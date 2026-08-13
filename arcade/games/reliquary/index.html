@@ -20,7 +20,7 @@
     --radius: 2px;  --dur: 160ms;  --ease: cubic-bezier(.2,.6,.2,1);
     --safe-t: env(safe-area-inset-top, 0px);
     --safe-r: env(safe-area-inset-right, 0px);
-    --safe-b: env(safe-area-inset-bottom, 0px);
+    --safe-b: min(env(safe-area-inset-bottom, 0px), 34px);
     --safe-l: env(safe-area-inset-left, 0px);
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent;
@@ -66,7 +66,7 @@
 
   /* ---------- on-screen controls ---------- */
   .pad {
-    position: fixed; bottom: calc(var(--safe-b) + 22px);
+    position: fixed; bottom: calc(var(--safe-b) + 14px);
     width: 116px; height: 116px; z-index: 3;
     border: 1px solid var(--line-2); border-radius: var(--radius);
     background: rgba(11,6,9,.34); touch-action: none;
@@ -97,16 +97,35 @@
     border: 1px solid var(--line-2); border-radius: var(--radius);
     background: rgba(11,6,9,.6); color: var(--accent); overflow: hidden;
   }
-  .flare { right: calc(var(--safe-r) + 16px); bottom: calc(var(--safe-b) + 152px);
+  .flare { right: calc(var(--safe-r) + 16px); bottom: calc(var(--safe-b) + 146px);
            width: 62px; height: 44px;
            font: 500 9px/1 var(--font-ui); letter-spacing: .16em; text-transform: uppercase; }
   .flare .fill { position: absolute; left: 0; bottom: 0; width: 100%;
                  background: rgba(233,216,197,.12); transition: height 90ms linear; }
   .flare span { position: relative; }
   .flare[disabled] { color: var(--t-3); }
-  .gear { left: calc(var(--safe-l) + 16px); bottom: calc(var(--safe-b) + 152px);
+  .gear { left: calc(var(--safe-l) + 16px); bottom: calc(var(--safe-b) + 146px);
           width: 44px; height: 44px; display: grid; place-items: center; }
   .flare:active, .gear:active { background: rgba(233,216,197,.14); }
+
+  /* Clear of both the HUD above and the battle panel below, and above them
+     in z-order: this is the escape hatch, so it has to stay reachable
+     precisely when a fight is covering the bottom of the screen. */
+  .fight {
+    position: fixed; z-index: 7; appearance: none;
+    right: calc(var(--safe-r) + 12px);
+    top: calc(var(--safe-t) + 92px);
+    padding: 9px 14px; border: 1px solid var(--line-2); border-radius: var(--radius);
+    background: rgba(11,6,9,.6); color: var(--t-3);
+    font: 500 9px/1 var(--font-ui); letter-spacing: .16em; text-transform: uppercase;
+    display: flex; align-items: center; gap: 7px; white-space: nowrap;
+  }
+  .fight i { width: 6px; height: 6px; border-radius: 50%; background: var(--t-3);
+             transition: background var(--dur) var(--ease), box-shadow var(--dur) var(--ease); }
+  .fight.on { color: var(--accent); border-color: var(--accent-2); }
+  .fight.on i { background: var(--accent-2); box-shadow: 0 0 8px rgba(184,29,58,.8); }
+  .fight:active { background: rgba(233,216,197,.14); }
+  @media (max-height: 460px) { .fight { top: calc(var(--safe-t) + 84px); padding: 7px 11px; } }
   @media (max-height: 460px) {
     .flare, .gear { bottom: calc(var(--safe-b) + 118px); }
   }
@@ -114,7 +133,7 @@
   /* ---------- battle ---------- */
   .battle {
     position: fixed; z-index: 6; left: calc(var(--safe-l) + 12px); right: calc(var(--safe-r) + 12px);
-    bottom: calc(var(--safe-b) + 12px); padding: 12px; display: none;
+    bottom: calc(var(--safe-b) + 8px); padding: 12px; display: none;
     max-height: 62%; overflow-y: auto; -webkit-overflow-scrolling: touch;
   }
   .battle.on { display: block; }
@@ -248,6 +267,10 @@
 </div>
 
 <button class="flare" id="flare"><div class="fill" id="flareFill"></div><span>Flare</span></button>
+<button class="fight on" id="fight" aria-pressed="true">
+  <i></i><span id="fightLbl">Fights on</span>
+</button>
+
 <button class="gear" id="gear" aria-label="Settings">
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
        stroke-width="1.6" stroke-linecap="square" aria-hidden="true">
@@ -1001,7 +1024,7 @@
   /* ---------------- settings ---------------- */
 
   var settings = { fullscreen: false, reflect: true, rain: true, look: 10,
-                   haptics: true, grain: true, diag: true };
+                   haptics: true, grain: true, diag: true, fights: true };
   try {
     var sv = JSON.parse(localStorage.getItem(SKEY) || 'null');
     if (sv) for (var sk in settings) if (sv[sk] !== undefined) settings[sk] = sv[sk];
@@ -1073,6 +1096,15 @@
   window.addEventListener('keydown', function (e) { keys[e.key.toLowerCase()] = true; });
   window.addEventListener('keyup', function (e) { keys[e.key.toLowerCase()] = false; });
 
+  var fightBtn = document.getElementById('fight');
+  var fightLbl = document.getElementById('fightLbl');
+
+  function applyFights() {
+    fightBtn.classList.toggle('on', settings.fights);
+    fightBtn.setAttribute('aria-pressed', settings.fights ? 'true' : 'false');
+    fightLbl.textContent = settings.fights ? 'Fights on' : 'Roaming';
+  }
+
   var flareBtn = document.getElementById('flare');
   var flareFill = document.getElementById('flareFill');
   function flash(v, col) { state.flash = Math.min(1, state.flash + v); state.flashCol = col; }
@@ -1112,6 +1144,12 @@
 
   function startBattle(foe) {
     state.mode = 'battle';
+    // Step back to a fixed standoff: contact range fills the screen with
+    // blob, and a turn-based fight wants the whole creature in frame.
+    var bx = state.x - foe.x, bz = state.z - foe.z, bd = Math.hypot(bx, bz) || 1;
+    var stand = collide(foe.x + bx/bd*4.0, foe.z + bz/bd*4.0);
+    state.x = stand[0]; state.z = stand[1];
+    state.vx = 0; state.vz = 0;
     battle = { foe: foe, hpYou: 100, hpFoe: foe.maxHp, turn: 'choose', wait: 0, fx: null };
     state.fights++;
     foeNameEl.textContent = foe.name;
@@ -1119,6 +1157,19 @@
     setBars(); setActs(true); showControls(false);
     battleEl.classList.add('on');
     buzz([18,60,18]);
+  }
+
+  function fleeBattle() {
+    if (!battle) return;
+    battleEl.classList.remove('on');
+    showControls(true);
+    // Step clear so the blob does not immediately re-trigger on contact.
+    var f = battle.foe;
+    var dx = state.x - f.x, dz = state.z - f.z, d = Math.hypot(dx, dz) || 1;
+    var moved = collide(f.x + dx/d*3.4, f.z + dz/d*3.4);
+    state.x = moved[0]; state.z = moved[1];
+    battle = null;
+    state.mode = 'explore';
   }
 
   function endBattle(won) {
@@ -1286,7 +1337,12 @@
       b.x = m[0]; b.z = m[1];
       b.rot += (b.dir - b.rot) * Math.min(1, dt*3);
       b.moving = sp;
-      if (state.mode === 'explore' && toP < 1.7) return startBattle(b);
+      if (settings.fights) {
+        if (state.mode === 'explore' && toP < 1.7) return startBattle(b);
+      } else if (toP < 1.1) {
+        var px = state.x - b.x, pz = state.z - b.z, pd = Math.hypot(px, pz) || 1;
+        b.x = state.x - px/pd*1.1; b.z = state.z - pz/pd*1.1;
+      }
     }
   }
 
@@ -1311,10 +1367,13 @@
     if (state.mode === 'battle') {
       var f = battle && battle.foe;
       if (f) {
-        var want = Math.atan2(f.x - state.x, -(f.z - state.z));
+        var want = Math.atan2(-(f.x - state.x), -(f.z - state.z));
         var diff = ((want - state.yaw + Math.PI*3) % (Math.PI*2)) - Math.PI;
-        state.yaw += diff * Math.min(1, dt*5);
-        state.pitch += (-0.08 - state.pitch) * Math.min(1, dt*5);
+        var horiz = Math.max(0.4, Math.hypot(f.x - state.x, f.z - state.z));
+        var wantPitch = Math.atan2(1.05 - 1.62, horiz);
+        var k = Math.min(1, dt*11);
+        state.yaw += diff * k;
+        state.pitch += (wantPitch - state.pitch) * k;
       }
       updateBattle(dt);
       return;
@@ -1365,7 +1424,7 @@
       if (d < nd) { nd = d; nearest = r; }
     }
     if (nearest) {
-      var ang2 = Math.atan2(nearest.x-state.x, -(nearest.z-state.z)) - state.yaw;
+      var ang2 = Math.atan2(nearest.x-state.x, -(nearest.z-state.z)) + state.yaw;
       arrow.style.transform = 'rotate(' + (ang2*180/Math.PI).toFixed(1) + 'deg)';
     }
   }
@@ -1697,6 +1756,7 @@
 
   function setSwitch(el, on) { el.setAttribute('aria-checked', on ? 'true' : 'false'); }
   function applySettings() {
+    applyFights();
     setSwitch(swFs, settings.fullscreen);
     setSwitch(swReflect, settings.reflect);
     setSwitch(swRain, settings.rain);
@@ -1712,6 +1772,18 @@
   }
   function openSettings() { state.paused = true; sheet.classList.remove('hide'); applySettings(); }
   function closeSettings() { sheet.classList.add('hide'); state.paused = false; }
+
+  fightBtn.addEventListener('click', function () {
+    settings.fights = !settings.fights;
+    applyFights();
+    saveSettings();
+    buzz(10);
+    // Switching it off is also the way out of a fight you are already in.
+    if (!settings.fights && state.mode === 'battle' && battle) {
+      logEl.textContent = 'You back away.';
+      fleeBattle();
+    }
+  });
 
   document.getElementById('gear').addEventListener('click', openSettings);
   document.getElementById('openSettings').addEventListener('click', openSettings);

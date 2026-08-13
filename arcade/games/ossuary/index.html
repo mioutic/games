@@ -19,7 +19,7 @@
     --radius: 2px;  --dur: 160ms;  --ease: cubic-bezier(.2,.6,.2,1);
     --safe-t: env(safe-area-inset-top, 0px);
     --safe-r: env(safe-area-inset-right, 0px);
-    --safe-b: env(safe-area-inset-bottom, 0px);
+    --safe-b: min(env(safe-area-inset-bottom, 0px), 34px);
     --safe-l: env(safe-area-inset-left, 0px);
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent;

@@ -42,7 +42,7 @@
     --ease: cubic-bezier(.2,.6,.2,1);
 
     --safe-t: env(safe-area-inset-top, 0px);
-    --safe-b: env(safe-area-inset-bottom, 0px);
+    --safe-b: min(env(safe-area-inset-bottom, 0px), 34px);
     --safe-l: env(safe-area-inset-left, 0px);
     --safe-r: env(safe-area-inset-right, 0px);
   }
@@ -66,7 +66,7 @@
 
   .wrap {
     padding: calc(var(--safe-t) + 18px) calc(var(--safe-r) + 16px)
-             calc(var(--safe-b) + 42px) calc(var(--safe-l) + 16px);
+             calc(var(--safe-b) + 18px) calc(var(--safe-l) + 16px);
     max-width: 760px; margin: 0 auto;
     min-height: 100%;
     min-height: 100dvh;      /* survives Safari's collapsing toolbars */
@@ -190,14 +190,16 @@
   }
   @keyframes scan { to { transform: translateX(100%); } }
 
-  .foot { margin-top: auto; padding-top: 26px; text-align: center;
+  /* The stamp rides in the flow rather than fixed to the viewport: that is
+     what makes its bottom gap equal the header's top gap on any device. */
+  .footbar { margin-top: auto; padding-top: 22px; display: flex;
+             align-items: flex-end; gap: 10px; }
+  .foot { flex: 1; min-width: 0; text-align: center;
           color: var(--t-3); font-size: 11px; line-height: 1.8; }
   .foot code { font-family: var(--font-mono); color: var(--t-2); }
 
   .version {
-    position: fixed; z-index: 60;
-    right: calc(var(--safe-r) + 14px); bottom: calc(var(--safe-b) + 12px);
-    appearance: none; white-space: nowrap;
+    flex: none; appearance: none; white-space: nowrap;
     font: 500 9.5px/1 var(--font-mono); letter-spacing: .1em;
     color: var(--brand); border: 1px solid var(--line-2); border-radius: var(--radius);
     /* the trailing letter-spacing eats into the right edge, so pad it back */
@@ -206,8 +208,6 @@
   }
   .version:active { background: var(--ov-active); }
   .version[hidden] { display: none; }
-  /* The build stamp belongs to the launcher — keep it off a running game. */
-  .player.open ~ .version { display: none; }
 
   /* ---------- player ---------- */
   .player {
@@ -293,8 +293,11 @@
     <div class="skel"></div><div class="skel"></div><div class="skel"></div><div class="skel"></div>
   </div>
 
-  <div class="foot">
-    Drop a folder into <code>arcade/games/</code> with an <code>index.html</code>, push, then refresh.
+  <div class="footbar">
+    <div class="foot">
+      Drop a folder into <code>arcade/games/</code> with an <code>index.html</code>, push, then refresh.
+    </div>
+    <button class="version" id="version" hidden aria-label="Build and viewport"></button>
   </div>
 </div>
 
@@ -315,8 +318,6 @@
   <svg width="9" height="15" viewBox="0 0 12 20" fill="none" stroke="currentColor"
        stroke-width="2" stroke-linecap="square" aria-hidden="true"><path d="M10 2 2 10l8 8"/></svg>
 </button>
-
-<button class="version" id="version" hidden aria-label="Build and viewport"></button>
 
 <script>
 (function () {
