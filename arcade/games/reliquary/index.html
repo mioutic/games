@@ -1312,12 +1312,17 @@
 
   /* ---------------- settings ---------------- */
 
-  var settings = { fullscreen: false, reflect: true, rain: true, shafts: true,
+  var settings = { rev: 2, fullscreen: true, reflect: true, rain: true, shafts: true,
                    look: 10, haptics: true, grain: true, diag: true, fights: true,
                    third: false };
   try {
     var sv = JSON.parse(localStorage.getItem(SKEY) || 'null');
-    if (sv) for (var sk in settings) if (sv[sk] !== undefined) settings[sk] = sv[sk];
+    if (sv) {
+      for (var sk in settings) if (sv[sk] !== undefined) settings[sk] = sv[sk];
+      // A stored value from before a default changed would pin the old
+      // behaviour forever; the rev re-applies the new default once.
+      if ((sv.rev || 0) < 2) { settings.fullscreen = true; settings.rev = 2; }
+    }
   } catch (e) {}
   function saveSettings() { try { localStorage.setItem(SKEY, JSON.stringify(settings)); } catch (e) {} }
   function buzz(p) { if (settings.haptics && navigator.vibrate) navigator.vibrate(p); }

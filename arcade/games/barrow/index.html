@@ -83,6 +83,16 @@
   .diag .good { color: var(--success); } .diag .fair { color: var(--warning); }
   .diag .poor { color: var(--error); }
 
+  .bench {
+    position: absolute; right: calc(var(--safe-r) + 12px); top: calc(var(--safe-t) + 152px);
+    width: 132px; padding: 7px 9px; font: 500 10px/1.5 var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+  .bench.off { display: none; }
+  .bench .row { display: flex; justify-content: space-between; gap: 8px; color: var(--t-3); }
+  .bench .row span:last-child { color: var(--accent); }
+  .diag.off ~ .bench { top: calc(var(--safe-t) + 12px); }
+
   /* The objective rides inside the vitals panel. A separate centred banner
      collided with it at 390px wide, and the notch owns that strip anyway. */
   .objective { padding-bottom: 7px; margin-bottom: 7px;
@@ -106,27 +116,55 @@
   .reticle i:nth-child(4) { right: 0; bottom: 0; border-left: 0; border-top: 0; }
 
   /* ---------- controls ---------- */
-  .pad {
-    position: absolute; width: 118px; height: 118px; pointer-events: auto;
-    border: 1px solid var(--line-1); border-radius: var(--radius);
-    background: rgba(233,216,197,.03); touch-action: none;
-    bottom: calc(var(--safe-b) + 14px);
+  /* The touch zone is large and invisible; the stick is drawn wherever the
+     thumb lands. That is what makes a faded — or fully invisible — stick still
+     usable: you are never aiming at a thing, you are just touching a corner. */
+  .zone {
+    position: absolute; bottom: 0; height: 46%; pointer-events: auto;
+    touch-action: none; z-index: 1;
   }
-  .pad.left  { left: calc(var(--safe-l) + 16px); }
-  .pad.right { right: calc(var(--safe-r) + 16px); }
-  .pad::before, .pad::after {
-    content: ""; position: absolute; background: var(--line-1);
+  .zone.left  { left: 0; right: 50%; }
+  .zone.right { left: 50%; right: 0; }
+
+  .stick {
+    position: absolute; width: 120px; height: 120px; margin: -60px 0 0 -60px;
+    border: 1px solid var(--line-1); background: rgba(233,216,197,.03);
+    pointer-events: none;
+    opacity: var(--stick-a, .55);
+    transition: opacity 140ms var(--ease);
   }
-  .pad::before { left: 8px; right: 8px; top: 50%; height: 1px; }
-  .pad::after { top: 8px; bottom: 8px; left: 50%; width: 1px; }
-  .pad .knob {
-    position: absolute; left: 50%; top: 50%; width: 42px; height: 42px;
-    margin: -21px 0 0 -21px; border-radius: var(--radius);
+  .stick.circle { border-radius: 50%; }
+  .stick.square { border-radius: var(--radius); }
+  .stick::before, .stick::after { content: ""; position: absolute; background: var(--line-1); }
+  .stick::before { left: 12px; right: 12px; top: 50%; height: 1px; }
+  .stick::after { top: 12px; bottom: 12px; left: 50%; width: 1px; }
+  .stick .knob {
+    position: absolute; left: 50%; top: 50%; width: 44px; height: 44px;
+    margin: -22px 0 0 -22px;
     background: rgba(233,216,197,.16); border: 1px solid var(--line-2);
   }
-  .pad.active .knob { background: rgba(233,216,197,.26); border-color: var(--accent-2); }
-  .pad .lbl { position: absolute; left: 0; right: 0; bottom: -15px; text-align: center; }
-  .pad.hidden { display: none; }
+  .stick.circle .knob { border-radius: 50%; }
+  .stick.square .knob { border-radius: var(--radius); }
+  .stick.active { opacity: calc(var(--stick-a, .55) * 1.55 + .06); }
+  .stick.active .knob { background: rgba(233,216,197,.26); border-color: var(--accent-2); }
+  .stick .lbl { position: absolute; left: 0; right: 0; bottom: -16px; text-align: center; }
+  .stick.active .lbl { opacity: 0; }
+  .stick.hidden { display: none; }
+
+  /* ---------- damage markers ---------- */
+  /* Projected from the world point that was actually struck, so a marker is a
+     readout of where the blade landed rather than a generic popup. */
+  .marks { position: absolute; inset: 0; pointer-events: none; z-index: 3; }
+  .mark {
+    position: absolute; transform: translate(-50%, -50%);
+    font: 500 20px/1 var(--font-mono); font-variant-numeric: tabular-nums;
+    color: var(--t-0); text-shadow: 0 0 10px rgba(0,0,0,.9), 0 0 3px rgba(0,0,0,1);
+    white-space: nowrap;
+  }
+  .mark.crit { color: var(--warning); font-size: 26px; }
+  .mark.block { color: var(--info); font-size: 16px; }
+  .mark small { display: block; font: 500 8px/1 var(--font-ui); letter-spacing: .18em;
+                text-transform: uppercase; color: var(--t-2); margin-top: 3px; }
 
   /* Attack and block sit above the right pad, under the thumb in both
      orientations (DESIGN.md: controls reposition, they do not just shrink). */
@@ -201,6 +239,14 @@
   .sw[aria-checked="true"] { border-color: var(--accent-2); }
   .sw[aria-checked="true"] span { transform: translateX(19px); background: var(--accent); }
   .rng { flex: none; width: 132px; accent-color: var(--accent); }
+  .seg { flex: none; display: flex; border: 1px solid var(--line-2); border-radius: var(--radius); }
+  .seg button {
+    appearance: none; border: 0; background: transparent; color: var(--t-2);
+    padding: 8px 11px; font: 500 9px/1 var(--font-ui); letter-spacing: .14em;
+    text-transform: uppercase;
+  }
+  .seg button + button { border-left: 1px solid var(--line-2); }
+  .seg button.on { background: var(--accent); color: var(--t-inv, #0b0609); }
 
   .keys { display: flex; gap: 8px; justify-content: center; margin-bottom: 18px; }
   .keyk { flex: 1; text-align: center; padding: 9px 4px; border: 1px solid var(--line-1);
@@ -246,8 +292,19 @@
 
   <div class="reticle" id="reticle"><i></i><i></i><i></i><i></i></div>
 
-  <div class="pad left" id="padMove"><div class="knob"></div><div class="lbl micro">Move</div></div>
-  <div class="pad right" id="padLook"><div class="knob"></div><div class="lbl micro">Look</div></div>
+  <div class="panel bench off" id="bench">
+    <div class="row"><span>Last hit</span><span id="bLast">—</span></div>
+    <div class="row"><span>Tip speed</span><span id="bSpeed">—</span></div>
+    <div class="row"><span>Contact</span><span id="bPart">—</span></div>
+    <div class="row"><span>Total</span><span id="bTotal">0</span></div>
+  </div>
+
+  <div class="marks" id="marks"></div>
+
+  <div class="zone left" id="zoneMove"></div>
+  <div class="zone right" id="zoneLook"></div>
+  <div class="stick circle" id="stickMove"><div class="knob"></div><div class="lbl micro">Move</div></div>
+  <div class="stick circle" id="stickLook"><div class="knob"></div><div class="lbl micro">Look</div></div>
 
   <button class="act strike" id="btnStrike">Strike</button>
   <button class="act guard" id="btnGuard">Guard</button>
@@ -272,7 +329,8 @@
     </div>
     <p class="lede" style="margin-bottom:14px">The blade is real. It only hits what
       it actually passes through — aim it, do not point at things.</p>
-    <div style="text-align:center"><button class="go" id="btnGo">Descend</button></div>
+    <button class="go wide" id="btnDescend" style="margin-top:0">Descend</button>
+    <button class="go ghost wide" id="btnTrain">Training room</button>
     <button class="go ghost wide" id="btnSettingsFromIntro">Settings</button>
   </div>
 </div>
@@ -280,9 +338,8 @@
 <div class="overlay hide" id="over">
   <div class="panel card">
     <div id="overHead"></div>
-    <div style="text-align:center;margin-top:18px">
-      <button class="go" id="btnAgain">Again</button>
-    </div>
+    <button class="go wide" id="btnAgain">Again</button>
+    <button class="go ghost wide" id="btnMenu">Main screen</button>
   </div>
 </div>
 
@@ -310,6 +367,21 @@
     <div class="opt">
       <div><div class="optk">Invert look</div><div class="optd">Drag down to look up.</div></div>
       <button class="sw" id="swInvert" role="switch" aria-checked="false"><span></span></button>
+    </div>
+
+    <div class="opt">
+      <div><div class="optk">Stick visibility</div>
+      <div class="optd" id="alphaVal">55% — at 0 the sticks are invisible, and the
+        bottom corners still steer.</div></div>
+      <input class="rng" id="stickAlpha" type="range" min="0" max="100" step="5" value="55">
+    </div>
+
+    <div class="opt">
+      <div><div class="optk">Stick shape</div><div class="optd">Round or squared off.</div></div>
+      <div class="seg" id="stickShape">
+        <button data-shape="circle" class="on">Circle</button>
+        <button data-shape="square">Square</button>
+      </div>
     </div>
 
     <div class="opt">
@@ -362,7 +434,7 @@
   var elDraws = document.getElementById('draws'), elTris = document.getElementById('tris');
   var elView = document.getElementById('view'), elGap = document.getElementById('gap');
   var reticle = document.getElementById('reticle');
-  var padMoveEl = document.getElementById('padMove'), padLookEl = document.getElementById('padLook');
+  var stickMoveEl = document.getElementById('stickMove'), stickLookEl = document.getElementById('stickLook');
   var strikeBtn = document.getElementById('btnStrike'), guardBtn = document.getElementById('btnGuard');
 
   /* ---------------- matrices ---------------- */
@@ -627,7 +699,7 @@
     '  if (uShadowOn < 0.5) return 1.0;\n' +
     '  vec3 pc = vLightPos.xyz/max(vLightPos.w, 1e-4)*0.5+0.5;\n' +
     '  if (vLightPos.w <= 0.0 || pc.z>1.0 || pc.x<0.02||pc.x>0.98||pc.y<0.02||pc.y>0.98) return 1.0;\n' +
-    '  float bias = max(0.0035*(1.0-dot(N,L)), 0.0012);\n' +
+    '  float bias = max(0.0075*(1.0-dot(N,L)), 0.0026);\n' +
     '  float sum=0.0;\n' +
     '  for (int y=-1;y<=1;y++) for (int x=-1;x<=1;x++)\n' +
     '    sum += texture(uShadow, vec3(pc.xy+vec2(float(x),float(y))*uShadowTexel, pc.z-bias));\n' +
@@ -850,6 +922,7 @@
   }
   function resize() {
     fitStage();
+    if (typeof padMove === 'object' && padMove && padMove.home) { padMove.home(); padLook.home(); }
     cssW = Math.max(1, stageEl.clientWidth);
     cssH = Math.max(1, stageEl.clientHeight);
     dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -906,6 +979,7 @@
   var IRON    = srgb('#6b6a70');
   var IRON_D  = srgb('#43424a');
   var LEATHER = srgb('#4e3128');
+  var SACK    = srgb('#8a6a4e');   // lit cloth: the tiers render black as albedo
   var BLOOD   = srgb('#b81d3a');
   var GOLD    = srgb('#d9a441');
   // Arterial crimson makes a purple light; a warm ember is what actually reads
@@ -927,6 +1001,7 @@
   function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
 
   var world = { walls: [], torches: [], props: [], cells: null, rooms: [] };
+  var dummy = null;
 
   function cellX(i) { return (i - (N-1)/2)*CELL; }
   function cellZ(j) { return (j - (N-1)/2)*CELL; }
@@ -1049,6 +1124,15 @@
       var cox = ddx - cqx, coz = ddz - cqz, cd = Math.hypot(cox, coz);
       if (cd < radius && cd > 1e-5) {
         nx = pr.x + cqx + cox/cd*radius; nz = pr.z + cqz + coz/cd*radius;
+      }
+    }
+    // The dummy is solid. Without this you walk inside it, and a blade that
+    // starts at your hand is already past the thing you are trying to hit.
+    if (dummy && dummy.live) {
+      var ddx2 = nx - dummy.x, ddz2 = nz - dummy.z;
+      var dd2 = Math.hypot(ddx2, ddz2), min2 = 0.55 + radius;
+      if (dd2 < min2 && dd2 > 1e-5) {
+        nx = dummy.x + ddx2/dd2*min2; nz = dummy.z + ddz2/dd2*min2;
       }
     }
     return [nx, nz];
@@ -1213,13 +1297,66 @@
     }
   }
 
+  /* ---------------- damage markers ---------------- */
+
+  // Projected from the world point the blade actually touched, so the number
+  // appears on the wound rather than over the enemy's middle.
+  var marksEl = document.getElementById('marks');
+  var MARKS = 14, markPool = [], markHead = 0, lastVP = null;
+  for (var mk = 0; mk < MARKS; mk++) {
+    var el = document.createElement('div');
+    el.className = 'mark';
+    el.style.display = 'none';
+    marksEl.appendChild(el);
+    markPool.push({ el: el, live: false, x:0, y:0, z:0, t:0, life: 0.95, vy: 0.95 });
+  }
+  function addMark(x, y, z, text, sub, cls) {
+    var m = markPool[markHead]; markHead = (markHead+1) % MARKS;
+    m.live = true; m.x = x; m.y = y; m.z = z; m.t = 0; m.vy = 0.95;
+    m.el.className = 'mark' + (cls ? ' ' + cls : '');
+    m.el.innerHTML = text + (sub ? '<small>' + sub + '</small>' : '');
+    m.el.style.display = 'block';
+  }
+  function updateMarks(dt) {
+    if (!lastVP) return;
+    var w = cssW, h = cssH;
+    for (var i = 0; i < MARKS; i++) {
+      var m = markPool[i];
+      if (!m.live) continue;
+      m.t += dt;
+      if (m.t >= m.life) { m.live = false; m.el.style.display = 'none'; continue; }
+      m.y += m.vy*dt; m.vy -= 1.1*dt;
+      var vp = lastVP;
+      var cx = vp[0]*m.x + vp[4]*m.y + vp[8]*m.z + vp[12];
+      var cy = vp[1]*m.x + vp[5]*m.y + vp[9]*m.z + vp[13];
+      var cw = vp[3]*m.x + vp[7]*m.y + vp[11]*m.z + vp[15];
+      if (cw <= 0.01) { m.el.style.display = 'none'; continue; }
+      var sx = (cx/cw*0.5 + 0.5)*w, sy = (1 - (cy/cw*0.5 + 0.5))*h;
+      var k = m.t/m.life;
+      m.el.style.display = 'block';
+      m.el.style.left = sx.toFixed(1) + 'px';
+      m.el.style.top = sy.toFixed(1) + 'px';
+      m.el.style.opacity = (1 - k*k).toFixed(3);
+    }
+  }
+  function clearMarks() {
+    for (var i = 0; i < MARKS; i++) { markPool[i].live = false; markPool[i].el.style.display = 'none'; }
+  }
+
   /* ---------------- settings ---------------- */
 
-  var settings = { fullscreen: false, shadows: true, look: 10, invert: false,
-                   haptics: true, grain: true, diag: true };
+  var SETTINGS_REV = 2;
+  var settings = { rev: SETTINGS_REV, fullscreen: true, shadows: true, look: 10, invert: false,
+                   haptics: true, grain: true, diag: true,
+                   stickAlpha: 55, stickShape: 'circle' };
   try {
     var sv = JSON.parse(localStorage.getItem(SKEY) || 'null');
-    if (sv) for (var sk in settings) if (sv[sk] !== undefined) settings[sk] = sv[sk];
+    if (sv) {
+      for (var sk in settings) if (sv[sk] !== undefined) settings[sk] = sv[sk];
+      // A stored value from before a default changed would otherwise pin the
+      // old behaviour forever. Bumping the rev re-applies the new defaults once.
+      if ((sv.rev || 0) < 2) { settings.fullscreen = true; settings.rev = 2; }
+    }
   } catch (e) {}
   function saveSettings() { try { localStorage.setItem(SKEY, JSON.stringify(settings)); } catch (e) {} }
   function buzz(p) { if (settings.haptics && navigator.vibrate) navigator.vibrate(p); }
@@ -1236,47 +1373,93 @@
 
   /* ---------------- input ---------------- */
 
-  function makePad(el) {
+  // The stick is drawn wherever the thumb lands inside a large invisible zone,
+  // and returns to a home corner when released. A fixed stick has to be aimed
+  // at, which is exactly what stops working once you fade it out.
+  var STICK_R = 52;
+
+  function makeStick(zone, stickEl, homeSide) {
     var pad = { x: 0, y: 0, id: null };
-    var knob = el.querySelector('.knob');
-    function R() { return el.clientWidth * 0.34; }
-    function setKnob(dx, dy) { knob.style.transform = 'translate(' + dx.toFixed(1) + 'px,' + dy.toFixed(1) + 'px)'; }
-    function from(touch) {
-      var r = el.getBoundingClientRect();
-      var dx = touch.clientX - (r.left + r.width/2);
-      var dy = touch.clientY - (r.top + r.height/2);
-      var d = Math.hypot(dx, dy), m = R();
-      if (d > m) { dx = dx/d*m; dy = dy/d*m; }
-      setKnob(dx, dy);
-      pad.x = dx/m; pad.y = dy/m;
+    var knob = stickEl.querySelector('.knob');
+    var originX = 0, originY = 0;
+
+    function place(x, y) {
+      stickEl.style.left = x + 'px';
+      stickEl.style.top = y + 'px';
     }
-    function release() { pad.id = null; pad.x = 0; pad.y = 0; setKnob(0,0); el.classList.remove('active'); }
-    el.addEventListener('touchstart', function (e) {
+    function home() {
+      var r = stageEl.getBoundingClientRect();
+      var ins = insetsNow();
+      var y = r.height - ins.b - 74;
+      var x = homeSide === 'left' ? ins.l + 78 : r.width - ins.r - 78;
+      originX = x; originY = y;
+      place(x, y);
+    }
+    function setKnob(dx, dy) {
+      knob.style.transform = 'translate(' + dx.toFixed(1) + 'px,' + dy.toFixed(1) + 'px)';
+    }
+    function from(cx, cy) {
+      var r = stageEl.getBoundingClientRect();
+      var dx = (cx - r.left) - originX, dy = (cy - r.top) - originY;
+      var d = Math.hypot(dx, dy);
+      if (d > STICK_R) { dx = dx/d*STICK_R; dy = dy/d*STICK_R; }
+      setKnob(dx, dy);
+      pad.x = dx/STICK_R; pad.y = dy/STICK_R;
+    }
+    function grab(cx, cy, id) {
+      var r = stageEl.getBoundingClientRect();
+      originX = cx - r.left; originY = cy - r.top;
+      place(originX, originY);
+      pad.id = id; stickEl.classList.add('active');
+      setKnob(0, 0); pad.x = 0; pad.y = 0;
+    }
+    function release() {
+      pad.id = null; pad.x = 0; pad.y = 0; setKnob(0, 0);
+      stickEl.classList.remove('active');
+      home();
+    }
+    zone.addEventListener('touchstart', function (e) {
+      if (pad.id !== null) return;
       e.preventDefault();
       var t = e.changedTouches[0];
-      pad.id = t.identifier; el.classList.add('active'); from(t);
+      grab(t.clientX, t.clientY, t.identifier);
     }, { passive: false });
     window.addEventListener('touchmove', function (e) {
       if (pad.id === null) return;
       for (var i = 0; i < e.changedTouches.length; i++)
-        if (e.changedTouches[i].identifier === pad.id) { e.preventDefault(); from(e.changedTouches[i]); }
+        if (e.changedTouches[i].identifier === pad.id) {
+          e.preventDefault();
+          from(e.changedTouches[i].clientX, e.changedTouches[i].clientY);
+        }
     }, { passive: false });
     function endH(e) {
       if (pad.id === null) return;
       for (var i = 0; i < e.changedTouches.length; i++)
         if (e.changedTouches[i].identifier === pad.id) release();
     }
-    el.addEventListener('touchend', endH);
-    el.addEventListener('touchcancel', endH);
     window.addEventListener('touchend', endH);
-    el.addEventListener('mousedown', function (e) {
-      e.preventDefault(); pad.id = 'mouse'; el.classList.add('active'); from(e);
+    window.addEventListener('touchcancel', endH);
+    zone.addEventListener('mousedown', function (e) {
+      e.preventDefault(); grab(e.clientX, e.clientY, 'mouse');
     });
-    window.addEventListener('mousemove', function (e) { if (pad.id === 'mouse') from(e); });
+    window.addEventListener('mousemove', function (e) {
+      if (pad.id === 'mouse') from(e.clientX, e.clientY);
+    });
     window.addEventListener('mouseup', function () { if (pad.id === 'mouse') release(); });
+    pad.home = home;
     return pad;
   }
-  var padMove = makePad(padMoveEl), padLook = makePad(padLookEl);
+
+  function insetsNow() {
+    var cs = getComputedStyle(insProbe);
+    function v(n) { return parseFloat(cs[n]) || 0; }
+    return { t: v('paddingTop'), r: v('paddingRight'), b: v('paddingBottom'), l: v('paddingLeft') };
+  }
+
+  var padMove = makeStick(document.getElementById('zoneMove'),
+                          document.getElementById('stickMove'), 'left');
+  var padLook = makeStick(document.getElementById('zoneLook'),
+                          document.getElementById('stickLook'), 'right');
 
   var keys = {};
   window.addEventListener('keydown', function (e) {
@@ -1292,7 +1475,7 @@
     x: 0, z: 0, yaw: 0, pitch: 0, vx: 0, vz: 0, bob: 0, t: 0,
     hp: 100, sta: 100, guard: false, guardHeld: 0,
     swing: null, swingT: 0, hurt: 0, shock: 0, shake: 0,
-    kills: 0, depth: 1, haveSigil: false,
+    kills: 0, depth: 1, haveSigil: false, training: false, hitStop: 0,
     prevBlade: null, hitThisSwing: null,
     torchPh: 0
   };
@@ -1371,10 +1554,14 @@
   // screen on this phone while looking fine on a wide one.
   // Each is [handRightFrac, handUpFrac, handDepth, bladeRight, bladeUp, bladeFwd].
   var POSE_REST  = [ 0.62, -0.56, 0.52,  0.16,  0.80, 0.58];
-  var POSE_WIND  = [ 0.84, -0.12, 0.40,  0.44,  0.86, 0.26];
-  var POSE_CUT   = [-0.58, -0.64, 0.60, -0.72, -0.16, 0.68];
+  var POSE_WIND  = [ 0.80,  0.02, 0.46,  0.42,  0.86, 0.30];
+  // The cut finishes near the centre-line, not out past your left shoulder.
+  // The blade being real geometry does not mean the arc should miss what you
+  // are looking at: in first person the swing has to pass through the middle
+  // of the screen, because that is where the player aimed it.
+  var POSE_CUT   = [-0.14, -0.52, 0.74, -0.16, -0.26, 0.95];
   var POSE_GUARD = [ 0.14, -0.30, 0.52, -0.86,  0.42, 0.30];
-  var BLADE_LEN = 0.95;
+  var BLADE_LEN = 1.15;
   var FOV = 1.20;
 
   var camR = [0,0,0], camU = [0,0,0], camF = [0,0,0], camPos = [0,0,0];
@@ -1470,39 +1657,84 @@
     return 0.22*s;
   }
 
-  function resolveSwing() {
+  // How fast the tip is travelling at contact, in m/s. Damage scales with it,
+  // so a committed cut hurts and brushing past does not — the number on screen
+  // is a readout of the swing, not a dice roll.
+  function tipSpeed(dt) {
+    if (!state.prevBlade) return 0;
+    var dx = blade[3]-state.prevBlade[3], dy = blade[4]-state.prevBlade[4], dz = blade[5]-state.prevBlade[5];
+    return Math.hypot(dx,dy,dz)/Math.max(dt, 1e-4);
+  }
+
+  var PART_NAME = ['skull', 'ribs', 'legs'];
+
+  function resolveSwing(dt) {
     if (!state.prevBlade) return;
+    var spd = tipSpeed(dt);
     for (var i = 0; i < foes.length; i++) {
       var f = foes[i];
       if (!f.alive || state.hitThisSwing[i]) continue;
-      if (Math.hypot(f.x-state.x, f.z-state.z) > 3.4) continue;
+      if (Math.hypot(f.x-state.x, f.z-state.z) > 4.0) continue;
+      var bestPart = -1, bestPen = 0;
       for (var part = 0; part < 3; part++) {
         var r = foeCapsules(f, part);
         var d = bladeHits(state.prevBlade, blade, capA, capB, r + 0.045);
-        if (d < r + 0.045) {
-          state.hitThisSwing[i] = 1;
-          landHit(f, part, i);
-          break;
-        }
+        var pen = (r + 0.045) - d;
+        if (pen > 0 && pen > bestPen) { bestPen = pen; bestPart = part; }
       }
+      if (bestPart >= 0) { state.hitThisSwing[i] = 1; landHit(f, bestPart, spd); }
+    }
+    if (dummy && dummy.live && !state.hitThisSwing.dummy) {
+      var dBest = -1, dPen = 0;
+      for (var dp = 0; dp < 3; dp++) {
+        var dr = dummyCapsule(dp);
+        var dd = bladeHits(state.prevBlade, blade, capA, capB, dr + 0.045);
+        var dpen = (dr + 0.045) - dd;
+        if (dpen > 0 && dpen > dPen) { dPen = dpen; dBest = dp; }
+      }
+      if (dBest >= 0) { state.hitThisSwing.dummy = 1; hitDummy(dBest, spd); }
     }
   }
 
-  function landHit(f, part, idx) {
-    var dmg = part === 0 ? 42 : (part === 1 ? 26 : 17);
+  // The closest point on the blade to the thing it hit, so sparks and the
+  // damage marker both sit on the wound.
+  var contact = [0,0,0];
+  function markContact(cap0, cap1) {
+    segSegDist(blade[0],blade[1],blade[2], blade[3],blade[4],blade[5],
+               cap0[0],cap0[1],cap0[2], cap1[0],cap1[1],cap1[2]);
+    var t = segHitS;
+    contact[0] = blade[0] + (blade[3]-blade[0])*t;
+    contact[1] = blade[1] + (blade[4]-blade[1])*t;
+    contact[2] = blade[2] + (blade[5]-blade[2])*t;
+  }
+
+  function swingDamage(part, spd) {
+    var base = part === 0 ? 30 : (part === 1 ? 19 : 12);
+    // A cut lands somewhere between a nudge and a full commit; 9 m/s is about
+    // what the strike pose produces at the peak of the arc.
+    var k = clamp(spd/13, 0.35, 1.35);
+    return Math.max(1, Math.round(base*k));
+  }
+
+  function landHit(f, part, spd) {
+    foeCapsules(f, part);
+    markContact(capA, capB);
+    var dmg = swingDamage(part, spd);
     f.hp -= dmg;
     f.hit = 1;
     f.stagger = part === 0 ? 0.55 : 0.30;
     var kx = f.x - state.x, kz = f.z - state.z, kd = Math.hypot(kx,kz) || 1;
-    f.vx += kx/kd*(part === 0 ? 3.4 : 2.2);
-    f.vz += kz/kd*(part === 0 ? 3.4 : 2.2);
-    // Contact point: the blade tip is close enough and much cheaper than
-    // recovering the exact closest point.
-    var hx = blade[3], hy = blade[4], hz = blade[5];
-    burst(hx, hy, hz, part === 0 ? 26 : 16, BONE, 4.2, 0.55, 0.036, 9, 0.9);
-    burst(hx, hy, hz, 8, FLAME, 3.0, 0.30, 0.028, 5, 2.2);
+    var push = (part === 0 ? 3.4 : 2.2) * clamp(spd/13, 0.4, 1.4);
+    f.vx += kx/kd*push; f.vz += kz/kd*push;
+    burst(contact[0], contact[1], contact[2], part === 0 ? 26 : 16, BONE, 4.2, 0.55, 0.036, 9, 0.9);
+    burst(contact[0], contact[1], contact[2], 8, FLAME, 3.0, 0.30, 0.028, 5, 2.2);
+    addMark(contact[0], contact[1], contact[2], dmg,
+            part === 0 ? 'skull' : null, part === 0 ? 'crit' : null);
     state.shock = 0.02;
     state.shake = Math.min(0.6, state.shake + (part === 0 ? 0.34 : 0.20));
+    // A frame of hitstop is most of what makes a blow feel like it connected.
+    state.hitStop = Math.max(state.hitStop, part === 0 ? 0.085 : 0.055);
+    bench(dmg, spd, PART_NAME[part]);
     buzz(part === 0 ? [14,26,14] : 12);
     if (f.hp <= 0) killFoe(f);
   }
@@ -1566,7 +1798,7 @@
       } else if (sees) {
         f.windup = Math.max(0, f.windup - dt*3.0);
         f.state = 'chase';
-        if (toP < 1.85) {
+        if (toP < 1.70) {
           f.state = 'windup'; f.timer = f.tough ? 0.40 : 0.52; f.windup = 0;
         } else {
           wantX = state.x - f.x; wantZ = state.z - f.z;
@@ -1638,6 +1870,118 @@
     if (state.hp <= 0) { state.hp = 0; die(); }
   }
 
+  /* ---------------- training room ---------------- */
+
+  // A post on a spring. Its capsules are the same shape the skeletons use, so
+  // what you learn hitting it is true of what you learn hitting them.
+  var benchEls = {
+    box: document.getElementById('bench'),
+    last: document.getElementById('bLast'),
+    speed: document.getElementById('bSpeed'),
+    part: document.getElementById('bPart'),
+    total: document.getElementById('bTotal')
+  };
+  var benchTotal = 0;
+
+  function bench(dmg, spd, part) {
+    if (!dummy) return;
+    benchTotal += dmg;
+    benchEls.last.textContent = dmg;
+    benchEls.speed.textContent = spd.toFixed(1) + ' m/s';
+    benchEls.part.textContent = part;
+    benchEls.total.textContent = benchTotal;
+  }
+
+  function makeDummy(x, z) {
+    return { x: x, z: z, live: true, lean: 0, leanV: 0, twist: 0, twistV: 0,
+             hit: 0, yaw: 0 };
+  }
+  function dummyCapsule(part) {
+    var d = dummy, s = 1.0;
+    var lx = Math.sin(d.yaw)*d.lean, lz = Math.cos(d.yaw)*d.lean;
+    if (part === 0) {                       // head
+      capA[0] = d.x + lx*1.55; capA[1] = 1.58; capA[2] = d.z + lz*1.55;
+      capB[0] = capA[0]; capB[1] = 1.72; capB[2] = capA[2];
+      return 0.17*s;
+    }
+    if (part === 1) {                       // body
+      capA[0] = d.x + lx*0.9; capA[1] = 0.95; capA[2] = d.z + lz*0.9;
+      capB[0] = d.x + lx*1.4; capB[1] = 1.45; capB[2] = d.z + lz*1.4;
+      return 0.27*s;
+    }
+    capA[0] = d.x; capA[1] = 0.10; capA[2] = d.z;   // post
+    capB[0] = d.x + lx*0.8; capB[1] = 0.92; capB[2] = d.z + lz*0.8;
+    return 0.16*s;
+  }
+  function hitDummy(part, spd) {
+    dummyCapsule(part);
+    markContact(capA, capB);
+    var dmg = swingDamage(part, spd);
+    dummy.hit = 1;
+    // It swings away from you, harder for a faster cut and a higher contact.
+    var kx = dummy.x - state.x, kz = dummy.z - state.z, kd = Math.hypot(kx,kz) || 1;
+    dummy.yaw = Math.atan2(kx/kd, kz/kd);
+    dummy.leanV += clamp(spd/13, 0.3, 1.6) * (part === 0 ? 1.5 : (part === 1 ? 1.1 : 0.6));
+    dummy.twistV += (Math.random() < 0.5 ? -1 : 1) * clamp(spd/13, 0.2, 1.0)*1.4;
+    burst(contact[0], contact[1], contact[2], 18, LEATHER, 3.2, 0.5, 0.034, 8, 0.5);
+    burst(contact[0], contact[1], contact[2], 6, FLAME, 2.4, 0.26, 0.024, 4, 1.8);
+    addMark(contact[0], contact[1], contact[2], dmg,
+            PART_NAME[part], part === 0 ? 'crit' : null);
+    state.shock = 0.015;
+    state.shake = Math.min(0.5, state.shake + 0.16);
+    state.hitStop = Math.max(state.hitStop, part === 0 ? 0.075 : 0.05);
+    bench(dmg, spd, PART_NAME[part]);
+    buzz(part === 0 ? [12,22,12] : 10);
+  }
+  function updateDummy(dt) {
+    if (!dummy) return;
+    dummy.hit = Math.max(0, dummy.hit - dt*2.4);
+    var a = spring(dummy.lean, dummy.leanV, 0, 34, dt);
+    dummy.lean = clamp(a[0], -0.9, 0.9); dummy.leanV = a[1];
+    var b = spring(dummy.twist, dummy.twistV, 0, 26, dt);
+    dummy.twist = b[0]; dummy.twistV = b[1];
+  }
+  function drawDummy() {
+    var d = dummy;
+    var lx = Math.sin(d.yaw)*d.lean, lz = Math.cos(d.yaw)*d.lean;
+    var col = d.hit > 0.02 ? [SACK[0] + d.hit*0.9, SACK[1] + d.hit*0.4, SACK[2] + d.hit*0.3]
+                           : SACK;
+    var em = d.hit*0.35;
+    // Base, post, body, crossbar arms, sacking head.
+    boxes.push(d.x, 0.10, d.z, 1.10, 0.20, 1.10, 0, STONE_D, 0, 0.85, 0.0, 61);
+    bones.pushSeg(d.x, 0.18, d.z, d.x + lx*0.95, 1.10, d.z + lz*0.95, 0.13, LEATHER, 0, 0.9, 0.0, 62, 3);
+    bones.pushSeg(d.x + lx*0.90, 1.00, d.z + lz*0.90, d.x + lx*1.42, 1.48, d.z + lz*1.42,
+                  0.52, col, em, 0.92, 0.0, 63, 3, 0.82, 0);
+    var ax = Math.cos(d.yaw + d.twist), az = -Math.sin(d.yaw + d.twist);
+    bones.pushSeg(d.x + lx*1.28 - ax*0.46, 1.34, d.z + lz*1.28 - az*0.46,
+                  d.x + lx*1.28 + ax*0.46, 1.34, d.z + lz*1.28 + az*0.46,
+                  0.14, LEATHER, em, 0.9, 0.0, 64, 3, 1.0);
+    bones.pushSeg(d.x + lx*1.52, 1.56, d.z + lz*1.52, d.x + lx*1.62, 1.72, d.z + lz*1.62,
+                  0.34, col, em, 0.95, 0.0, 65, 3, 0.95, 0);
+    // A painted mark, so there is something to aim at.
+    boxes.pushSeg(d.x + lx*1.30 + ax*0.16, 1.30, d.z + lz*1.30 + az*0.16,
+                  d.x + lx*1.30 - ax*0.16, 1.30, d.z + lz*1.30 - az*0.16,
+                  0.05, BLOOD, 0.35, 0.7, 0.0, 66, 1, 1.0, 0);
+  }
+
+  function buildTraining() {
+    // One lit chamber, no maze: the room exists to watch the blade, not to
+    // navigate. Walls are the same boxes the dungeon uses.
+    world.walls.length = 0; world.torches.length = 0;
+    world.props.length = 0; world.rooms.length = 0;
+    var R = 6.2;
+    world.walls.push({ x: 0, z: -R, hw: R + 0.5, hd: 0.5, seed: 4 });
+    world.walls.push({ x: 0, z:  R, hw: R + 0.5, hd: 0.5, seed: 9 });
+    world.walls.push({ x: -R, z: 0, hw: 0.5, hd: R + 0.5, seed: 14 });
+    world.walls.push({ x:  R, z: 0, hw: 0.5, hd: R + 0.5, seed: 21 });
+    for (var i = 0; i < 4; i++) {
+      var a = i*Math.PI/2 + Math.PI/4;
+      world.torches.push({ x: Math.sin(a)*(R-0.7), y: 2.05, z: Math.cos(a)*(R-0.7),
+                           ph: rand(0,6.28), nx: 0, nz: 0 });
+    }
+    world.props.push({ x: -3.4, z: 3.6, rot: 0, seed: 12 });
+  }
+
   /* ---------------- run ---------------- */
 
   function farCellFrom(x, z, minDist) {
@@ -1649,7 +1993,36 @@
     return [cellX(N-1), cellZ(N-1)];
   }
 
+  function startTraining() {
+    buildTraining();
+    foes.length = 0;
+    dummy = makeDummy(0, -3.2);
+    benchTotal = 0;
+    benchEls.total.textContent = '0';
+    benchEls.last.textContent = '—'; benchEls.speed.textContent = '—';
+    benchEls.part.textContent = '—';
+    benchEls.box.classList.remove('off');
+    state.x = 0; state.z = -0.9; state.yaw = 0; state.pitch = 0;
+    state.vx = 0; state.vz = 0; state.bob = 0;
+    state.hp = 100; state.sta = 100;
+    state.dead = false; state.won = false; state.paused = false;
+    state.swing = null; state.swingT = 0; state.prevBlade = null;
+    state.hurt = 0; state.shock = 0; state.shake = 0; state.hitStop = 0;
+    state.kills = 0; state.haveSigil = false; state.training = true;
+    sigil.taken = true;
+    for (var i = 0; i < MAX_PARTS; i++) pool[i].live = false;
+    clearMarks();
+    state.running = true;
+    setObjective('Hit the dummy');
+    updateVitals();
+    padMove.home(); padLook.home();
+  }
+
   function resetRun() {
+    dummy = null;
+    state.training = false;
+    benchEls.box.classList.add('off');
+    clearMarks();
     buildDungeon();
     foes.length = 0;
     state.x = cellX(0); state.z = cellZ(0);
@@ -1677,8 +2050,10 @@
       spawnFoe(p[0] + rand(-0.9,0.9), p[1] + rand(-0.9,0.9), false);
     }
     state.running = true;
+    state.hitStop = 0;
     setObjective('Find the sigil');
     updateVitals();
+    padMove.home(); padLook.home();
   }
 
   function setObjective(text) { elObjV.textContent = text; }
@@ -1777,7 +2152,10 @@
     }
 
     updateFoes(dt);
+    updateDummy(dt);
     updateVitals();
+
+    if (state.training) return;
 
     // Sigil and stair
     if (!sigil.taken && Math.hypot(sigil.x-state.x, sigil.z-state.z) < 1.1) {
@@ -2011,6 +2389,8 @@
     // Everything after this mark is carried, and is skipped when the shadow
     // map is drawn from the torch it is carried in.
     boxes.holdMark = boxes.n; bones.holdMark = bones.n;
+    if (dummy && dummy.live) drawDummy();
+
     drawPlayerGear();
 
     for (var q = 0; q < MAX_PARTS; q++) {
@@ -2084,7 +2464,7 @@
     camU[0]/=ul; camU[1]/=ul; camU[2]/=ul;
 
     updateBlade();
-    if (state.swing && state.swingT > 0.11 && state.swingT < 0.34) resolveSwing();
+    if (state.swing && state.swingT > 0.11 && state.swingT < 0.34) resolveSwing(lastDt);
     if (state.swing) {
       state.prevBlade = state.prevBlade || [0,0,0,0,0,0];
       for (var q = 0; q < 6; q++) state.prevBlade[q] = blade[q];
@@ -2097,6 +2477,7 @@
     var view = m4lookAt(camPos[0], camPos[1], camPos[2],
                         camPos[0]+fwdX, camPos[1]+fwdY, camPos[2]+fwdZ, upX, upY, upZ);
     var vp = m4mul(proj, view);
+    lastVP = vp;
 
     // The shadow map is a spot from the torch down the view axis. Shadows only
     // matter where you are looking, so one perspective map buys the whole
@@ -2192,15 +2573,25 @@
 
   /* ---------------- loop ---------------- */
 
-  var lastT = 0, acc = 0, frames = 0, scaleCooldown = 0;
+  var lastT = 0, acc = 0, frames = 0, scaleCooldown = 0, lastDt = 0.016;
 
   function tick(now) {
     requestAnimationFrame(tick);
     var t = now*0.001;
     var dt = lastT ? Math.min(0.05, t - lastT) : 0.016;
     lastT = t;
+    lastDt = dt;
 
-    update(dt);
+    // Hitstop: the world nearly halts for a few frames on a landed blow. It is
+    // most of what makes a hit feel like it connected rather than overlapped.
+    var sim = dt;
+    if (state.hitStop > 0) {
+      state.hitStop = Math.max(0, state.hitStop - dt);
+      sim = dt*0.14;
+    }
+
+    update(sim);
+    updateMarks(dt);
     render();
 
     // vsync pins frame time near 16.7ms, which sits between any sensible pair
@@ -2245,8 +2636,29 @@
   var swDiag = document.getElementById('swDiag');
   var lookEl = document.getElementById('look'), lookVal = document.getElementById('lookVal');
 
+  var alphaEl = document.getElementById('stickAlpha');
+  var alphaVal = document.getElementById('alphaVal');
+  var shapeEl = document.getElementById('stickShape');
+
+  function applyStick() {
+    var a = clamp(settings.stickAlpha, 0, 100)/100;
+    document.documentElement.style.setProperty('--stick-a', a.toFixed(3));
+    [stickMoveEl, stickLookEl].forEach(function (el) {
+      el.classList.toggle('circle', settings.stickShape !== 'square');
+      el.classList.toggle('square', settings.stickShape === 'square');
+    });
+    alphaEl.value = settings.stickAlpha;
+    alphaVal.textContent = settings.stickAlpha === 0
+      ? 'Invisible — the bottom corners still steer.'
+      : settings.stickAlpha + '% — at 0 the sticks are invisible, and the bottom corners still steer.';
+    var btns = shapeEl.querySelectorAll('button');
+    for (var i = 0; i < btns.length; i++)
+      btns[i].classList.toggle('on', btns[i].dataset.shape === settings.stickShape);
+  }
+
   function setSwitch(el, on) { el.setAttribute('aria-checked', on ? 'true' : 'false'); }
   function applySettings() {
+    applyStick();
     setSwitch(swFs, settings.fullscreen);
     setSwitch(swShadow, settings.shadows);
     setSwitch(swInvert, settings.invert);
@@ -2286,6 +2698,16 @@
   swHaptic.addEventListener('click', function () { settings.haptics = !settings.haptics; applySettings(); buzz(10); });
   swGrain.addEventListener('click', function () { settings.grain = !settings.grain; applySettings(); });
   swDiag.addEventListener('click', function () { settings.diag = !settings.diag; applySettings(); });
+  alphaEl.addEventListener('input', function () {
+    settings.stickAlpha = parseInt(alphaEl.value, 10);
+    applyStick(); saveSettings();
+  });
+  shapeEl.addEventListener('click', function (e) {
+    var b = e.target.closest('button');
+    if (!b) return;
+    settings.stickShape = b.dataset.shape;
+    applyStick(); saveSettings(); buzz(8);
+  });
   lookEl.addEventListener('input', function () {
     settings.look = parseInt(lookEl.value, 10);
     lookVal.textContent = (settings.look/10).toFixed(1);
@@ -2302,14 +2724,27 @@
   guardBtn.addEventListener('mousedown', guardOn);
   window.addEventListener('mouseup', function () { if (state.guard) setGuard(false); });
 
-  document.getElementById('btnGo').addEventListener('click', function () {
+  document.getElementById('btnDescend').addEventListener('click', function () {
     introEl.classList.add('hide');
+    state.depth = 1;
     resetRun();
+  });
+  document.getElementById('btnTrain').addEventListener('click', function () {
+    introEl.classList.add('hide');
+    startTraining();
   });
   document.getElementById('btnAgain').addEventListener('click', function () {
     overEl.classList.add('hide');
     state.depth = state.won ? state.depth + 1 : 1;
     resetRun();
+  });
+  document.getElementById('btnMenu').addEventListener('click', function () {
+    overEl.classList.add('hide');
+    introEl.classList.remove('hide');
+    state.running = false;
+    dummy = null;
+    benchEls.box.classList.add('off');
+    clearMarks();
   });
 
   document.addEventListener('visibilitychange', function () {
@@ -2324,6 +2759,7 @@
   // A still frame behind the intro card, so the tomb is there before you enter.
   state.x = cellX(0); state.z = cellZ(0); state.yaw = Math.PI;
   resize();
+  padMove.home(); padLook.home();
   requestAnimationFrame(tick);
 }());
 </script>

@@ -988,12 +988,17 @@
   /* ---------------- settings ---------------- */
 
   var SKEY = 'ossuary.settings';
-  var settings = { fullscreen: false, motion: false, sens: 10, haptics: true,
+  var settings = { rev: 2, fullscreen: true, motion: false, sens: 10, haptics: true,
                    grain: true, diag: true, neutral: 0 };
   var framed = window.self !== window.top;
   try {
     var saved = JSON.parse(localStorage.getItem(SKEY) || 'null');
-    if (saved) for (var sk in settings) if (saved[sk] !== undefined) settings[sk] = saved[sk];
+    if (saved) {
+      for (var sk in settings) if (saved[sk] !== undefined) settings[sk] = saved[sk];
+      // A stored value from before a default changed would pin the old
+      // behaviour forever; the rev re-applies the new default once.
+      if ((saved.rev || 0) < 2) { settings.fullscreen = true; settings.rev = 2; }
+    }
   } catch (e) {}
 
   function saveSettings() {

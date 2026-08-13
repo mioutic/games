@@ -619,6 +619,10 @@
   function open(g) {
     current = g;
     ptitle.textContent = g.name;
+    // Fullscreen belongs to the game that asked for it. A game with no settings
+    // sheet has no way to ask for the bar back, so inheriting the previous
+    // game's fullscreen would leave it with no way out at all.
+    player.classList.remove('fs');
     if (BUNDLE) {
       frame.removeAttribute('src');
       frame.srcdoc = BUNDLE.html[g.slug] || '<p>Missing.</p>';
