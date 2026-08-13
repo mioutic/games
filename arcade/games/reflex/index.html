@@ -210,6 +210,32 @@
     next();
   });
 })();
+
+  // The launcher's metrics panel asks; every game answers, so a viewport
+  // mismatch names which side of the frame boundary lost the pixels.
+  (function () {
+    var probe = document.createElement('div');
+    probe.style.cssText = 'position:fixed;top:0;left:0;width:0;height:0;visibility:hidden;' +
+      'pointer-events:none;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) ' +
+      'env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)';
+    document.body.appendChild(probe);
+    window.addEventListener('message', function (e) {
+      if (!e.data || e.data.type !== 'arcade:spec?') return;
+      var vv = window.visualViewport, doc = document.documentElement, cs = getComputedStyle(probe);
+      function v(n) { return Math.round(parseFloat(cs[n]) || 0); }
+      try {
+        window.parent.postMessage({
+          type: 'arcade:spec', name: 'Reflex',
+          win: (window.innerWidth || 0) + '\u00d7' + (window.innerHeight || 0),
+          doc: (doc.clientWidth || 0) + '\u00d7' + (doc.clientHeight || 0),
+          vv: vv ? Math.round(vv.width) + '\u00d7' + Math.round(vv.height) : 'n/a',
+          stage: Math.round(document.body.clientWidth) + '\u00d7' + Math.round(document.body.clientHeight),
+          ins: v('paddingTop') + ' / ' + v('paddingRight') + ' / ' +
+               v('paddingBottom') + ' / ' + v('paddingLeft')
+        }, '*');
+      } catch (err) {}
+    });
+  }());
 </script>
 </body>
 </html>

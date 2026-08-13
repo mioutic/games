@@ -267,6 +267,9 @@
   <button class="fight on" id="fight" aria-pressed="true">
     <i></i><span id="fightLbl">Fights on</span>
   </button>
+  <button class="fight" id="view3" aria-pressed="false">
+    <i></i><span id="viewLbl">First person</span>
+  </button>
   </div>
 </div>
 
@@ -455,6 +458,22 @@
     buf[o+8]=s*sz; buf[o+9]=0; buf[o+10]=c*sz; buf[o+11]=0;
     buf[o+12]=px; buf[o+13]=py; buf[o+14]=pz; buf[o+15]=1;
   }
+  // writeTRS only carries a yaw, which is enough for architecture and useless
+  // for a limb. This aims the mesh's local +Y down an arbitrary vector, so a
+  // unit mesh centred on the origin becomes a bone between two points.
+  function writeAim(buf, o, px, py, pz, dx, dy, dz, len, rx, rz) {
+    var l = Math.hypot(dx, dy, dz) || 1;
+    var yx = dx/l, yy = dy/l, yz = dz/l;
+    // Any axis not parallel to the bone works as the seed for the basis.
+    var ax = Math.abs(yy) > 0.985 ? 1 : 0, ay = Math.abs(yy) > 0.985 ? 0 : 1;
+    var xx = ay*yz - 0*yy, xy = 0*yx - ax*yz, xz = ax*yy - ay*yx;
+    var xl = Math.hypot(xx, xy, xz) || 1; xx/=xl; xy/=xl; xz/=xl;
+    var zx = xy*yz - xz*yy, zy = xz*yx - xx*yz, zz = xx*yy - xy*yx;
+    buf[o]=xx*rx;    buf[o+1]=xy*rx;   buf[o+2]=xz*rx;   buf[o+3]=0;
+    buf[o+4]=yx*len; buf[o+5]=yy*len;  buf[o+6]=yz*len;  buf[o+7]=0;
+    buf[o+8]=zx*rz;  buf[o+9]=zy*rz;   buf[o+10]=zz*rz;  buf[o+11]=0;
+    buf[o+12]=px; buf[o+13]=py; buf[o+14]=pz; buf[o+15]=1;
+  }
 
   /* ---------------- gl helpers ---------------- */
 
@@ -556,6 +575,24 @@
       d.data[o+20]=rough; d.data[o+21]=metal; d.data[o+22]=seed; d.data[o+23]=mode||0;
       d.n++;
     };
+    // A bone between two world points. `bulge` widens it across the axis so a
+    // sphere mesh reads as a limb rather than a bead.
+    // `rad` is the thickness across, matching the full-extent scale arguments
+    // used everywhere else. `extend` is how far past the endpoints the caps
+    // run, in thicknesses: 1 for a bone, so the caps swallow the joint seam,
+    // 0 for a body, where the two points are the actual ends of the ellipsoid.
+    d.pushSeg = function (ax,ay,az, bx,by,bz, rad, col, emis, rough, metal, seed, mode, bulge, extend) {
+      if (d.n >= d.max) return;
+      var o = d.n * INST_FLOATS;
+      var dx=bx-ax, dy=by-ay, dz=bz-az;
+      var len = Math.hypot(dx,dy,dz);
+      writeAim(d.data, o, (ax+bx)*0.5, (ay+by)*0.5, (az+bz)*0.5,
+               dx, dy, dz, len + rad*(extend === undefined ? 1 : extend),
+               rad, rad*(bulge || 1));
+      d.data[o+16]=col[0]; d.data[o+17]=col[1]; d.data[o+18]=col[2]; d.data[o+19]=emis;
+      d.data[o+20]=rough; d.data[o+21]=metal; d.data[o+22]=seed; d.data[o+23]=mode||0;
+      d.n++;
+    };
     d.upload = function () {
       if (!d.n) return;
       gl.bindBuffer(gl.ARRAY_BUFFER, d.ib);
@@ -572,6 +609,9 @@
 
   var boxes  = makeDrawable(boxMesh(), 520);
   var orbs   = makeDrawable(sphereMesh(20, 14), 96);
+  // Bones and body parts: many instances, none of them close enough to the
+  // camera to need the 560-triangle sphere.
+  var limbs  = makeDrawable(sphereMesh(10, 7), 260);
   var dust   = makeDrawable(sphereMesh(6, 4), 64);
   var parts  = makeDrawable(sphereMesh(6, 4), 640);
   var rainD  = makeDrawable(boxMesh(), 520);
@@ -648,7 +688,7 @@
 
     'void main(){\n' +
     '  if (vWorld.y < uClipY) discard;\n' +
-    '  if (vMat.w > 2.5) {\n' +
+    '  if (vMat.w > 2.5 && vMat.w < 3.5) {\n' +
     '    float e = smoothstep(0.0, 0.5, vUV.x) * smoothstep(1.0, 0.5, vUV.x);\n' +
     '    float edge = e * e;\n' +
     '    float drop = smoothstep(0.0, 0.55, vUV.y);\n' +
@@ -670,12 +710,12 @@
     '    float det=dot(dpx,r1);\n' +
     '    vec3 grad=(r1*dFdx(h)+r2*dFdy(h))/(abs(det)<1e-9?1e-9:det);\n' +
     '    float fade=clamp(1.35-length(fwidth(np)),0.0,1.0);\n' +
-    '    N = normalize(N - (mode > 1.5 ? 0.055 : 0.18)*fade*grad);\n' +
+    '    N = normalize(N - (mode > 1.5 && mode < 2.5 ? 0.055 : 0.18)*fade*grad);\n' +
     '    albedo *= mix(1.0, 0.90+0.18*h, fade);\n' +
     '    rough = clamp(rough*(0.74+0.52*h), 0.05, 1.0);\n' +
     // Wet stone goes darker and smoother. That, plus the stronger reflection
     // below, is most of why rain reads at all in a room this dark.
-    '    if (mode > 1.5) { albedo *= mix(1.0, 0.55, uWet); rough = mix(rough, 0.08, uWet); }\n' +
+    '    if (mode > 1.5 && mode < 2.5) { albedo *= mix(1.0, 0.55, uWet); rough = mix(rough, 0.08, uWet); }\n' +
     '  }\n' +
 
     '  float aoV = mix(0.42, 1.0, smoothstep(0.0, 2.2, vWorld.y));\n' +
@@ -684,8 +724,13 @@
     '  float sh = shadowAt(N, L);\n' +
     '  vec3 col = brdf(N,V,L,albedo,rough,metal,uSunColor)*sh;\n' +
     '  vec3 pointSum = vec3(0.0);\n' +
+    // Light 0 is the lantern the player carries. Anything flagged mode 4 is
+    // being carried too, and would be blown to white by a source sitting
+    // inside it — brightness and lighting role are separate knobs (DESIGN.md).
+    '  int firstLight = (mode > 3.5) ? 1 : 0;\n' +
     '  for (int i=0;i<8;i++){\n' +
     '    if (i>=uNumLights || mode>0.5 && mode<1.5) break;\n' +
+    '    if (i < firstLight) continue;\n' +
     '    vec3 d = uLightPos[i]-vWorld;\n' +
     '    float dist2 = max(dot(d,d),0.06);\n' +
     '    pointSum += brdf(N,V,normalize(d),albedo,rough,metal,uLightColor[i]/dist2);\n' +
@@ -694,7 +739,7 @@
     '  col += uAmbient*albedo*ao;\n' +
     '  col += albedo*emissive;\n' +
 
-    '  if (mode > 1.5 && uReflectOn > 0.5) {\n' +
+    '  if (mode > 1.5 && mode < 2.5 && uReflectOn > 0.5) {\n' +
     '    vec2 suv = gl_FragCoord.xy / uViewport;\n' +
     '    suv += N.xz * 0.007;\n' +
     '    vec3 refl = texture(uReflect, clamp(suv, vec2(0.001), vec2(0.999))).rgb;\n' +
@@ -938,9 +983,118 @@
   var PALE  = [0.26, 0.21, 0.17];
   var STONE = srgb('#4a3138');
   var STONE_D = srgb('#38242a');
-  var BLOB  = srgb('#a884c9');
+  var BLOB   = srgb('#a884c9');
+  var BLOB_D = srgb('#8f74ac');       // limbs, so they read against the mass
+  var FLESH  = srgb('#c3a9ad');       // the pallid half of the player
+  var CLOTH  = srgb('#6b2f3c');       // and the oxblood half
   var NIGHT_FOG = [0.010, 0.006, 0.008];
   var DAY_FOG   = [0.026, 0.020, 0.028];
+
+  /* ---------------- procedural limbs ---------------- */
+
+  // Feet are planted in the world and only move when the body has walked far
+  // enough away from them; the knees are solved back from there. Gait comes out
+  // of the movement instead of a sine wave, so a blob turning on the spot
+  // shuffles its feet round and a blob knocked back catches itself.
+
+  function makeRig(off, opt) {
+    var legs = [];
+    for (var i = 0; i < off.length; i++)
+      legs.push({ fx: 0, fy: 0, fz: 0, ax: 0, az: 0, bx: 0, bz: 0,
+                  t: 1, dur: 0.24, planted: true });
+    return {
+      legs: legs, off: off,
+      stride: opt.stride, lift: opt.lift, lead: opt.lead,
+      l1: opt.l1, l2: opt.l2, hipY: opt.hipY, hipR: opt.hipR,
+      ready: false
+    };
+  }
+
+  function rigHome(rig, i, x, z, yaw, out) {
+    var o = rig.off[i], a = yaw + o[0];
+    out[0] = x + Math.sin(a)*o[1];
+    out[1] = z + Math.cos(a)*o[1];
+  }
+
+  var homeTmp = [0, 0];
+
+  function stepRig(rig, x, z, yaw, vx, vz, dt, onPlant) {
+    var n = rig.legs.length, i, leg;
+    if (!rig.ready) {
+      for (i = 0; i < n; i++) {
+        rigHome(rig, i, x, z, yaw, homeTmp);
+        leg = rig.legs[i];
+        leg.fx = homeTmp[0]; leg.fz = homeTmp[1]; leg.fy = 0;
+      }
+      rig.ready = true;
+      return;
+    }
+    var sp = Math.hypot(vx, vz);
+    var worst = -1, worstD = rig.stride;
+    for (i = 0; i < n; i++) {
+      leg = rig.legs[i];
+      if (leg.t < 1) {
+        leg.t = Math.min(1, leg.t + dt/leg.dur);
+        var e = leg.t*leg.t*(3 - 2*leg.t);
+        leg.fx = leg.ax + (leg.bx - leg.ax)*e;
+        leg.fz = leg.az + (leg.bz - leg.az)*e;
+        leg.fy = Math.sin(Math.PI*leg.t) * rig.lift;
+        if (leg.t >= 1) { leg.fy = 0; leg.planted = true; if (onPlant) onPlant(i, sp); }
+        continue;
+      }
+      rigHome(rig, i, x, z, yaw, homeTmp);
+      var d = Math.hypot(leg.fx - homeTmp[0], leg.fz - homeTmp[1]);
+      if (d > worstD) { worstD = d; worst = i; }
+    }
+    if (worst < 0) return;
+    // Neighbours stay down while this one swings: on four legs that falls out
+    // as a diagonal trot, on two as an ordinary walk.
+    var a = rig.legs[(worst + 1) % n], b = rig.legs[(worst + n - 1) % n];
+    if (a.t < 1 || b.t < 1) return;
+    leg = rig.legs[worst];
+    rigHome(rig, worst, x, z, yaw, homeTmp);
+    leg.ax = leg.fx; leg.az = leg.fz;
+    leg.bx = homeTmp[0] + vx*rig.lead;
+    leg.bz = homeTmp[1] + vz*rig.lead;
+    leg.t = 0; leg.planted = false;
+    leg.dur = clamp(rig.stride/(sp + 0.6)*0.55, 0.13, 0.40);
+  }
+
+  // Two bones, one hinge. The pole vector decides which way the knee breaks —
+  // outward and up for the blobs, forward for the player.
+  var ikOut = [0,0,0, 0,0,0];
+  function solveIK(hx,hy,hz, fx,fy,fz, l1, l2, px,py,pz) {
+    var dx = fx-hx, dy = fy-hy, dz = fz-hz;
+    var d = Math.hypot(dx,dy,dz);
+    var maxd = (l1 + l2)*0.998;
+    if (d > maxd) { var s = maxd/d; dx*=s; dy*=s; dz*=s; d = maxd; }
+    if (d < 1e-4) { dx = 0; dy = -1e-4; dz = 0; d = 1e-4; }
+    var ux = dx/d, uy = dy/d, uz = dz/d;
+    var a = (l1*l1 - l2*l2 + d*d)/(2*d);
+    var h = Math.sqrt(Math.max(0, l1*l1 - a*a));
+    var pd = px*ux + py*uy + pz*uz;
+    var qx = px - ux*pd, qy = py - uy*pd, qz = pz - uz*pd;
+    var ql = Math.hypot(qx,qy,qz);
+    if (ql < 1e-5) {
+      // Pole parallel to the bone: any perpendicular will do.
+      qx = -uy; qy = ux; qz = 0;
+      ql = Math.hypot(qx,qy,qz);
+      if (ql < 1e-5) { qx = 1; qy = 0; qz = 0; ql = 1; }
+    }
+    qx/=ql; qy/=ql; qz/=ql;
+    ikOut[0] = hx + ux*a + qx*h;
+    ikOut[1] = hy + uy*a + qy*h;
+    ikOut[2] = hz + uz*a + qz*h;
+    ikOut[3] = hx + dx; ikOut[4] = hy + dy; ikOut[5] = hz + dz;
+    return ikOut;
+  }
+
+  // Critically damped spring, used for every bit of secondary motion.
+  function spring(cur, vel, target, k, dt) {
+    var c = 2*Math.sqrt(k);
+    vel += (-k*(cur - target) - c*vel)*dt;
+    return [cur + vel*dt, vel];
+  }
 
   /* ---------------- world ---------------- */
 
@@ -959,7 +1113,13 @@
     vx: 0, vz: 0, bob: 0,
     t: 0, clock: 0, found: 0, penalty: 0, fights: 0, won: 0,
     flare: 0, flareCd: 0, flash: 0, flashCol: [0.42,0.36,0.30], shock: 0, shake: 0,
-    wet: 0
+    wet: 0,
+    // the body you only see in third person, on the same rig as the blobs
+    face: 0, pbob: 0, pbobV: 0, ptx: 0, ptxv: 0, ptz: 0, ptzv: 0,
+    swing: 0, hurt: 0, breathe: 0,
+    prig: makeRig([[Math.PI/2, 0.17], [-Math.PI/2, 0.17]],
+                  { stride: 0.66, lift: 0.17, lead: 0.13,
+                    l1: 0.52, l2: 0.52, hipY: 0.92, hipR: 0.17 })
   };
 
   var best = parseFloat(localStorage.getItem(BKEY) || '0') || 0;
@@ -995,13 +1155,26 @@
       }
     }
     for (var k = 0; k < 5; k++) {
-      world.blobs.push({
+      var size = rand(0.86, 1.18);
+      var blob = {
         x: rand(-HALL+6, HALL-6), z: rand(-HALL+6, HALL-6),
         dir: rand(0,6.28), rot: rand(0,6.28), ph: rand(0,6.28),
         speed: rand(1.1,1.9), think: rand(0,2), alive: true, moving: 0,
         name: FOE_NAMES[Math.floor(Math.random()*FOE_NAMES.length)],
-        maxHp: Math.round(rand(52,78))
-      });
+        maxHp: Math.round(rand(52,78)),
+        size: size,
+        // secondary motion — none of this is driven by the clock
+        px: 0, pz: 0, vx: 0, vz: 0, ax: 0, az: 0,
+        bob: 0, bobV: 0, tx: 0, txv: 0, tz: 0, tzv: 0, sq: 0, sqV: 0,
+        hit: 0, hitX: 0, hitZ: 0, kvx: 0, kvz: 0, lunge: 0, jaw: 0, look: rand(0,6.28),
+        blink: rand(1.5, 6), blinking: 0,
+        rig: makeRig([[0.72, 0.82*size], [2.42, 0.82*size],
+                      [3.86, 0.82*size], [5.56, 0.82*size]],
+                     { stride: 0.46*size, lift: 0.22*size, lead: 0.16,
+                       l1: 0.68*size, l2: 0.68*size, hipY: 0.94*size, hipR: 0.34*size })
+      };
+      blob.px = blob.x; blob.pz = blob.z;
+      world.blobs.push(blob);
     }
   }
 
@@ -1115,7 +1288,8 @@
   /* ---------------- settings ---------------- */
 
   var settings = { fullscreen: false, reflect: true, rain: true, shafts: true,
-                   look: 10, haptics: true, grain: true, diag: true, fights: true };
+                   look: 10, haptics: true, grain: true, diag: true, fights: true,
+                   third: false };
   try {
     var sv = JSON.parse(localStorage.getItem(SKEY) || 'null');
     if (sv) for (var sk in settings) if (sv[sk] !== undefined) settings[sk] = sv[sk];
@@ -1241,6 +1415,7 @@
     var stand = collide(foe.x + bx/bd*4.0, foe.z + bz/bd*4.0);
     state.x = stand[0]; state.z = stand[1];
     state.vx = 0; state.vz = 0;
+    state.prig.ready = false;          // the feet were left behind
     battle = { foe: foe, hpYou: 100, hpFoe: foe.maxHp, turn: 'choose', wait: 0, fx: null };
     state.fights++;
     foeNameEl.textContent = foe.name;
@@ -1259,6 +1434,7 @@
     var dx = state.x - f.x, dz = state.z - f.z, d = Math.hypot(dx, dz) || 1;
     var moved = collide(f.x + dx/d*3.4, f.z + dz/d*3.4);
     state.x = moved[0]; state.z = moved[1];
+    state.prig.ready = false;
     battle = null;
     state.mode = 'explore';
   }
@@ -1277,6 +1453,7 @@
       // harder than any damage number in a game scored on the clock.
       state.penalty += 15;
       state.x = 0; state.z = 0;
+      state.prig.ready = false;
       flash(0.8, [0.50,0.06,0.14]);
     }
     battle = null;
@@ -1344,6 +1521,7 @@
     battle.turn = 'busy';
     setActs(false);
     var foe = battle.foe;
+    state.swing = 1;
     playFx(kind, state.x, 1.6, state.z, foe.x, 1.0, foe.z, function () {
       if (kind === 'ward') {
         battle.hpYou = Math.min(100, battle.hpYou + 18);
@@ -1352,6 +1530,11 @@
         var dmg = Math.round(rand(a.dmg[0], a.dmg[1]));
         battle.hpFoe -= dmg;
         logEl.textContent = 'Your ' + a.name.toLowerCase() + ' lands for ' + dmg + '.';
+        // It takes the blow: flare, buckle, and get shoved off the line.
+        var kx = foe.x - state.x, kz = foe.z - state.z, kd = Math.hypot(kx, kz) || 1;
+        foe.hit = 1; foe.hitX = kx/kd*0.5; foe.hitZ = kz/kd*0.5;
+        foe.kvx = kx/kd*2.6; foe.kvz = kz/kd*2.6;
+        foe.bobV += 2.6; foe.sqV -= 5.0;
       }
       setBars();
     });
@@ -1362,10 +1545,12 @@
   function foeAct() {
     var foe = battle.foe;
     battle.turn = 'busy';
+    foe.jaw = 1; foe.lunge = 1; foe.sqV += 4.0;
     playFx('ember', foe.x, 1.0, foe.z, state.x, 1.5, state.z, function () {
       var dmg = Math.round(rand(9, 19));
       battle.hpYou -= dmg;
       logEl.textContent = 'The ' + foe.name.toLowerCase() + ' slams into you for ' + dmg + '.';
+      state.hurt = 1; state.pbobV += 1.5;
       setBars();
     });
     battle.fx.next = 'choose';
@@ -1409,6 +1594,97 @@
     return [nx, nz];
   }
 
+  // Everything that is not decision-making: the walk, the wobble, the recoil.
+  // Runs in battle too, where the AI does not.
+  function animateBlobs(dt) {
+    for (var i = 0; i < world.blobs.length; i++) {
+      var b = world.blobs[i];
+      if (!b.alive) continue;
+
+      // Knockback is real displacement, not a lean: the feet come unplanted
+      // and the rig has to catch the body, which is the whole point of it.
+      if (b.kvx || b.kvz) {
+        var kmv = collide(b.x + b.kvx*dt, b.z + b.kvz*dt);
+        b.x = kmv[0]; b.z = kmv[1];
+        var damp = Math.max(0, 1 - dt*6);
+        b.kvx *= damp; b.kvz *= damp;
+        if (Math.abs(b.kvx) + Math.abs(b.kvz) < 0.02) { b.kvx = 0; b.kvz = 0; }
+      }
+
+      var nvx = (b.x - b.px)/Math.max(dt, 1e-4), nvz = (b.z - b.pz)/Math.max(dt, 1e-4);
+      b.ax = (nvx - b.vx)/Math.max(dt, 1e-4); b.az = (nvz - b.vz)/Math.max(dt, 1e-4);
+      b.vx = nvx; b.vz = nvz;
+      b.px = b.x; b.pz = b.z;
+
+      stepRig(b.rig, b.x, b.z, b.rot, b.vx, b.vz, dt, function (leg, sp) {
+        // A foot landing drops the body a little; that is where the gait
+        // bounce comes from, rather than from a sine on the clock.
+        b.bobV -= 0.55*Math.min(1, sp*0.5 + 0.25)*b.size;
+        b.sqV  += 1.7*Math.min(1, sp*0.5 + 0.25);
+      });
+
+      var s;
+      s = spring(b.bob, b.bobV, 0, 150, dt); b.bob = clamp(s[0], -0.22, 0.22); b.bobV = s[1];
+      s = spring(b.sq,  b.sqV,  0, 190, dt); b.sq  = clamp(s[0], -0.30, 0.30); b.sqV  = s[1];
+      // Leaning against its own acceleration, plus a shove away from a hit.
+      var tgtX = clamp(-b.ax*0.030, -0.36, 0.36) + b.hitX*b.hit;
+      var tgtZ = clamp(-b.az*0.030, -0.36, 0.36) + b.hitZ*b.hit;
+      s = spring(b.tx, b.txv, tgtX, 62, dt); b.tx = s[0]; b.txv = s[1];
+      s = spring(b.tz, b.tzv, tgtZ, 62, dt); b.tz = s[0]; b.tzv = s[1];
+
+      // In a fight the AI is not running, so squaring up is done here.
+      if (state.mode === 'battle' && battle && battle.foe === b) {
+        var wr = Math.atan2(state.x - b.x, state.z - b.z);
+        var dr = ((wr - b.rot + Math.PI*3) % (Math.PI*2)) - Math.PI;
+        b.rot += dr*Math.min(1, dt*4);
+      }
+
+      b.hit = Math.max(0, b.hit - dt*2.2);
+      b.lunge = Math.max(0, b.lunge - dt*2.6);
+      b.jaw = Math.max(0, b.jaw - dt*1.6);
+
+      // Eyes hold on the player, and blink on their own schedule.
+      var want = Math.atan2(state.x - b.x, state.z - b.z);
+      var d2 = ((want - b.look + Math.PI*3) % (Math.PI*2)) - Math.PI;
+      b.look += d2*Math.min(1, dt*6);
+      b.blink -= dt;
+      if (b.blink <= 0) { b.blinking = 0.13; b.blink = rand(1.8, 6.5); }
+      b.blinking = Math.max(0, b.blinking - dt);
+    }
+  }
+
+  var pAx = 0, pAz = 0, pPvx = 0, pPvz = 0;
+
+  function animatePlayer(dt) {
+    pAx = (state.vx - pPvx)/Math.max(dt, 1e-4);
+    pAz = (state.vz - pPvz)/Math.max(dt, 1e-4);
+    pPvx = state.vx; pPvz = state.vz;
+
+    var sp = Math.hypot(state.vx, state.vz);
+    // Facing runs with the feet while moving and falls back to the camera when
+    // standing, so turning on the spot still turns the body.
+    var wantFace = sp > 0.3 ? Math.atan2(state.vx, state.vz) : state.yaw + Math.PI;
+    if (state.mode === 'battle' && battle && battle.foe)
+      wantFace = Math.atan2(battle.foe.x - state.x, battle.foe.z - state.z);
+    var d = ((wantFace - state.face + Math.PI*3) % (Math.PI*2)) - Math.PI;
+    state.face += d*Math.min(1, dt*(sp > 0.3 ? 9 : 5));
+
+    stepRig(state.prig, state.x, state.z, state.face, state.vx, state.vz, dt,
+      function (leg, s) { state.pbobV -= 0.30*Math.min(1, s*0.35 + 0.3); });
+
+    var s2;
+    s2 = spring(state.pbob, state.pbobV, 0, 170, dt);
+    state.pbob = clamp(s2[0], -0.14, 0.14); state.pbobV = s2[1];
+    s2 = spring(state.ptx, state.ptxv, clamp(-pAx*0.016, -0.22, 0.22), 70, dt);
+    state.ptx = s2[0]; state.ptxv = s2[1];
+    s2 = spring(state.ptz, state.ptzv, clamp(-pAz*0.016, -0.22, 0.22), 70, dt);
+    state.ptz = s2[0]; state.ptzv = s2[1];
+
+    state.swing = Math.max(0, state.swing - dt*2.3);
+    state.hurt  = Math.max(0, state.hurt - dt*2.0);
+    state.breathe += dt*(1.1 + sp*0.35);
+  }
+
   function updateBlobs(dt) {
     for (var i = 0; i < world.blobs.length; i++) {
       var b = world.blobs[i];
@@ -1426,7 +1702,9 @@
       var m = collide(nx, nz);
       if (Math.abs(m[0]-nx) > 1e-6 || Math.abs(m[1]-nz) > 1e-6) b.dir += 2.2;
       b.x = m[0]; b.z = m[1];
-      b.rot += (b.dir - b.rot) * Math.min(1, dt*3);
+      // Wrapped, or a heading that crosses ±π sends it spinning the long way.
+      var dRot = ((b.dir - b.rot + Math.PI*3) % (Math.PI*2)) - Math.PI;
+      b.rot += dRot * Math.min(1, dt*3);
       b.moving = sp;
       if (settings.fights) {
         if (state.mode === 'explore' && toP < 1.7) return startBattle(b);
@@ -1466,6 +1744,9 @@
         state.yaw += diff * k;
         state.pitch += (wantPitch - state.pitch) * k;
       }
+      state.vx *= Math.max(0, 1-dt*9); state.vz *= Math.max(0, 1-dt*9);
+      animatePlayer(dt);
+      animateBlobs(dt);
       updateBattle(dt);
       return;
     }
@@ -1495,7 +1776,9 @@
     var moved = collide(state.x + state.vx*dt, state.z + state.vz*dt);
     state.x = moved[0]; state.z = moved[1];
 
+    animatePlayer(dt);
     updateBlobs(dt);
+    animateBlobs(dt);
     if (state.mode === 'battle') return;
 
     var nearest = null, nd = 1e9;
@@ -1547,6 +1830,11 @@
     state.fights = 0; state.won = 0;
     state.flare = 0; state.flareCd = 0; state.flash = 0; state.shock = 0; state.shake = 0;
     state.done = false; state.paused = false; state.mode = 'explore';
+    // The feet are planted in world space, so a teleport has to replant them.
+    state.face = Math.PI; state.prig.ready = false;
+    state.pbob = 0; state.pbobV = 0; state.ptx = 0; state.ptz = 0;
+    state.swing = 0; state.hurt = 0;
+    pPvx = 0; pPvz = 0;
     sky.t = 0.72;                       // open near dusk, so night closes in on you
     weather.rain = 0; weather.target = 0; weather.next = 14;
     battle = null; battleEl.classList.remove('on'); showControls(true);
@@ -1562,6 +1850,7 @@
   var lightPosArr = new Float32Array(MAX_LIGHTS*3), lightColArr = new Float32Array(MAX_LIGHTS*3);
   var drawCalls = 0, triCount = 0, lastFps = 0;
 
+  var CAM_DIST = 3.4;
   var MOTES = 40, motes = [];
   for (var mi2 = 0; mi2 < MOTES; mi2++)
     motes.push({ x: rand(-HALL,HALL), y: rand(0.6, CEIL_Y-1.5), z: rand(-HALL,HALL),
@@ -1571,9 +1860,153 @@
     return 0.72 + 0.28*Math.sin(state.t*9.1 + b.phase)*Math.sin(state.t*3.7 + b.phase*2.1);
   }
 
+  // A hip ball, a thigh, a shin and a foot, solved back from wherever the rig
+  // planted the foot. The pole decides which way the joint breaks.
+  function drawLeg(rig, i, hx, hy, hz, poleX, poleY, poleZ, thick, col, seed, mode) {
+    var leg = rig.legs[i];
+    var ik = solveIK(hx, hy, hz, leg.fx, leg.fy, leg.fz, rig.l1, rig.l2,
+                     poleX, poleY, poleZ);
+    var kx = ik[0], ky = ik[1], kz = ik[2], fx = ik[3], fy = ik[4], fz = ik[5];
+    var em = mode === 4 ? 0.06 : 0.04;
+    limbs.pushSeg(hx, hy, hz, kx, ky, kz, thick, col, em, 0.62, 0.0, seed, mode);
+    limbs.pushSeg(kx, ky, kz, fx, fy, fz, thick*0.80, col, em, 0.62, 0.0, seed+3, mode);
+    limbs.pushSeg(kx, ky, kz, kx, ky + 0.004, kz, thick*1.08, col, em, 0.5, 0.0, seed+6, mode);
+    return ik;
+  }
+
+  function drawBlob(b, k) {
+    if (!b.alive) return;
+    var sz = b.size, rig = b.rig;
+    var lx = Math.sin(b.look), lz = Math.cos(b.look);
+    var rx = lz, rz = -lx;                       // the body's own right
+    var cx = b.x + lx*b.lunge*0.5*sz, cz = b.z + lz*b.lunge*0.5*sz;
+    var midY = 1.00*sz + b.bob;                  // centre of the mass
+    var tiltX = b.tx*sz, tiltZ = b.tz*sz;
+    var glow = 0.06 + b.hit*0.45;                // it flares when struck
+
+    // The trunk runs front-to-back, not up-down: a sphere with a face on it is
+    // Halloween, and a low lozenge slung between four legs is not. Squash
+    // conserves volume — it spreads as it flattens.
+    var sq = b.sq;
+    var trunkA = 0.50*sz, trunkB = 0.44*sz;
+    limbs.pushSeg(cx - lx*trunkA - tiltX*0.3, midY - sq*0.10*sz, cz - lz*trunkA - tiltZ*0.3,
+                  cx + lx*trunkB + tiltX,     midY + sq*0.04*sz, cz + lz*trunkB + tiltZ,
+                  0.76*sz*(1 + sq*0.22), BLOB, glow, 0.58, 0.0, k*7, 0,
+                  0.68/(1 + sq*0.30), 0);
+    // A ridge of vertebrae along the back — cheap silhouette, big read.
+    for (var v = 0; v < 3; v++) {
+      var vf = (v - 1)*0.26*sz;
+      limbs.pushSeg(cx + lx*vf + tiltX*0.5, midY + 0.20*sz, cz + lz*vf + tiltZ*0.5,
+                    cx + lx*vf + tiltX*0.7, midY + (0.30 - v*0.03)*sz, cz + lz*vf + tiltZ*0.7,
+                    (0.24 - v*0.03)*sz, BLOB_D, glow*0.5, 0.7, 0.0, k*7+v, 0, 1, 0);
+    }
+
+    // Head, carried forward and low on a short neck.
+    var hx = cx + lx*0.92*sz + tiltX*1.1, hz = cz + lz*0.92*sz + tiltZ*1.1;
+    var hy = midY - 0.14*sz;
+    limbs.pushSeg(cx + lx*0.40*sz + tiltX*0.7, midY + 0.06*sz, cz + lz*0.40*sz + tiltZ*0.7,
+                  hx - lx*0.10*sz, hy + 0.02*sz, hz - lz*0.10*sz,
+                  0.30*sz, BLOB, glow*0.7, 0.62, 0.0, k*7+4);
+    limbs.pushSeg(hx - lx*0.16*sz, hy + 0.01*sz, hz - lz*0.16*sz,
+                  hx + lx*0.18*sz, hy - 0.02*sz, hz + lz*0.18*sz,
+                  0.40*sz, BLOB, glow*0.8, 0.52, 0.0, k*7+5, 0, 0.80, 0);
+
+    // Jaw hinges down on the attack; the throat behind it is the lit part.
+    var jaw = b.jaw;
+    limbs.pushSeg(hx - lx*0.06*sz, hy - 0.12*sz, hz - lz*0.06*sz,
+                  hx + lx*0.17*sz, hy - 0.13*sz - jaw*0.20*sz, hz + lz*0.17*sz,
+                  0.24*sz, BLOB_D, 0.02, 0.6, 0.0, k*7+8, 0, 0.55, 0);
+    if (jaw > 0.02)
+      limbs.pushSeg(hx + lx*0.02*sz, hy - 0.08*sz - jaw*0.05*sz, hz + lz*0.02*sz,
+                    hx + lx*0.13*sz, hy - 0.09*sz - jaw*0.09*sz, hz + lz*0.13*sz,
+                    0.14*sz*jaw, BLOOD, 0.8*jaw, 0.4, 0.0, 0, 1, 1, 0);
+
+    // Eyes are slits, not lamps: two round eyes on a face reads as a cartoon,
+    // which is the register the brief exists to keep out. Emissive crimson is
+    // held well under the clip and left to the bloom (DESIGN.md).
+    var open = b.blinking > 0 ? 0.16 : 1;
+    for (var e = 0; e < 2; e++) {
+      var side = e ? 1 : -1;
+      var ex = hx + lx*0.06*sz + rx*side*0.12*sz;
+      var ez = hz + lz*0.06*sz + rz*side*0.12*sz;
+      var ey = hy + 0.09*sz;
+      limbs.pushSeg(ex - rx*side*0.09*sz - lx*0.02*sz, ey, ez - rz*side*0.09*sz - lz*0.02*sz,
+                    ex + rx*side*0.09*sz + lx*0.02*sz, ey, ez + rz*side*0.09*sz + lz*0.02*sz,
+                    0.055*sz, BLOOD, 0.62 + b.hit*0.25, 0.3, 0.0, 0, 1, 0.55*open, 0);
+    }
+
+    for (var i = 0; i < 4; i++) {
+      var a = b.rot + rig.off[i][0];
+      var ax = Math.sin(a), az = Math.cos(a);
+      drawLeg(rig, i,
+              cx + ax*rig.hipR + tiltX*0.4, rig.hipY + b.bob*0.7, cz + az*rig.hipR + tiltZ*0.4,
+              ax*0.85, 1.0, az*0.85,             // knees break outward and up
+              0.20*sz, BLOB_D, k*3 + i, 0);
+      var leg = rig.legs[i];
+      limbs.pushSeg(leg.fx - ax*0.05*sz, leg.fy + 0.030*sz, leg.fz - az*0.05*sz,
+                    leg.fx + ax*0.10*sz, leg.fy + 0.025*sz, leg.fz + az*0.10*sz,
+                    0.17*sz, BLOB_D, 0.03, 0.7, 0.0, k*3+i+40, 0, 1.3);
+    }
+  }
+
+  function drawPlayer() {
+    var rig = state.prig;
+    var f = state.face, fx = Math.sin(f), fz = Math.cos(f);
+    var rx = fz, rz = -fx;
+    var bob = state.pbob;
+    var hipY = 0.94 + bob;
+    var px = state.x, pz = state.z;
+    var lean = 0.06 + state.swing*0.16 - state.hurt*0.10;
+    var chestY = hipY + 0.46 + Math.sin(state.breathe)*0.012;
+    var chestX = px + fx*lean + state.ptx*0.8, chestZ = pz + fz*lean + state.ptz*0.8;
+
+    limbs.pushSeg(px, hipY - 0.05, pz, chestX, chestY, chestZ, 0.34, CLOTH, 0.06, 0.68, 0.0, 71, 4, 0.70);
+    // A mantle over the shoulders — the one arterial note on the model.
+    limbs.pushSeg(chestX - fx*0.03, chestY + 0.06, chestZ - fz*0.03,
+                  chestX - fx*0.11, chestY - 0.20, chestZ - fz*0.11,
+                  0.46, CLOTH, 0.06, 0.8, 0.0, 72, 4, 0.62);
+    var shX = chestX + rx*0.17, shZ = chestZ + rz*0.17;
+    var sh2X = chestX - rx*0.17, sh2Z = chestZ - rz*0.17;
+    limbs.pushSeg(sh2X, chestY + 0.05, sh2Z, shX, chestY + 0.05, shZ, 0.20, CLOTH, 0.06, 0.7, 0.0, 73, 4);
+    // Head and a hood-shadowed face.
+    var headY = chestY + 0.24;
+    limbs.pushSeg(chestX + fx*0.01, headY - 0.03, chestZ + fz*0.01,
+                  chestX + fx*0.03, headY + 0.09, chestZ + fz*0.03, 0.25, FLESH, 0.11, 0.55, 0.0, 74, 4);
+
+    // The arms take their phase from where the feet actually are.
+    var l0 = rig.legs[0], l1 = rig.legs[1];
+    var lead = clamp(((l0.fx - l1.fx)*fx + (l0.fz - l1.fz)*fz)*1.6, -1, 1);
+    for (var s = 0; s < 2; s++) {
+      var side = s ? 1 : -1;                     // +1 is the body's right
+      var swing = -side*lead*0.42 + state.swing*(side > 0 ? 0.9 : 0.25);
+      var ax = chestX + rx*side*0.19, az = chestZ + rz*side*0.19;
+      var ay = chestY + 0.04;
+      var handX = ax + fx*swing*0.62 + rx*side*0.04;
+      var handZ = az + fz*swing*0.62 + rz*side*0.04;
+      var handY = ay - 0.52 + Math.abs(swing)*0.10 + state.swing*(side > 0 ? 0.34 : 0);
+      var ik = solveIK(ax, ay, az, handX, handY, handZ, 0.30, 0.30,
+                       -fx*0.8 + rx*side*0.5, -0.15, -fz*0.8 + rz*side*0.5);
+      limbs.pushSeg(ax, ay, az, ik[0], ik[1], ik[2], 0.15, CLOTH, 0.06, 0.7, 0.0, 80+s, 4);
+      limbs.pushSeg(ik[0], ik[1], ik[2], ik[3], ik[4], ik[5], 0.13, CLOTH, 0.06, 0.7, 0.0, 82+s, 4);
+      limbs.pushSeg(ik[3], ik[4], ik[5], ik[3], ik[4] - 0.02, ik[5], 0.13, FLESH, 0.09, 0.6, 0.0, 84+s, 4);
+    }
+
+    for (var i = 0; i < 2; i++) {
+      var la = state.face + rig.off[i][0];
+      var ox = Math.sin(la)*rig.hipR, oz = Math.cos(la)*rig.hipR;
+      drawLeg(rig, i, px + ox, hipY, pz + oz,
+              fx, 0.30, fz,                      // knees break forward
+              0.18, CLOTH, 90 + i*4, 4);
+      var leg = rig.legs[i];
+      limbs.pushSeg(leg.fx - fx*0.04, leg.fy + 0.035, leg.fz - fz*0.04,
+                    leg.fx + fx*0.10, leg.fy + 0.030, leg.fz + fz*0.10,
+                    0.15, CLOTH, 0.06, 0.75, 0.0, 96+i, 4, 1.2);
+    }
+  }
+
   function buildInstances() {
     boxes.reset(); orbs.reset(); dust.reset(); parts.reset();
-    rainD.reset(); floorD.reset(); shaftD.reset();
+    rainD.reset(); floorD.reset(); shaftD.reset(); limbs.reset();
 
     floorD.push(0, -0.25, 0, HALL*2, 0.5, HALL*2, 0, STONE, 0, 0.34, 0.0, 1, 2);
 
@@ -1603,29 +2036,8 @@
                 0.6, 0.82, 0.6, state.t*1.4 + rel.ph, BLOOD, 1.05, 0.35, 0.0, 0, 1);
     }
 
-    // Blobs: a squashing body, four legs on a walk cycle, two lit eyes.
-    for (var k = 0; k < world.blobs.length; k++) {
-      var bl = world.blobs[k];
-      if (!bl.alive) continue;
-      var moving = (bl.moving || 0) > 0.1;
-      var gait = state.t*(moving ? 7.5 : 2.2) + bl.ph;
-      var squash = 1 + Math.sin(gait*2)*(moving ? 0.10 : 0.045);
-      var by = 0.92 + Math.abs(Math.sin(gait))*(moving ? 0.10 : 0.03);
-      orbs.push(bl.x, by, bl.z, 1.30/squash, 1.12*squash, 1.30/squash, bl.rot, BLOB, 0.14, 0.55, 0.0, k*7);
-      for (var lg = 0; lg < 4; lg++) {
-        var la = bl.rot + lg*Math.PI/2 + Math.PI/4;
-        var swing = Math.sin(gait + lg*1.57)*(moving ? 0.5 : 0.14);
-        var lxp = bl.x + Math.sin(la)*0.52 + Math.sin(bl.rot)*swing*0.28;
-        var lzp = bl.z + Math.cos(la)*0.52 + Math.cos(bl.rot)*swing*0.28;
-        var lh = 0.62 + swing*0.16;
-        boxes.push(lxp, lh*0.5, lzp, 0.20, lh, 0.20, la, BLOB, 0.06, 0.6, 0.0, k*3+lg);
-      }
-      for (var ey = 0; ey < 2; ey++) {
-        var ea = bl.rot + (ey ? 0.30 : -0.30);
-        orbs.push(bl.x + Math.sin(ea)*0.62, by + 0.26, bl.z + Math.cos(ea)*0.62,
-                  0.15, 0.15, 0.15, 0, BLOOD, 2.0, 0.3, 0.0, 0, 1);
-      }
-    }
+    for (var k = 0; k < world.blobs.length; k++) drawBlob(world.blobs[k], k);
+    if (settings.third && state.running) drawPlayer();
 
     for (var m = 0; m < motes.length; m++) {
       var mo = motes[m];
@@ -1664,7 +2076,7 @@
     }
 
     boxes.upload(); orbs.upload(); dust.upload(); parts.upload();
-    rainD.upload(); floorD.upload(); shaftD.upload();
+    rainD.upload(); floorD.upload(); shaftD.upload(); limbs.upload();
   }
 
   function pickLights() {
@@ -1713,14 +2125,33 @@
     var aspect = cv.width/cv.height;
     var shx = state.shake*Math.sin(state.t*46)*0.10;
     var shy = state.shake*Math.sin(state.t*39)*0.08;
-    var eyeY = 1.62 + Math.sin(state.bob)*0.035 + shy;
     var cp = Math.cos(state.pitch), sp2 = Math.sin(state.pitch);
     var dirX = -Math.sin(state.yaw)*cp, dirY = sp2, dirZ = -Math.cos(state.yaw)*cp;
-    var ex = state.x + shx;
-    var atX = ex + dirX, atY = eyeY + dirY, atZ = state.z + dirZ;
+    var ex, eyeY, ez, atX, atY, atZ;
+
+    if (settings.third) {
+      // Orbit the same look vector, so the pads and the battle auto-face keep
+      // working unchanged; collide() keeps the camera out of the columns.
+      // The offset is over the shoulder rather than dead behind — centred, the
+      // player's own back is exactly what hides whatever they are fighting.
+      var fight = state.mode === 'battle';
+      var dist = fight ? 2.9 : CAM_DIST;
+      var sideX = Math.cos(state.yaw), sideZ = -Math.sin(state.yaw);
+      var sh = fight ? 0.86 : 0.50;
+      var tX = state.x + sideX*sh*0.55, tZ = state.z + sideZ*sh*0.55;
+      var tY = 1.34 + state.pbob*0.6 + shy;
+      var back = collide(state.x + sideX*sh - dirX*dist, state.z + sideZ*sh - dirZ*dist);
+      ex = back[0] + shx; ez = back[1];
+      eyeY = clamp(tY - dirY*dist, 0.5, CEIL_Y - 0.4);
+      atX = tX + shx; atY = tY; atZ = tZ;
+    } else {
+      eyeY = 1.62 + Math.sin(state.bob)*0.035 + shy;
+      ex = state.x + shx; ez = state.z;
+      atX = ex + dirX; atY = eyeY + dirY; atZ = ez + dirZ;
+    }
 
     var proj = m4perspective(1.12, aspect, 0.12, 220);
-    var view = m4lookAt(ex, eyeY, state.z, atX, atY, atZ, 0, 1, 0);
+    var view = m4lookAt(ex, eyeY, ez, atX, atY, atZ, 0, 1, 0);
     var vp = m4mul(proj, view);
 
     var lx = state.x - sky.sun[0]*52, ly = -sky.sun[1]*52, lz = state.z - sky.sun[2]*52;
@@ -1739,6 +2170,7 @@
     gl.uniformMatrix4fv(progShadow.u.uLightVP, false, lightVP);
     drawCalls += boxes.draw(); triCount += boxes.tris*boxes.n;
     drawCalls += orbs.draw();  triCount += orbs.tris*orbs.n;
+    drawCalls += limbs.draw(); triCount += limbs.tris*limbs.n;
 
     if (settings.reflect) {
       gl.bindFramebuffer(gl.FRAMEBUFFER, reflect.fbo);
@@ -1747,13 +2179,14 @@
       gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
       // Mirroring flips the winding, so the visible faces are the front ones.
       gl.cullFace(gl.FRONT);
-      var mview = m4lookAt(ex, -eyeY, state.z, atX, -atY, atZ, 0, 1, 0);
+      var mview = m4lookAt(ex, -eyeY, ez, atX, -atY, atZ, 0, 1, 0);
       gl.useProgram(progScene);
-      setSceneUniforms(m4mul(proj, mview), ex, -eyeY, state.z, -0.02, nLights,
+      setSceneUniforms(m4mul(proj, mview), ex, -eyeY, ez, -0.02, nLights,
                        reflect.w, reflect.h, dummyTex);
       gl.uniform1f(progScene.u.uReflectOn, 0);
       drawCalls += boxes.draw(); triCount += boxes.tris*boxes.n;
       drawCalls += orbs.draw();  triCount += orbs.tris*orbs.n;
+      drawCalls += limbs.draw(); triCount += limbs.tris*limbs.n;
     }
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, scene.fbo);
@@ -1762,11 +2195,12 @@
     gl.clearColor(sky.fog[0], sky.fog[1], sky.fog[2], 1);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     gl.useProgram(progScene);
-    setSceneUniforms(vp, ex, eyeY, state.z, -9999, nLights, scene.w, scene.h,
+    setSceneUniforms(vp, ex, eyeY, ez, -9999, nLights, scene.w, scene.h,
                      settings.reflect ? reflect.tex : dummyTex);
     gl.uniform1f(progScene.u.uReflectOn, settings.reflect ? 1 : 0);
     drawCalls += boxes.draw();  triCount += boxes.tris*boxes.n;
     drawCalls += orbs.draw();   triCount += orbs.tris*orbs.n;
+    drawCalls += limbs.draw();  triCount += limbs.tris*limbs.n;
     drawCalls += dust.draw();   triCount += dust.tris*dust.n;
     drawCalls += parts.draw();  triCount += parts.tris*parts.n;
     drawCalls += rainD.draw();  triCount += rainD.tris*rainD.n;
@@ -1902,6 +2336,24 @@
   }
   function openSettings() { state.paused = true; sheet.classList.remove('hide'); applySettings(); }
   function closeSettings() { sheet.classList.add('hide'); state.paused = false; }
+
+  var viewBtn = document.getElementById('view3');
+  var viewLbl = document.getElementById('viewLbl');
+  function applyView() {
+    viewBtn.classList.toggle('on', settings.third);
+    viewBtn.setAttribute('aria-pressed', settings.third ? 'true' : 'false');
+    viewLbl.textContent = settings.third ? 'Third person' : 'First person';
+  }
+  viewBtn.addEventListener('click', function () {
+    settings.third = !settings.third;
+    // Coming back from behind the shoulder, the body has to be where the
+    // camera left it or the first step drags the feet across the floor.
+    state.prig.ready = false;
+    applyView();
+    saveSettings();
+    buzz(10);
+  });
+  applyView();
 
   fightBtn.addEventListener('click', function () {
     settings.fights = !settings.fights;
