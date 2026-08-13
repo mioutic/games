@@ -3,8 +3,10 @@ name: Rebuild arcade index
 on:
   push:
     paths:
+      - 'arcade/index.html'
       - 'arcade/games/**'
-      - 'arcade/tools/build-index.py'
+      - 'arcade/tools/**'
+      - 'arcade/VERSION'
   workflow_dispatch:
 
 permissions:
@@ -20,17 +22,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Rebuild games.json
-        run: python3 arcade/tools/build-index.py
-
-      - name: Commit if it changed
+      - name: Rebuild games.json and the installable play/ build
         run: |
-          if git diff --quiet -- arcade/games.json; then
-            echo "index already up to date"
+          python3 arcade/tools/build-index.py
+          python3 arcade/tools/build-pwa.py
+
+      - name: Commit if anything changed
+        run: |
+          if git diff --quiet -- arcade/games.json play/; then
+            echo "already up to date"
             exit 0
           fi
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add arcade/games.json
-          git commit -m "Rebuild arcade index [skip ci]"
+          git add arcade/games.json play/
+          git commit -m "Rebuild arcade index and play/ build [skip ci]"
           git push

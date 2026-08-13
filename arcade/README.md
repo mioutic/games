@@ -52,10 +52,30 @@ external CDNs if you want them working offline. For a phone, these help:
 
 `games/reflex/` and `games/snake/` are working examples of all of the above.
 
+## The installable build
+
+`play/` is the version to host: four static files, everything inlined, no build
+step needed to serve it. It installs to the iPhone home screen as a standalone
+app and works offline through a network-first service worker.
+
+```
+play/index.html     launcher + every game inlined
+play/manifest.json
+play/sw.js
+play/icon-180.png
+```
+
+CI regenerates it alongside `games.json`, so adding a game updates the
+installable app too. To ship an update, bump `arcade/VERSION` — that single
+value becomes both the on-screen build stamp and the service worker's
+`CACHE_VERSION`, so they cannot drift and phones cannot get stuck on a stale
+build. The refresh button checks for a new worker and reloads.
+
 ## Tools
 
 ```
 python3 arcade/tools/build-index.py                 # regenerate games.json (CI does this for you)
+python3 arcade/tools/build-pwa.py                   # regenerate play/ (CI does this for you)
 python3 arcade/tools/build-bundle.py out.html       # inline everything into one offline file
 python3 arcade/tools/build-artifact.py in.html out.html   # strip the wrapper for an Artifact publish
 ```
