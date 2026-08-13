@@ -4,7 +4,7 @@
       "slug": "ossuary",
       "name": "Ossuary",
       "glyph": "crypt",
-      "description": "A lit 3D descent. Shadows, bloom, live diagnostics.",
+      "description": "A lit 3D descent. Tilt or drag, chain the drops.",
       "ink": "#8a8fc9",
       "entry": "index.html",
       "stat": {

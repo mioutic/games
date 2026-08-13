@@ -90,6 +90,79 @@
   .spec { margin-top: 22px; font: 500 8.5px/1.9 var(--font-ui); letter-spacing: .14em;
           text-transform: uppercase; color: var(--t-3); }
 
+  .summary { margin: 18px auto 0; max-width: 260px; }
+  .summary .row { border-top: 1px solid var(--line-0); padding: 6px 0; }
+  .summary .row span:first-child { color: var(--t-3); }
+  .summary .row span:last-child { color: var(--t-1); font-size: 11px; }
+
+  /* ---------- settings ---------- */
+  .gear {
+    position: fixed; z-index: 4;
+    right: calc(var(--safe-r) + 12px); bottom: calc(var(--safe-b) + 48px);
+    width: 38px; height: 38px; appearance: none;
+    border: 1px solid var(--line-2); border-radius: var(--radius);
+    background: rgba(11,6,9,.72); color: var(--accent);
+    display: grid; place-items: center;
+    transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease);
+  }
+  .gear:active { background: rgba(233,216,197,.12); border-color: var(--accent-2); }
+  .gear:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .sheet { z-index: 8; align-items: center; }
+  .sheet .card {
+    width: 100%; max-width: 340px; padding: 18px 16px 16px;
+    background: var(--s-1); text-align: left;
+  }
+  .cardhead { display: flex; align-items: baseline; gap: 9px; padding-bottom: 12px;
+              border-bottom: 1px solid var(--line-2); margin-bottom: 4px; }
+  .cardhead h3 { font: 400 20px/1 var(--font-display); letter-spacing: .04em; margin: 0; }
+  .ornament.sm { font-size: 12px; margin: 0; }
+
+  .opt { display: flex; align-items: center; justify-content: space-between; gap: 14px;
+         padding: 13px 0; border-bottom: 1px solid var(--line-0); }
+  .opt.off { display: none; }
+  .optk { font: 500 10px/1 var(--font-ui); letter-spacing: .16em;
+          text-transform: uppercase; color: var(--t-1); }
+  .optd { font-size: 11.5px; line-height: 1.45; color: var(--t-3); margin-top: 5px; max-width: 190px; }
+  .optd.warn { color: var(--warning); }
+
+  /* A segmented throw, not a pill — two cells and a bone slug that slides. */
+  .sw {
+    appearance: none; flex: none; width: 52px; height: 26px; padding: 2px;
+    border: 1px solid var(--line-2); border-radius: var(--radius);
+    background: var(--s-0); position: relative;
+    transition: border-color var(--dur) var(--ease), background var(--dur) var(--ease);
+  }
+  .sw span {
+    display: block; width: 23px; height: 20px; background: var(--t-3);
+    transition: transform var(--dur) var(--ease), background var(--dur) var(--ease);
+  }
+  .sw[aria-checked="true"] { border-color: var(--accent-2); }
+  .sw[aria-checked="true"] span { transform: translateX(23px); background: var(--accent);
+                                  box-shadow: var(--bloom); }
+  .sw:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .rng { flex: none; width: 108px; appearance: none; height: 22px; background: transparent; }
+  .rng::-webkit-slider-runnable-track { height: 3px; background: var(--line-2); }
+  .rng::-webkit-slider-thumb { appearance: none; width: 12px; height: 18px; margin-top: -7px;
+                               background: var(--accent); border: 0; border-radius: 1px; }
+  .rng::-moz-range-track { height: 3px; background: var(--line-2); }
+  .rng::-moz-range-thumb { width: 12px; height: 18px; background: var(--accent);
+                           border: 0; border-radius: 1px; }
+
+  .mini {
+    appearance: none; flex: none; padding: 8px 15px;
+    border: 1px solid var(--line-2); border-radius: var(--radius);
+    background: var(--s-0); color: var(--accent);
+    font: 500 9.5px/1 var(--font-ui); letter-spacing: .16em; text-transform: uppercase;
+  }
+  .mini:active { background: rgba(233,216,197,.12); }
+  .mini.done { color: var(--success); border-color: var(--success); }
+  .mini.spaced { margin-top: 14px; }
+
+  button.go.wide { display: block; width: 100%; margin-top: 18px; }
+  .diag.off, .gear.off { display: none; }
+
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { transition-duration: 1ms !important; }
   }
@@ -102,6 +175,7 @@
   <div class="panel rail">
     <div class="stat"><div class="k">Depth</div><div class="v" id="score">0</div></div>
     <div class="stat"><div class="k">Best</div><div class="v brandish" id="best">0</div></div>
+    <div class="stat"><div class="k">Chain</div><div class="v" id="combo">—</div></div>
   </div>
   <div class="panel diag">
     <div class="row"><span>Fps</span><span id="fps">—</span></div>
@@ -111,18 +185,86 @@
   </div>
 </div>
 
+<button class="gear" id="gear" aria-label="Settings">
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+       stroke-width="1.6" stroke-linecap="square" aria-hidden="true">
+    <circle cx="12" cy="12" r="3.1"/>
+    <path d="M12 2.6v3M12 18.4v3M2.6 12h3M18.4 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M18.7 5.3l-2.1 2.1M7.4 16.6l-2.1 2.1"/>
+  </svg>
+</button>
+
 <div class="gauge" id="gauge"></div>
-<div class="hint">Drag to steer</div>
+<div class="hint" id="hint">Drag to steer</div>
 
 <div class="overlay" id="overlay">
   <div>
     <div id="head">
       <div class="ornament">❦</div>
       <h2>Ossuary</h2>
-      <p>Descend the bone corridor. Drag to steer, take the drops, and do not touch the pillars.</p>
+      <p>Descend the bone corridor. Steer, take the drops, and do not touch the pillars.</p>
     </div>
     <button class="go" id="go">Descend</button>
+    <div><button class="mini spaced" id="openSettings">Settings</button></div>
     <div class="spec" id="spec"></div>
+  </div>
+</div>
+
+<div class="overlay sheet hide" id="settings">
+  <div class="panel card">
+    <div class="cardhead">
+      <span class="ornament sm">❦</span>
+      <h3>Settings</h3>
+    </div>
+
+    <div class="opt">
+      <div>
+        <div class="optk">Motion steering</div>
+        <div class="optd" id="motionNote">Tilt the phone to steer instead of dragging.</div>
+      </div>
+      <button class="sw" id="swMotion" role="switch" aria-checked="false"><span></span></button>
+    </div>
+
+    <div class="opt" id="rowSens">
+      <div>
+        <div class="optk">Tilt sensitivity</div>
+        <div class="optd"><span id="sensVal">1.0</span>×</div>
+      </div>
+      <input class="rng" id="sens" type="range" min="4" max="20" step="1" value="10">
+    </div>
+
+    <div class="opt" id="rowCal">
+      <div>
+        <div class="optk">Neutral angle</div>
+        <div class="optd">Hold the phone as you like, then set.</div>
+      </div>
+      <button class="mini" id="calibrate">Set</button>
+    </div>
+
+    <div class="opt">
+      <div>
+        <div class="optk">Haptics</div>
+        <div class="optd">Buzz on pickups and impacts.</div>
+      </div>
+      <button class="sw" id="swHaptic" role="switch" aria-checked="true"><span></span></button>
+    </div>
+
+    <div class="opt">
+      <div>
+        <div class="optk">Film grain</div>
+        <div class="optd">Sensor noise over the image.</div>
+      </div>
+      <button class="sw" id="swGrain" role="switch" aria-checked="true"><span></span></button>
+    </div>
+
+    <div class="opt">
+      <div>
+        <div class="optk">Diagnostics</div>
+        <div class="optd">Frame rate and render cost.</div>
+      </div>
+      <button class="sw" id="swDiag" role="switch" aria-checked="true"><span></span></button>
+    </div>
+
+    <button class="go wide" id="closeSettings">Resume</button>
   </div>
 </div>
 
@@ -556,7 +698,7 @@
   var compositeFS = '#version 300 es\nprecision highp float;\n' +
     'in vec2 vUV; out vec4 outColor;\n' +
     'uniform sampler2D uScene; uniform sampler2D uBloom;\n' +
-    'uniform float uBloomAmount, uTime, uGrain, uFlash, uExposure;\n' +
+    'uniform float uBloomAmount, uTime, uGrain, uFlash, uExposure, uPulse;\n' +
 
     // ACES filmic curve, fitted — keeps the crimson from clipping to pink.
     'vec3 aces(vec3 x){\n' +
@@ -581,6 +723,7 @@
     '  vec3 bloom = texture(uBloom, uv).rgb;\n' +
     '  vec3 col = scene + bloom * uBloomAmount;\n' +
     '  col += vec3(0.55, 0.05, 0.12) * uFlash;\n' +
+    '  col += vec3(0.30, 0.26, 0.22) * uPulse;\n' +
     '  col = aces(col * uExposure);\n' +
 
     '  float vig = smoothstep(1.15, 0.18, r2 * 2.0);\n' +
@@ -731,15 +874,72 @@
   var LANE_MIN = -3.5, LANE_MAX = 3.5;
 
   var state = {
-    running: false, dead: false,
+    running: false, dead: false, paused: false,
     z: 0, speed: 15, targetSpeed: 15,
-    px: 0, targetX: 0,
-    score: 0, flash: 0, shake: 0,
-    segBase: 0, obstacles: [], drops: [], braziers: [], t: 0
+    px: 0, targetX: 0, lean: 0,
+    score: 0, flash: 0, shake: 0, gateFlash: 0,
+    combo: 0, bestCombo: 0, taken: 0, missed: 0, nearMiss: 0, topSpeed: 0,
+    obstacles: [], drops: [], braziers: [], gates: [], t: 0,
+    nextGate: 250, pbGate: null
   };
 
   var best = parseInt(localStorage.getItem(BKEY) || '0', 10) || 0;
   elBest.textContent = best;
+
+  var elCombo = document.getElementById('combo');
+  var hintEl = document.getElementById('hint');
+
+  function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
+
+  /* ---------------- settings ---------------- */
+
+  var SKEY = 'ossuary.settings';
+  var settings = { motion: false, sens: 10, haptics: true, grain: true, diag: true, neutral: 0 };
+  try {
+    var saved = JSON.parse(localStorage.getItem(SKEY) || 'null');
+    if (saved) for (var sk in settings) if (saved[sk] !== undefined) settings[sk] = saved[sk];
+  } catch (e) {}
+
+  function saveSettings() {
+    try { localStorage.setItem(SKEY, JSON.stringify(settings)); } catch (e) {}
+  }
+
+  function buzz(pattern) {
+    if (settings.haptics && navigator.vibrate) navigator.vibrate(pattern);
+  }
+
+  /* ---------------- motion steering ---------------- */
+
+  // iOS gates the sensor behind a permission prompt that only a real gesture
+  // can raise, so this is only ever called from the toggle's click handler.
+  var gyro = { on: false, live: false, gamma: 0, denied: false };
+
+  function onOrient(e) {
+    if (e.gamma === null || e.gamma === undefined) return;
+    gyro.gamma = e.gamma;
+    gyro.live = true;
+  }
+
+  function enableMotion() {
+    var DOE = window.DeviceOrientationEvent;
+    if (!DOE) return Promise.resolve(false);
+    if (typeof DOE.requestPermission === 'function') {
+      return DOE.requestPermission().then(function (res) {
+        if (res !== 'granted') { gyro.denied = true; return false; }
+        window.addEventListener('deviceorientation', onOrient);
+        gyro.on = true;
+        return true;
+      }).catch(function () { gyro.denied = true; return false; });
+    }
+    window.addEventListener('deviceorientation', onOrient);
+    gyro.on = true;
+    return Promise.resolve(true);
+  }
+
+  function disableMotion() {
+    window.removeEventListener('deviceorientation', onOrient);
+    gyro.on = false; gyro.live = false;
+  }
 
   var GAUGE_SEGS = 24, segEls = [];
   for (var gi = 0; gi < GAUGE_SEGS; gi++) {
@@ -753,9 +953,14 @@
 
   // Pillars are placed so a gap of at least GAP always survives, otherwise the
   // corridor eventually becomes unrunnable rather than merely hard.
+  // The corridor tightens as you descend: pairs of pillars get likelier and the
+  // rows come closer together, both easing off before the run becomes a lottery.
+  function rowGap(depth) { return rand(11, 16) - Math.min(3.6, depth / 900); }
+
   function spawnRow(z) {
     var GAP = 2.05;
-    var count = Math.random() < 0.42 ? 2 : 1;
+    var depth = Math.max(0, -z);
+    var count = Math.random() < Math.min(0.7, 0.34 + depth / 2600) ? 2 : 1;
     var slots = [];
     var tries = 0;
     while (slots.length < count && tries++ < 40) {
@@ -783,16 +988,31 @@
 
   function resetWorld() {
     state.z = 0; state.speed = 15; state.targetSpeed = 15;
-    state.px = 0; state.targetX = 0; state.score = 0;
-    state.flash = 0; state.shake = 0; state.dead = false;
-    state.obstacles.length = 0; state.drops.length = 0; state.braziers.length = 0;
-    state.segBase = 0;
-    for (var z = -30; z > -SEG_COUNT * SEG_LEN; z -= rand(11, 16)) spawnRow(z);
+    state.px = 0; state.targetX = 0; state.lean = 0; state.score = 0;
+    state.flash = 0; state.shake = 0; state.gateFlash = 0;
+    state.dead = false; state.paused = false;
+    state.combo = 0; state.bestCombo = 0; state.taken = 0; state.missed = 0;
+    state.nearMiss = 0; state.topSpeed = 0;
+    state.obstacles.length = 0; state.drops.length = 0;
+    state.braziers.length = 0; state.gates.length = 0;
+    state.nextGate = 250;
+
+    for (var z = -30; z > -SEG_COUNT * SEG_LEN; z -= rowGap(-z)) spawnRow(z);
     for (var b = 0; b > -SEG_COUNT * SEG_LEN; b -= SEG_LEN * 2) {
       state.braziers.push({ x: -HALF_W + 0.5, z: b, phase: rand(0, 6.28) });
       state.braziers.push({ x: HALF_W - 0.5, z: b - SEG_LEN, phase: rand(0, 6.28) });
     }
+
+    // Your own record stands in the corridor as a lit threshold, so beating it
+    // is something you run through rather than read off a counter afterwards.
+    state.pbGate = null;
+    if (best > 40) {
+      state.pbGate = { z: -best, kind: 'pb', passed: false };
+      state.gates.push(state.pbGate);
+    }
     elScore.textContent = '0';
+    elCombo.textContent = '—';
+    elCombo.classList.remove('brandish');
   }
 
   function recycle() {
@@ -811,11 +1031,20 @@
         state.braziers[k].phase = rand(0, 6.28);
       }
     }
+    for (var g = state.gates.length - 1; g >= 0; g--) {
+      if (state.gates[g].z > behind + 10) state.gates.splice(g, 1);
+    }
+    // Depth thresholds every 250m, placed as the corridor is built out.
+    while (state.nextGate < -far) {
+      state.gates.push({ z: -state.nextGate, kind: 'depth', mark: state.nextGate, passed: false });
+      state.nextGate += 250;
+    }
+
     // Keep the corridor stocked ahead of the camera.
     var lowest = 0;
     for (var m = 0; m < state.obstacles.length; m++) lowest = Math.min(lowest, state.obstacles[m].z);
     while (lowest > far) {
-      lowest -= rand(11, 16);
+      lowest -= rowGap(-lowest);
       spawnRow(lowest);
     }
   }
@@ -827,6 +1056,7 @@
   function pointerDown(x) { dragging = true; dragX = x; dragStartTarget = state.targetX; }
   function pointerMove(x) {
     if (!dragging) return;
+    if (settings.motion && gyro.live) return;
     var k = 9.0 / Math.max(cssW, 1);
     state.targetX = Math.max(LANE_MIN, Math.min(LANE_MAX, dragStartTarget + (x - dragX) * k));
   }
@@ -848,19 +1078,36 @@
 
   /* ---------------- simulation ---------------- */
 
+  function setCombo(n) {
+    state.combo = n;
+    if (n > state.bestCombo) state.bestCombo = n;
+    elCombo.textContent = n >= 2 ? '×' + n : (n === 1 ? '×1' : '—');
+    elCombo.classList.toggle('brandish', n >= 3);
+  }
+
   function update(dt) {
     state.t += dt;
-    if (!state.running) return;
+    state.flash = Math.max(0, state.flash - dt * 3.2);
+    state.shake = Math.max(0, state.shake - dt * 3.0);
+    state.gateFlash = Math.max(0, state.gateFlash - dt * 1.6);
+    if (!state.running || state.paused) return;
 
+    if (settings.motion && gyro.live) {
+      // gamma is the left-right tilt in portrait; neutral is wherever the
+      // player said "this is straight".
+      var tilt = gyro.gamma - settings.neutral;
+      state.targetX = clamp(tilt * (settings.sens / 10) * 0.115, LANE_MIN, LANE_MAX);
+    }
     if (keys.ArrowLeft || keys.a) state.targetX = Math.max(LANE_MIN, state.targetX - 9 * dt);
     if (keys.ArrowRight || keys.d) state.targetX = Math.min(LANE_MAX, state.targetX + 9 * dt);
 
+    var prevX = state.px;
     state.px += (state.targetX - state.px) * Math.min(1, dt * 11);
+    state.lean += (clamp((state.px - prevX) / Math.max(dt, 1e-4) * 0.055, -1, 1) - state.lean)
+                  * Math.min(1, dt * 7);
     state.speed += (state.targetSpeed - state.speed) * Math.min(1, dt * 1.4);
     state.z -= state.speed * dt;
-
-    state.flash = Math.max(0, state.flash - dt * 3.2);
-    state.shake = Math.max(0, state.shake - dt * 3.0);
+    if (state.speed > state.topSpeed) state.topSpeed = state.speed;
 
     // Depth travelled is the score; it reads better than a bare counter.
     var depth = Math.floor(-state.z);
@@ -871,15 +1118,43 @@
       if (d.got) continue;
       if (Math.abs(d.z - state.z) < 1.2 && Math.abs(d.x - state.px) < 1.15) {
         d.got = true;
+        state.taken++;
+        setCombo(Math.min(9, state.combo + 1));
         state.flash = Math.min(1, state.flash + 0.45);
-        state.targetSpeed = Math.min(34, state.targetSpeed + 0.55);
-        if (navigator.vibrate) navigator.vibrate(8);
+        // A longer chain pushes harder, so holding one costs you margin.
+        state.targetSpeed = Math.min(34, state.targetSpeed + 0.4 + state.combo * 0.06);
+        buzz(8);
+      } else if (!d.lost && d.z > state.z + 1.6) {
+        d.lost = true;
+        state.missed++;
+        if (state.combo) setCombo(0);
       }
     }
 
     for (var j = 0; j < state.obstacles.length; j++) {
       var o = state.obstacles[j];
-      if (Math.abs(o.z - state.z) < 0.95 && Math.abs(o.x - state.px) < 1.05) return die();
+      var dz = Math.abs(o.z - state.z), dx = Math.abs(o.x - state.px);
+      if (dz < 0.95 && dx < 1.05) return die();
+      // Threading a pillar closely is worth something, and worth feeling.
+      if (!o.grazed && dz < 0.7 && dx < 1.85) {
+        o.grazed = true;
+        state.nearMiss++;
+        state.flash = Math.min(1, state.flash + 0.16);
+        buzz(5);
+      }
+    }
+
+    for (var g = 0; g < state.gates.length; g++) {
+      var gate = state.gates[g];
+      if (gate.passed || gate.z < state.z) continue;
+      gate.passed = true;
+      state.gateFlash = 1;
+      if (gate.kind === 'pb') {
+        buzz([14, 40, 14]);
+        state.targetSpeed = Math.min(34, state.targetSpeed + 1.2);
+      } else {
+        buzz(12);
+      }
     }
 
     recycle();
@@ -894,15 +1169,27 @@
     state.dead = true;
     state.flash = 1;
     state.shake = 1;
-    if (navigator.vibrate) navigator.vibrate([20, 45, 20]);
-    if (state.score > best) { best = state.score; localStorage.setItem(BKEY, String(best)); elBest.textContent = best; }
+    buzz([20, 45, 20]);
+
+    var beat = state.score > best;
+    if (beat) { best = state.score; localStorage.setItem(BKEY, String(best)); elBest.textContent = best; }
+
     head.innerHTML =
       '<div class="big">' + state.score + '<small>metres down</small></div>' +
-      '<p>' + (state.score >= best && state.score > 0
-        ? 'A new personal best.' : 'Your best stands at ' + best + 'm.') + '</p>';
+      '<p>' + (beat ? 'A new personal best.' : 'Your best stands at ' + best + 'm.') + '</p>' +
+      '<div class="summary">' +
+        row('Drops taken', state.taken + ' of ' + (state.taken + state.missed)) +
+        row('Longest chain', state.bestCombo ? '×' + state.bestCombo : '—') +
+        row('Near misses', String(state.nearMiss)) +
+        row('Top speed', state.topSpeed.toFixed(1) + ' m/s') +
+      '</div>';
     document.getElementById('go').textContent = 'Again';
     elSpec.textContent = lastFps + ' fps · ' + Math.round(renderScale * 100) + '% scale';
     overlay.classList.remove('hide');
+  }
+
+  function row(k, v) {
+    return '<div class="row"><span>' + k + '</span><span>' + v + '</span></div>';
   }
 
   /* ---------------- frame ---------------- */
@@ -973,6 +1260,18 @@
       boxes.push(o.x, o.h * 0.5 - 0.25, o.z, 1.05, o.h, 1.05, o.r, BONE, 0, 0.42, 0.0, o.seed);
       boxes.push(o.x, o.h - 0.1, o.z, 1.35, 0.3, 1.35, o.r, BONE, 0, 0.42, 0.0, o.seed + 5);
       boxes.push(o.x, 0.12, o.z, 1.45, 0.24, 1.45, o.r, PALE, 0, 0.6, 0.0, o.seed + 9);
+    }
+
+    for (var gx = 0; gx < state.gates.length; gx++) {
+      var ga = state.gates[gx];
+      if (ga.z > state.z + 12 || ga.z < state.z - SEG_COUNT * SEG_LEN) continue;
+      boxes.push(-HALF_W + 0.5, 3.2, ga.z, 0.8, 6.8, 1.0, 0, BONE, 0, 0.45, 0.0, 3);
+      boxes.push(HALF_W - 0.5, 3.2, ga.z, 0.8, 6.8, 1.0, 0, BONE, 0, 0.45, 0.0, 5);
+      boxes.push(0, 6.7, ga.z, HALF_W * 2 - 0.4, 1.0, 1.1, 0, BONE, 0, 0.45, 0.0, 7);
+      // A lit lintel: arterial for your own record, pale for a depth mark.
+      // It dims once you are through it, so the corridor behind reads as spent.
+      boxes.push(0, 6.05, ga.z, HALF_W * 2 - 1.0, 0.16, 1.16, 0,
+                 ga.kind === 'pb' ? BLOOD : PALE, ga.passed ? 0.35 : 1.5, 0.4, 0.0, 0, 1);
     }
 
     for (var b = 0; b < state.braziers.length; b++) {
@@ -1052,7 +1351,8 @@
 
     var eyeX = state.px * 0.5 + shakeX, eyeY = 2.45 + shakeY, eyeZ = state.z + 5.9;
     var atX = state.px * 0.8, atY = 2.05, atZ = state.z - 14;
-    var view = m4lookAt(eyeX, eyeY, eyeZ, atX, atY, atZ, 0, 1, 0);
+    var roll = state.lean * 0.085;   // a lean, not a barrel roll
+    var view = m4lookAt(eyeX, eyeY, eyeZ, atX, atY, atZ, Math.sin(roll), Math.cos(roll), 0);
     var proj = m4perspective(1.05, aspect, 0.15, 190);
     var vp = m4mul(proj, view);
 
@@ -1148,8 +1448,9 @@
     gl.uniform1i(progComposite.u.uBloom, 1);
     gl.uniform1f(progComposite.u.uBloomAmount, 0.85);
     gl.uniform1f(progComposite.u.uTime, state.t);
-    gl.uniform1f(progComposite.u.uGrain, 0.022);
+    gl.uniform1f(progComposite.u.uGrain, settings.grain ? 0.022 : 0.0);
     gl.uniform1f(progComposite.u.uFlash, state.flash * (state.dead ? 0.9 : 0.35));
+    gl.uniform1f(progComposite.u.uPulse, state.gateFlash * 0.5);
     gl.uniform1f(progComposite.u.uExposure, 1.12);
     gl.drawArrays(gl.TRIANGLES, 0, 3); drawCalls++;
 
@@ -1199,8 +1500,139 @@
     state.running = true;
   });
 
+  /* ---------------- settings panel ---------------- */
+
+  var sheet = document.getElementById('settings');
+  var gearBtn = document.getElementById('gear');
+  var diagEl = document.querySelector('.diag');
+  var swMotion = document.getElementById('swMotion');
+  var swHaptic = document.getElementById('swHaptic');
+  var swGrain = document.getElementById('swGrain');
+  var swDiag = document.getElementById('swDiag');
+  var sensEl = document.getElementById('sens');
+  var sensVal = document.getElementById('sensVal');
+  var motionNote = document.getElementById('motionNote');
+  var rowSens = document.getElementById('rowSens');
+  var rowCal = document.getElementById('rowCal');
+  var calBtn = document.getElementById('calibrate');
+
+  function setSwitch(el, on) { el.setAttribute('aria-checked', on ? 'true' : 'false'); }
+
+  var motionMsg = null;   // overrides the default blurb when something is off
+
+  function applySettings() {
+    setSwitch(swMotion, settings.motion);
+    setSwitch(swHaptic, settings.haptics);
+    setSwitch(swGrain, settings.grain);
+    setSwitch(swDiag, settings.diag);
+    sensEl.value = settings.sens;
+    sensVal.textContent = (settings.sens / 10).toFixed(1);
+    rowSens.classList.toggle('off', !settings.motion);
+    rowCal.classList.toggle('off', !settings.motion);
+    diagEl.classList.toggle('off', !settings.diag);
+    hintEl.textContent = (settings.motion && gyro.live) ? 'Tilt to steer' : 'Drag to steer';
+
+    if (motionMsg) {
+      motionNote.textContent = motionMsg;
+      motionNote.classList.add('warn');
+    } else if (settings.motion && gyro.denied) {
+      motionNote.textContent = 'Motion access was refused. Allow it in Settings › Safari › Motion & Orientation.';
+      motionNote.classList.add('warn');
+    } else if (settings.motion && !gyro.live) {
+      motionNote.textContent = 'Waiting for the sensor…';
+      motionNote.classList.remove('warn');
+    } else {
+      motionNote.textContent = 'Tilt the phone to steer instead of dragging.';
+      motionNote.classList.remove('warn');
+    }
+    saveSettings();
+  }
+
+  function openSettings() {
+    state.paused = true;
+    sheet.classList.remove('hide');
+    applySettings();
+  }
+  function closeSettings() {
+    sheet.classList.add('hide');
+    state.paused = false;
+  }
+
+  gearBtn.addEventListener('click', openSettings);
+  document.getElementById('openSettings').addEventListener('click', openSettings);
+  document.getElementById('closeSettings').addEventListener('click', closeSettings);
+
+  swMotion.addEventListener('click', function () {
+    motionMsg = null;
+    if (settings.motion) {
+      settings.motion = false;
+      disableMotion();
+      applySettings();
+      return;
+    }
+    // Must stay inside this click: iOS only grants the sensor from a gesture.
+    enableMotion().then(function (ok) {
+      settings.motion = ok;
+      applySettings();
+      if (!ok) { applySettings(); return; }
+      // Give the sensor a beat, then take the current pose as neutral.
+      setTimeout(function () {
+        if (gyro.live) { settings.neutral = gyro.gamma; saveSettings(); }
+        applySettings();
+      }, 500);
+      // The permission can be granted on a device that never reports. If
+      // nothing has arrived by now, there is no sensor — say so and back out
+      // rather than leaving a switch on that steers nothing.
+      setTimeout(function () {
+        if (settings.motion && !gyro.live) {
+          settings.motion = false;
+          disableMotion();
+          motionMsg = 'No motion sensor reported on this device.';
+          applySettings();
+        }
+      }, 1800);
+    });
+  });
+
+  swHaptic.addEventListener('click', function () {
+    settings.haptics = !settings.haptics; applySettings(); buzz(10);
+  });
+  swGrain.addEventListener('click', function () { settings.grain = !settings.grain; applySettings(); });
+  swDiag.addEventListener('click', function () { settings.diag = !settings.diag; applySettings(); });
+
+  sensEl.addEventListener('input', function () {
+    settings.sens = parseInt(sensEl.value, 10) || 10;
+    sensVal.textContent = (settings.sens / 10).toFixed(1);
+    saveSettings();
+  });
+
+  calBtn.addEventListener('click', function () {
+    if (!gyro.live) return;
+    settings.neutral = gyro.gamma;
+    saveSettings();
+    calBtn.textContent = 'Set ✓';
+    calBtn.classList.add('done');
+    setTimeout(function () { calBtn.textContent = 'Set'; calBtn.classList.remove('done'); }, 1200);
+  });
+
+  // Losing the tab mid-run should not cost a life to a frozen clock.
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden && state.running) { state.paused = true; }
+  });
+  window.addEventListener('blur', function () { if (state.running) state.paused = true; });
+  window.addEventListener('focus', function () {
+    if (sheet.classList.contains('hide')) state.paused = false;
+  });
+
   resize();
   resetWorld();
+  applySettings();
+  // Motion cannot be re-armed silently on load — iOS needs a fresh gesture —
+  // so a returning player sees the toggle on but steers by drag until they
+  // open settings and confirm it.
+  if (settings.motion) {
+    motionNote.textContent = 'Open settings and re-enable to re-arm the sensor.';
+  }
   elSpec.textContent = hdrLabel + ' hdr · ' + SHADOW_SIZE + '² shadow · ' +
                        Math.min(window.devicePixelRatio || 1, 2).toFixed(1) + '× dpr';
   requestAnimationFrame(tick);
