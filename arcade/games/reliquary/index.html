@@ -262,6 +262,7 @@
     <div class="row"><span>Tris</span><span id="tris">—</span></div>
     <div class="row"><span>View</span><span id="view">—</span></div>
     <div class="row"><span>Unused</span><span id="gap">—</span></div>
+    <div class="row"><span>Doc/In/VV</span><span id="hts">—</span></div>
   </div>
   <button class="fight on" id="fight" aria-pressed="true">
     <i></i><span id="fightLbl">Fights on</span>
@@ -400,6 +401,7 @@
   var elTris = document.getElementById('tris');
   var elView = document.getElementById('view');
   var elGap = document.getElementById('gap');
+  var elHts = document.getElementById('hts');
   var elSpec = document.getElementById('spec');
   var arrow = document.getElementById('arrow');
 
@@ -856,8 +858,15 @@
   // standalone and an iframe; innerHeight is the fallback for the rest.
   function fitStage() {
     var vv = window.visualViewport;
-    var w = Math.round(vv ? vv.width : window.innerWidth);
-    var h = Math.round(vv ? vv.height : window.innerHeight);
+    var doc = document.documentElement;
+    // Take the largest honest measurement. visualViewport alone under-reports
+    // on iOS — it can hand back the safe-area height, which leaves exactly the
+    // Dynamic Island inset uncovered at the bottom. offsetTop puts back what a
+    // scrolled visual viewport has taken off the top.
+    var w = Math.max(doc.clientWidth || 0, window.innerWidth || 0,
+                     vv ? Math.round(vv.width + (vv.offsetLeft || 0)) : 0);
+    var h = Math.max(doc.clientHeight || 0, window.innerHeight || 0,
+                     vv ? Math.round(vv.height + (vv.offsetTop || 0)) : 0);
     stageEl.style.width = w + 'px';
     stageEl.style.height = h + 'px';
   }
@@ -872,6 +881,37 @@
     cv.height = Math.round(cssH*dpr);
     applyScale();
   }
+
+  // The launcher's metrics panel asks; this answers with what the game can
+  // actually see, so a mismatch names its own side of the frame boundary.
+  // A custom property holding env() does not reliably compute to px, so the
+  // insets are read back off real resolved padding.
+  var insProbe = document.createElement('div');
+  insProbe.style.cssText = 'position:fixed;top:0;left:0;width:0;height:0;visibility:hidden;' +
+    'pointer-events:none;padding:var(--safe-t) var(--safe-r) var(--safe-b) var(--safe-l)';
+  document.body.appendChild(insProbe);
+  function insetPx() {
+    var cs = getComputedStyle(insProbe);
+    function v(n) { return Math.round(parseFloat(cs[n]) || 0); }
+    return v('paddingTop') + ' / ' + v('paddingRight') + ' / ' +
+           v('paddingBottom') + ' / ' + v('paddingLeft');
+  }
+  window.addEventListener('message', function (e) {
+    if (!e.data || e.data.type !== 'arcade:spec?') return;
+    var vv = window.visualViewport, doc = document.documentElement;
+    try {
+      window.parent.postMessage({
+        type: 'arcade:spec', name: 'Reliquary',
+        win: (window.innerWidth || 0) + '×' + (window.innerHeight || 0),
+        doc: (doc.clientWidth || 0) + '×' + (doc.clientHeight || 0),
+        vv: vv ? Math.round(vv.width) + '×' + Math.round(vv.height) : 'n/a',
+        stage: Math.round(cssW) + '×' + Math.round(cssH),
+        canvas: cv.width + '×' + cv.height,
+        ins: insetPx(),
+        fps: lastFps, scale: Math.round(renderScale*100) + '%'
+      }, '*');
+    } catch (err) {}
+  });
   window.addEventListener('resize', resize);
   // Safari reports the old size during the rotation itself.
   window.addEventListener('orientationchange', function () {
@@ -1822,6 +1862,9 @@
       // read 0; anything else is Safari handing us a short viewport.
       var screenH = Math.max(screen.width || 0, screen.height || 0);
       elGap.textContent = screenH ? Math.round(screenH - cssH) + 'px' : '—';
+      var vv = window.visualViewport;
+      elHts.textContent = (document.documentElement.clientHeight || 0) + '/' +
+        (window.innerHeight || 0) + '/' + (vv ? Math.round(vv.height) : 0);
       acc = 0; frames = 0;
     }
   }

@@ -95,6 +95,7 @@
 
   .spacer { flex: 1; }
 
+  .instrs { flex: none; display: flex; gap: 8px; }
   button.instr {
     appearance: none; flex: none;
     width: 38px; height: 38px; border-radius: var(--radius);
@@ -209,9 +210,66 @@
   .version:active { background: var(--ov-active); }
   .version[hidden] { display: none; }
 
+  /* ---------- metrics sheet ---------- */
+  /* Guessing at someone else's device is not a technique (DESIGN.md): this
+     reads the real numbers off the launcher and off the running game. */
+  .sheet {
+    position: fixed; inset: 0; z-index: 60; display: grid; place-items: center;
+    background: rgba(5,2,3,.72); backdrop-filter: blur(3px);
+    padding: calc(var(--safe-t) + 14px) calc(var(--safe-r) + 14px)
+             calc(var(--safe-b) + 14px) calc(var(--safe-l) + 14px);
+  }
+  .sheet[hidden] { display: none; }
+  .sheet .card {
+    width: 100%; max-width: 460px; max-height: 100%; overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    background: var(--s-1); border: 1px solid var(--line-2); border-radius: var(--radius);
+    box-shadow: 0 0 0 1px rgba(0,0,0,.6), var(--lit-within);
+    padding: 15px 15px 13px;
+  }
+  .sheet h2 {
+    font: 400 17px/1 var(--font-display); letter-spacing: .04em;
+    margin: 0 0 3px; color: var(--t-0);
+  }
+  .sheet .hint { color: var(--t-3); font-size: 11px; margin: 0 0 11px; }
+  .sect {
+    font: 500 9px/1 var(--font-ui); letter-spacing: .2em; text-transform: uppercase;
+    color: var(--t-2); margin: 13px 0 5px; display: flex; align-items: center; gap: 8px;
+  }
+  .sect::after { content: ""; flex: 1; height: 1px; background: var(--line-1); }
+  .mrow {
+    display: flex; justify-content: space-between; gap: 12px;
+    padding: 3.5px 0; border-bottom: 1px solid var(--line-0);
+    font-size: 11.5px; color: var(--t-1);
+  }
+  .mrow b {
+    font: 500 11.5px/1.35 var(--font-mono); font-variant-numeric: tabular-nums;
+    color: var(--t-0); text-align: right; white-space: nowrap;
+  }
+  .mrow b.warn { color: var(--warning); }
+  .mrow b.bad  { color: var(--error); }
+  .mrow b.ok   { color: var(--success); }
+  .verdict {
+    margin-top: 12px; padding: 9px 10px; font-size: 11.5px; line-height: 1.5;
+    border: 1px solid var(--line-2); border-left: 2px solid var(--accent-2);
+    background: var(--s-2); color: var(--t-1);
+  }
+  .sheet .acts { display: flex; gap: 8px; margin-top: 13px; }
+  .sheet .acts button {
+    flex: 1; appearance: none; padding: 10px 8px; border-radius: var(--radius);
+    border: 1px solid var(--line-2); background: var(--s-2); color: var(--t-1);
+    font: 500 10px/1 var(--font-ui); letter-spacing: .16em; text-transform: uppercase;
+  }
+  .sheet .acts button.key { background: var(--accent); color: var(--t-inv); border-color: var(--accent); }
+  .sheet .acts button:active { background: var(--ov-active); }
+
   /* ---------- player ---------- */
   .player {
-    position: fixed; inset: 0; background: var(--s-0); z-index: 50;
+    /* Width/height are set from measurement in JS — `inset: 0` sizes to the
+       layout viewport, which is not the visible area while Safari is
+       overlaying a toolbar. */
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: var(--s-0); z-index: 50;
     display: flex; flex-direction: column;
     transform: translateY(100%); visibility: hidden;
     transition: transform 200ms var(--ease), visibility 200ms var(--ease);
@@ -232,9 +290,16 @@
   .back:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .player .title {
     font: 400 15px/1 var(--font-display); letter-spacing: .03em;
-    flex: 1; text-align: center; margin-right: 74px;
+    /* offsets the wider Back control so the name still reads as centred */
+    flex: 1; text-align: center; margin-right: 36px;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
+  .pspec {
+    appearance: none; flex: none; width: 32px; height: 32px;
+    border: 1px solid var(--line-2); border-radius: var(--radius);
+    background: var(--s-2); color: var(--t-2); display: grid; place-items: center;
+  }
+  .pspec:active { background: var(--ov-active); color: var(--accent); }
   .player iframe { flex: 1; width: 100%; border: 0; background: var(--s-0); display: block; }
 
   /* Fullscreen: a game can ask for the bar to go. Something has to stay
@@ -285,12 +350,22 @@
 
     <div class="spacer"></div>
 
+    <div class="instrs">
+    <button class="instr" id="specs" aria-label="Display metrics">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="1.8" stroke-linecap="square" aria-hidden="true">
+        <path d="M3.5 7.5v-4h4M20.5 7.5v-4h-4M3.5 16.5v4h4M20.5 16.5v4h-4"/>
+        <path d="M7.5 12h9M7.5 9.8v4.4M16.5 9.8v4.4"/>
+      </svg>
+    </button>
+
     <button class="instr" id="refresh" aria-label="Refresh">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
            stroke-width="1.8" stroke-linecap="square" aria-hidden="true">
         <path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/>
       </svg>
     </button>
+    </div>
   </header>
 
   <div class="rule"></div>
@@ -315,9 +390,37 @@
       Arcade
     </button>
     <div class="title" id="ptitle"></div>
+    <!-- The metrics that matter most are the running game's, and the header
+         button is behind the player by then — so it gets one of its own. -->
+    <button class="pspec" id="pspec" aria-label="Display metrics">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="1.8" stroke-linecap="square" aria-hidden="true">
+        <path d="M3.5 7.5v-4h4M20.5 7.5v-4h-4M3.5 16.5v4h4M20.5 16.5v4h-4"/>
+        <path d="M7.5 12h9M7.5 9.8v4.4M16.5 9.8v4.4"/>
+      </svg>
+    </button>
   </div>
   <iframe id="frame" allow="autoplay; fullscreen; gamepad; accelerometer; gyroscope"
           referrerpolicy="no-referrer" title="Game"></iframe>
+</div>
+
+<!-- Reads the four insets back as real pixels; env() cannot be read any other way. -->
+<div id="probe" aria-hidden="true" style="position:fixed;top:0;left:0;width:0;height:0;
+     visibility:hidden;pointer-events:none;
+     padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px)
+             env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)"></div>
+
+<div class="sheet" id="specsheet" hidden>
+  <div class="card" role="dialog" aria-modal="true" aria-label="Display metrics">
+    <h2>❦ Display metrics</h2>
+    <p class="hint">Live measurements from this launcher and from whatever is loaded in the frame.</p>
+    <div id="metrics"></div>
+    <div class="verdict" id="verdict"></div>
+    <div class="acts">
+      <button id="copySpecs">Copy</button>
+      <button id="closeSpecs" class="key">Close</button>
+    </div>
+  </div>
 </div>
 
 <button class="fsback" id="fsback" aria-label="Back to Arcade">
@@ -576,12 +679,229 @@
   // leaving one always clears it.
   window.addEventListener('message', function (e) {
     var d = e.data;
-    if (!d || d.type !== 'arcade:fullscreen') return;
-    if (e.source !== frame.contentWindow) return;
-    player.classList.toggle('fs', !!d.on);
-    if (d.on) wakeFsBack(); else { clearTimeout(fsTimer); fsback.classList.remove('dim'); }
+    if (!d || e.source !== frame.contentWindow) return;
+    if (d.type === 'arcade:fullscreen') {
+      player.classList.toggle('fs', !!d.on);
+      if (d.on) wakeFsBack(); else { clearTimeout(fsTimer); fsback.classList.remove('dim'); }
+      fitPlayer();
+    } else if (d.type === 'arcade:spec') {
+      gameSpec = sanitizeSpec(d); gameSpecAt = Date.now();
+    }
   });
   window.addEventListener('popstate', close);
+
+  /* ---------------- display metrics ---------------- */
+
+  // Safari reports its viewport several different ways and they disagree, so
+  // the player is sized from measurement and the numbers are put on screen
+  // rather than inferred from a unit (DESIGN.md).
+
+  var probe = document.getElementById('probe');
+  var gameSpec = null, gameSpecAt = 0;
+
+  // The game half of this panel arrives over postMessage, so it is untrusted
+  // text going into innerHTML.
+  function esc(s) {
+    return String(s).replace(/[&<>"]/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+    });
+  }
+
+  function sanitizeSpec(d) {
+    function str(v) { return v == null ? '' : String(v).slice(0, 48); }
+    return { name: str(d.name), win: str(d.win), doc: str(d.doc), vv: str(d.vv),
+             stage: str(d.stage), canvas: str(d.canvas), ins: str(d.ins),
+             fps: d.fps == null ? null : str(d.fps), scale: str(d.scale) };
+  }
+
+  function insets() {
+    var cs = getComputedStyle(probe);
+    return { t: parseFloat(cs.paddingTop)    || 0, r: parseFloat(cs.paddingRight) || 0,
+             b: parseFloat(cs.paddingBottom) || 0, l: parseFloat(cs.paddingLeft)  || 0 };
+  }
+
+  function measure() {
+    var vv = window.visualViewport, doc = document.documentElement;
+    return {
+      w: Math.max(doc.clientWidth || 0, window.innerWidth || 0,
+                  vv ? Math.round(vv.width + (vv.offsetLeft || 0)) : 0),
+      h: Math.max(doc.clientHeight || 0, window.innerHeight || 0,
+                  vv ? Math.round(vv.height + (vv.offsetTop || 0)) : 0)
+    };
+  }
+
+  function fitPlayer() {
+    var m = measure();
+    player.style.width  = m.w + 'px';
+    player.style.height = m.h + 'px';
+  }
+  fitPlayer();
+  window.addEventListener('resize', fitPlayer);
+  window.addEventListener('orientationchange', function () {
+    // Safari reports the pre-rotation size during the rotation itself.
+    setTimeout(fitPlayer, 60); setTimeout(fitPlayer, 260); setTimeout(fitPlayer, 600);
+  });
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', fitPlayer);
+    window.visualViewport.addEventListener('scroll', fitPlayer);
+  }
+
+  function displayMode() {
+    if (window.navigator.standalone === true) return 'standalone (iOS)';
+    if (window.matchMedia) {
+      var modes = ['fullscreen', 'standalone', 'minimal-ui'];
+      for (var i = 0; i < modes.length; i++)
+        if (matchMedia('(display-mode: ' + modes[i] + ')').matches) return modes[i];
+    }
+    return 'browser tab';
+  }
+
+  function collect() {
+    var vv = window.visualViewport, doc = document.documentElement, ins = insets();
+    var winW = window.innerWidth || 0, winH = window.innerHeight || 0;
+    var sw = screen.width || 0, sh = screen.height || 0;
+    var long = Math.max(sw, sh), short = Math.min(sw, sh);
+    var portrait = winH >= winW;
+    var expW = portrait ? short : long, expH = portrait ? long : short;
+
+    var open = player.classList.contains('open');
+    var r = open ? frame.getBoundingClientRect() : null;
+    var above  = r ? Math.max(0, Math.round(r.top)) : 0;
+    var below  = r ? Math.max(0, Math.round(winH - r.bottom)) : 0;
+    var outside = Math.max(0, expH - winH);
+
+    var g = (gameSpec && Date.now() - gameSpecAt < 4000) ? gameSpec : null;
+
+    return {
+      mode: displayMode(),
+      win: winW + '×' + winH,
+      doc: (doc.clientWidth || 0) + '×' + (doc.clientHeight || 0),
+      vv: vv ? Math.round(vv.width) + '×' + Math.round(vv.height) +
+               ' +' + Math.round(vv.offsetLeft || 0) + ',' + Math.round(vv.offsetTop || 0) : 'n/a',
+      screen: sw + '×' + sh + ' @' + (window.devicePixelRatio || 1) + '×',
+      expect: expW + '×' + expH,
+      ins: ins.t + ' / ' + ins.r + ' / ' + ins.b + ' / ' + ins.l,
+      player: open ? Math.round(player.getBoundingClientRect().width) + '×' +
+                     Math.round(player.getBoundingClientRect().height) : '—',
+      frame: r ? Math.round(r.width) + '×' + Math.round(r.height) : '— not open',
+      fs: open ? (player.classList.contains('fs') ? 'on' : 'off') : '—',
+      above: above, below: below, outside: outside,
+      lost: above + below + outside,
+      insT: ins.t, insB: ins.b,
+      game: g
+    };
+  }
+
+  var METRIC_ROWS = [
+    ['Mode',            'mode'],
+    ['window.inner',    'win'],
+    ['doc.client',      'doc'],
+    ['visualViewport',  'vv'],
+    ['screen',          'screen'],
+    ['Expected cover',  'expect'],
+    ['Insets t/r/b/l',  'ins']
+  ];
+
+  var sheetEl   = document.getElementById('specsheet');
+  var metricsEl = document.getElementById('metrics');
+  var verdictEl = document.getElementById('verdict');
+  var specTimer = null, lastText = '';
+
+  function paintSpecs() {
+    var m = collect();
+    var html = '', text = [];
+
+    function sect(t) { html += '<div class="sect">' + esc(t) + '</div>'; text.push('[' + t + ']'); }
+    function row(label, value, cls) {
+      html += '<div class="mrow"><span>' + esc(label) + '</span><b' +
+              (cls ? ' class="' + cls + '"' : '') + '>' + esc(value) + '</b></div>';
+      text.push(label + ': ' + value);
+    }
+
+    sect('Launcher');
+    for (var i = 0; i < METRIC_ROWS.length; i++)
+      row(METRIC_ROWS[i][0], m[METRIC_ROWS[i][1]]);
+
+    sect('Frame');
+    row('Player', m.player);
+    row('Game frame', m.frame);
+    row('Fullscreen', m.fs);
+    row('Lost above', m.above + 'px', m.above ? 'warn' : 'ok');
+    row('Lost below', m.below + 'px', m.below ? 'warn' : 'ok');
+    row('Outside window', m.outside + 'px', m.outside ? 'warn' : 'ok');
+    row('Total unused', m.lost + 'px', m.lost > 1 ? (m.lost > 20 ? 'bad' : 'warn') : 'ok');
+
+    if (m.game) {
+      var g = m.game;
+      sect(g.name || 'Game');
+      row('window.inner', g.win || '—');
+      row('doc.client', g.doc || '—');
+      row('visualViewport', g.vv || '—');
+      row('Stage', g.stage || '—');
+      row('Canvas px', g.canvas || '—');
+      row('Insets t/r/b/l', g.ins || '—');
+      if (g.fps != null) row('FPS / scale', g.fps + ' @ ' + g.scale);
+    } else if (player.classList.contains('open')) {
+      sect('Game'); row('Reporting', 'no answer');
+    }
+
+    metricsEl.innerHTML = html;
+
+    // Naming where the pixels went is the whole point: inside the layout is
+    // ours to fix, outside the window is not.
+    var v;
+    if (m.lost <= 1) {
+      v = 'Covered. The frame matches the physical screen exactly.';
+    } else {
+      var bits = [];
+      if (m.above)   bits.push(m.above + 'px above the frame');
+      if (m.below)   bits.push(m.below + 'px below it');
+      if (m.outside) bits.push(m.outside + 'px outside the window');
+      v = m.lost + 'px unused — ' + bits.join(', ') + '. ';
+      if (m.above || m.below) {
+        v += 'The band inside the window is launcher chrome; a game’s fullscreen setting takes it. ';
+      }
+      if (m.outside) {
+        v += (m.insT + m.insB >= m.outside - 2)
+          ? 'The outside band matches the safe-area insets (' + m.insT + ' top, ' + m.insB +
+            ' bottom), so the system inset the web view — not this layout.'
+          : 'Insets read ' + m.insT + '/' + m.insB + ', so that band is browser chrome rather ' +
+            'than a safe area; installing to the home screen reclaims it.';
+      }
+    }
+    verdictEl.textContent = v;
+
+    lastText = 'Arcade v' + (window.__ARCADE_VERSION__ || '?') + '\n' +
+               text.join('\n') + '\n\n' + v;
+  }
+
+  function openSpecs() {
+    sheetEl.hidden = false;
+    paintSpecs();
+    clearInterval(specTimer);
+    specTimer = setInterval(function () {
+      if (player.classList.contains('open') && frame.contentWindow)
+        frame.contentWindow.postMessage({ type: 'arcade:spec?' }, '*');
+      paintSpecs();
+    }, 500);
+  }
+  function closeSpecs() { sheetEl.hidden = true; clearInterval(specTimer); specTimer = null; }
+
+  document.getElementById('specs').addEventListener('click', openSpecs);
+  document.getElementById('pspec').addEventListener('click', openSpecs);
+  document.getElementById('closeSpecs').addEventListener('click', closeSpecs);
+  sheetEl.addEventListener('click', function (e) { if (e.target === sheetEl) closeSpecs(); });
+  document.getElementById('copySpecs').addEventListener('click', function (e) {
+    var b = e.currentTarget;
+    var done = function (ok) {
+      b.textContent = ok ? 'Copied' : 'No clipboard';
+      setTimeout(function () { b.textContent = 'Copy'; }, 1400);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(lastText).then(function () { done(true); },
+                                                   function () { done(false); });
+    } else { done(false); }
+  });
 
   /* ---------------- load ---------------- */
 
