@@ -1,7 +1,7 @@
 // Bump CACHE_VERSION on EVERY update, or phones keep serving the old build.
 // It is generated from arcade/VERSION — change that file and re-run
 // arcade/tools/build-pwa.py, or edit both by hand if you are not regenerating.
-const CACHE_VERSION = 'arcade-v1.4.0';
+const CACHE_VERSION = 'arcade-v1.5.0';
 
 // Relative paths only: this worker is scoped to a Pages project subpath.
 const SHELL = ['./', './index.html', './manifest.json', './icon-180.png'];

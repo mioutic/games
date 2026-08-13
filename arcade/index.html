@@ -301,6 +301,8 @@
            + '<circle cx="11.5" cy="4.5" r="1.5" fill="currentColor" stroke="none"/>',
     grid:    '<path d="M3.5 3.5h17v17h-17zM9.2 3.5v17M14.8 3.5v17M3.5 9.2h17M3.5 14.8h17"/>',
     crypt:   '<path d="M5 21V10.5a7 7 0 0 1 14 0V21"/><path d="M2.5 21h19"/><path d="M9.5 21v-6.5a2.5 2.5 0 0 1 5 0V21"/>',
+    chalice: '<path d="M6.8 4.5h10.4l-1.7 6.2a3.7 3.7 0 0 1-7 0z"/>'
+           + '<path d="M12 12.8v7.2"/><path d="M8.3 20.4h7.4"/>',
     'default': '<path d="M12 2.6 21.4 12 12 21.4 2.6 12 12 2.6Z"/>'
   };
 
@@ -398,7 +400,9 @@
     if (raw === null || raw === '') return null;
     var n = parseFloat(raw);
     if (!isFinite(n) || n <= 0) return null;
-    return stat.format === 'ms' ? Math.round(n) + 'ms' : String(Math.round(n));
+    if (stat.format === 'ms') return Math.round(n) + 'ms';
+    if (stat.format === 'sec') return n.toFixed(1) + 's';
+    return String(Math.round(n));
   }
 
   /* ---------------- render ---------------- */

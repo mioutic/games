@@ -27,6 +27,19 @@
       }
     },
     {
+      "slug": "reliquary",
+      "name": "Reliquary",
+      "glyph": "chalice",
+      "description": "Free roam a pillared hall. Twin pads, mirrored floor.",
+      "ink": "#a884c9",
+      "entry": "index.html",
+      "stat": {
+        "key": "reliquary.best",
+        "label": "Fastest",
+        "format": "sec"
+      }
+    },
+    {
       "slug": "snake",
       "name": "Snake",
       "glyph": "serpent",

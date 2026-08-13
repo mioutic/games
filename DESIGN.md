@@ -47,6 +47,43 @@ status pair is ≥49° apart in hue.
 - Shadows are true black, modal scrims `#050203`.
 - Overlay ramp: hover 6%, active 12%, selected 10%, status fills 14%, strong 16%.
 
+## Colour in a lit 3D scene
+
+The palette above is specified for flat UI, where a value *is* the pixel. In a
+renderer every colour goes through albedo × light × tonemap first, and three of
+these values break on the way. Each of the following was hit in practice
+building `arcade/games/ossuary/`; none is a reason to loosen the palette, they
+are conversions to apply when a value becomes a material or a light.
+
+**Surface tiers are unusable as albedo.** `#241119` and `#1a0d12` are already
+near-black as pixels; as albedo, multiplied by any plausible light, they render
+as pure black and the geometry disappears — the first lit floor was invisible.
+Keep the hue, raise the value: around `#4a3138` for lit stone and `#38242a` for
+walls read as the same oxblood once the lighting is applied. The near-black
+register is then produced by the *lighting* being scarce, which is what the
+brief actually asks for, rather than by the surfaces being unlit black.
+
+**Arterial crimson makes a purple light.** `#b81d3a` linearises to roughly
+`(0.48, 0.012, 0.042)` — more blue than green — so every surface it lights
+picks up a violet cast and the whole scene turns lilac. As a *light source* use
+a warm ember, `(0.52, 0.10, 0.032)` linear, which still reads as blood on the
+wall while bouncing warm. Crimson stays correct as an emissive surface and as a
+bloom colour; it is only wrong as the colour of the light itself.
+
+**Emissive crimson clips to pink.** Push a crimson emitter bright enough and
+the red channel saturates through the tonemap while green and blue are lifted
+by the gamma encode — the result is hot pink, the exact collision the palette
+was designed to avoid, arriving from the render pipeline rather than from the
+picker. Hold emissive crimson under the clip (with ACES and exposure ~1.1, that
+is roughly `albedo × 1.6` at most) and lower the bloom threshold to compensate
+if it needs to glow. Bright and *saturated* are separate controls; reach for
+bloom, not intensity.
+
+The general rule: **a value's brightness and its role in the lighting are
+separate knobs.** Conflating them is what produced all three bugs — an object
+was made brighter to make it self-lit, or dimmer to stop it blowing out. Carry
+an explicit material flag instead.
+
 ## Typography
 
 Display face is a serif — `Georgia, "Times New Roman", serif` — against a normal
