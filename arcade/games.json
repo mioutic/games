@@ -30,7 +30,7 @@
       "slug": "reliquary",
       "name": "Reliquary",
       "glyph": "chalice",
-      "description": "Free roam, weather, and things in the dark that want a turn.",
+      "description": "Free roam a hall. Weather, and things that fight back.",
       "ink": "#a884c9",
       "entry": "index.html",
       "stat": {

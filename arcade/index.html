@@ -66,8 +66,11 @@
 
   .wrap {
     padding: calc(var(--safe-t) + 18px) calc(var(--safe-r) + 16px)
-             calc(var(--safe-b) + 48px) calc(var(--safe-l) + 16px);
+             calc(var(--safe-b) + 42px) calc(var(--safe-l) + 16px);
     max-width: 760px; margin: 0 auto;
+    min-height: 100%;
+    min-height: 100dvh;      /* survives Safari's collapsing toolbars */
+    display: flex; flex-direction: column;
   }
 
   /* ---------- masthead ---------- */
@@ -114,7 +117,19 @@
   }
 
   /* ---------- grid ---------- */
-  .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  /* The grid takes the slack rather than leaving a band of nothing above the
+     footer; card content centres itself so a tall card still reads as full. */
+  .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;
+          flex: 1 1 auto; grid-auto-rows: minmax(152px, 1fr); }
+  /* Landscape has height to spare across, not down — shorter rows so the
+     library still fits without scrolling. */
+  @media (max-height: 500px) {
+    .grid { grid-auto-rows: minmax(124px, 1fr); }
+    .card { min-height: 124px; padding: 11px 11px 9px; }
+    .card .glyph { margin-bottom: 7px; }
+    .card .desc { -webkit-line-clamp: 1; }
+    .foot { padding-top: 14px; }
+  }
   @media (min-width: 560px) { .grid { grid-template-columns: repeat(3, 1fr); } }
 
   .card {
@@ -139,7 +154,7 @@
   }
   .card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-  .card .glyph { color: var(--accent); margin-bottom: 12px; }
+  .card .glyph { color: var(--accent); margin-top: auto; margin-bottom: 12px; }
   .card .name {
     font: 400 18px/1.15 var(--font-display); letter-spacing: .02em; color: var(--t-0);
   }
@@ -175,17 +190,21 @@
   }
   @keyframes scan { to { transform: translateX(100%); } }
 
-  .foot { margin-top: 22px; text-align: center; color: var(--t-3); font-size: 11px; line-height: 1.8; }
+  .foot { margin-top: auto; padding-top: 26px; text-align: center;
+          color: var(--t-3); font-size: 11px; line-height: 1.8; }
   .foot code { font-family: var(--font-mono); color: var(--t-2); }
 
   .version {
     position: fixed; z-index: 60;
-    right: calc(var(--safe-r) + 10px); bottom: calc(var(--safe-b) + 9px);
+    right: calc(var(--safe-r) + 14px); bottom: calc(var(--safe-b) + 12px);
+    appearance: none; white-space: nowrap;
     font: 500 9.5px/1 var(--font-mono); letter-spacing: .1em;
     color: var(--brand); border: 1px solid var(--line-2); border-radius: var(--radius);
-    padding: 3px 5px; background: var(--s-1); pointer-events: none;
+    /* the trailing letter-spacing eats into the right edge, so pad it back */
+    padding: 5px 8px 5px 7px; background: var(--s-1);
     font-variant-numeric: tabular-nums;
   }
+  .version:active { background: var(--ov-active); }
   .version[hidden] { display: none; }
   /* The build stamp belongs to the launcher — keep it off a running game. */
   .player.open ~ .version { display: none; }
@@ -297,7 +316,7 @@
        stroke-width="2" stroke-linecap="square" aria-hidden="true"><path d="M10 2 2 10l8 8"/></svg>
 </button>
 
-<div class="version" id="version" hidden></div>
+<button class="version" id="version" hidden aria-label="Build and viewport"></button>
 
 <script>
 (function () {
@@ -626,7 +645,16 @@
 
   if (window.__ARCADE_VERSION__) {
     var vEl = document.getElementById('version');
-    vEl.textContent = 'v' + window.__ARCADE_VERSION__;
+    var showSize = false;
+    function stamp() {
+      vEl.textContent = showSize
+        ? Math.round(window.innerWidth) + '×' + Math.round(window.innerHeight) +
+          ' @' + (window.devicePixelRatio || 1) + '×'
+        : 'v' + window.__ARCADE_VERSION__;
+    }
+    vEl.addEventListener('click', function () { showSize = !showSize; stamp(); });
+    window.addEventListener('resize', stamp);
+    stamp();
     vEl.hidden = false;
   }
 
