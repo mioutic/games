@@ -17,6 +17,10 @@
     --font-ui: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
     --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
     --radius: 2px;  --dur: 160ms;  --ease: cubic-bezier(.2,.6,.2,1);
+    --safe-t: env(safe-area-inset-top, 0px);
+    --safe-r: env(safe-area-inset-right, 0px);
+    --safe-b: env(safe-area-inset-bottom, 0px);
+    --safe-l: env(safe-area-inset-left, 0px);
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent;
       user-select: none; -webkit-user-select: none; }
@@ -30,9 +34,9 @@
   canvas { display: block; width: 100%; height: 100%; touch-action: none; }
 
   .hud {
-    position: fixed; left: calc(env(safe-area-inset-left,0px) + 12px);
-    right: calc(env(safe-area-inset-right,0px) + 12px);
-    top: calc(env(safe-area-inset-top,0px) + 12px);
+    position: fixed; left: calc(var(--safe-l) + 12px);
+    right: calc(var(--safe-r) + 12px);
+    top: calc(var(--safe-t) + 12px);
     display: flex; gap: 8px; pointer-events: none;
   }
   .panel { border: 1px solid var(--line-1); border-radius: var(--radius);
@@ -52,14 +56,14 @@
   .row span:last-child { font: 500 10px/1.5 var(--font-mono); font-variant-numeric: tabular-nums; color: var(--t-2); }
   #fps.good { color: var(--success); } #fps.fair { color: var(--warning); } #fps.poor { color: var(--error); }
 
-  .gauge { position: fixed; left: calc(env(safe-area-inset-left,0px) + 12px);
-           right: calc(env(safe-area-inset-right,0px) + 12px);
-           bottom: calc(env(safe-area-inset-bottom,0px) + 34px);
+  .gauge { position: fixed; left: calc(var(--safe-l) + 12px);
+           right: calc(var(--safe-r) + 12px);
+           bottom: calc(var(--safe-b) + 30px);
            display: flex; gap: 2px; pointer-events: none; }
   .seg { flex: 1; height: 3px; background: var(--line-1); transition: background 120ms var(--ease); }
   .seg.on { background: var(--accent-2); }
 
-  .hint { position: fixed; left: 0; right: 0; bottom: calc(env(safe-area-inset-bottom,0px) + 13px);
+  .hint { position: fixed; left: 0; right: 0; bottom: calc(var(--safe-b) + 11px);
           text-align: center; font: 500 8.5px/1 var(--font-ui); letter-spacing: .16em;
           text-transform: uppercase; color: var(--t-3); pointer-events: none; }
 
@@ -145,6 +149,12 @@
   var elTris = document.getElementById('tris');
   var elSpec = document.getElementById('spec');
   var gaugeEl = document.getElementById('gauge');
+
+  // The launcher's title bar already absorbs the top inset; applying it again
+  // inside the frame just burns a strip of screen under the bar.
+  if (window.self !== window.top) {
+    document.documentElement.style.setProperty('--safe-t', '0px');
+  }
 
   var gl = cv.getContext('webgl2', {
     antialias: false, alpha: false, depth: true,
@@ -328,12 +338,13 @@
     gl.bindVertexArray(null);
 
     d.reset = function () { d.n = 0; };
-    d.push = function (px, py, pz, sx, sy, sz, ry, col, emis, rough, metal, seed) {
+    d.push = function (px, py, pz, sx, sy, sz, ry, col, emis, rough, metal, seed, selfLit) {
       if (d.n >= d.max) return;
       var o = d.n * INST_FLOATS;
       writeTRS(d.data, o, px, py, pz, sx, sy, sz, ry);
       d.data[o + 16] = col[0]; d.data[o + 17] = col[1]; d.data[o + 18] = col[2]; d.data[o + 19] = emis;
-      d.data[o + 20] = rough;  d.data[o + 21] = metal;  d.data[o + 22] = seed;   d.data[o + 23] = 0;
+      d.data[o + 20] = rough;  d.data[o + 21] = metal;  d.data[o + 22] = seed;
+      d.data[o + 23] = selfLit ? 1 : 0;
       d.n++;
     };
     d.upload = function () {
@@ -350,8 +361,9 @@
     return d;
   }
 
-  var boxes = makeDrawable(boxMesh(), 420);
-  var orbs  = makeDrawable(sphereMesh(20, 14), 48);
+  var boxes = makeDrawable(boxMesh(), 640);
+  var orbs  = makeDrawable(sphereMesh(20, 14), 96);
+  var dust  = makeDrawable(sphereMesh(6, 4), 64);
 
   /* ---------------- shaders ---------------- */
 
@@ -396,8 +408,9 @@
     'uniform vec3 uFogColor;\n' +
     'uniform float uFogDensity;\n' +
     'uniform int uNumLights;\n' +
-    'uniform vec3 uLightPos[6];\n' +
-    'uniform vec3 uLightColor[6];\n' +
+    'uniform vec3 uLightPos[8];\n' +
+    'uniform vec3 uLightColor[8];\n' +
+    'uniform float uHalfW;\n' +
     'uniform sampler2DShadow uShadow;\n' +
     'uniform float uShadowTexel;\n' +
 
@@ -473,25 +486,36 @@
     '    float fade = clamp(1.35 - length(fwidth(np)), 0.0, 1.0);\n' +
     '    N = normalize(N - 0.22 * fade * grad);\n' +
     '    albedo *= mix(1.0, 0.90 + 0.18 * h, fade);\n' +
+    '    rough = clamp(rough * (0.74 + 0.52 * h), 0.05, 1.0);\n' +
     '  }\n' +
 
+  // Cheap contact occlusion: darken vertical surfaces near the floor and
+  // floor-facing ones near the walls. It is not SSAO, but it seats the
+  // geometry instead of leaving it floating on flat ambient.
+    '  float aoV = mix(0.40, 1.0, smoothstep(0.0, 2.2, vWorld.y));\n' +
+    '  float aoW = mix(0.52, 1.0, smoothstep(0.0, 2.4, uHalfW - abs(vWorld.x)));\n' +
+    '  float ao = mix(1.0, aoV, 1.0 - abs(N.y)) * mix(1.0, aoW, max(N.y, 0.0));\n' +
     '  vec3 L = normalize(-uSunDir);\n' +
     '  float sh = shadowAt(N, L);\n' +
     '  vec3 col = brdf(N, V, L, albedo, rough, metal, uSunColor) * sh;\n' +
+    '  vec3 pointSum = vec3(0.0);\n' +
 
-    '  for (int i = 0; i < 6; i++) {\n' +
-    '    if (i >= uNumLights) break;\n' +
+    '  for (int i = 0; i < 8; i++) {\n' +
+    '    if (i >= uNumLights || vMat.w > 0.5) break;\n' +
     '    vec3 d = uLightPos[i] - vWorld;\n' +
     '    float dist2 = max(dot(d, d), 0.06);\n' +
-    '    col += brdf(N, V, normalize(d), albedo, rough, metal, uLightColor[i] / dist2);\n' +
+    '    pointSum += brdf(N, V, normalize(d), albedo, rough, metal, uLightColor[i] / dist2);\n' +
     '  }\n' +
 
-    '  col += uAmbient * albedo;\n' +
+    '  col += pointSum * mix(1.0, ao, 0.65);\n' +
+    '  col += uAmbient * albedo * ao;\n' +
     '  col += albedo * emissive;\n' +
 
     '  float dist = length(uEye - vWorld);\n' +
     '  float fog = 1.0 - exp(-pow(dist * uFogDensity, 2.0));\n' +
     '  col = mix(col, uFogColor, clamp(fog, 0.0, 1.0));\n' +
+    '  float mist = 0.5 * exp(-max(vWorld.y, 0.0) * 0.62) * (1.0 - exp(-dist * 0.055));\n' +
+    '  col = mix(col, vec3(0.045, 0.030, 0.040), clamp(mist, 0.0, 0.55));\n' +
 
     '  outColor = vec4(col, 1.0);\n' +
     '}\n';
@@ -627,7 +651,7 @@
     if (t.depth) gl.deleteRenderbuffer(t.depth);
   }
 
-  var SHADOW_SIZE = 1024;
+  var SHADOW_SIZE = 2048;
   var shadow = { w: SHADOW_SIZE, h: SHADOW_SIZE };
   shadow.tex = gl.createTexture();
   gl.bindTexture(gl.TEXTURE_2D, shadow.tex);
@@ -695,13 +719,15 @@
   // dark that lit stone reads as pure black. These are the same oxblood hue
   // raised to a value the lighting can actually work with.
   var EMBER   = [0.52, 0.10, 0.032];
+  var PALE    = [0.26, 0.21, 0.17];
   var STONE   = srgb('#4a3138');
   var STONE_D = srgb('#38242a');
   var FOG     = [0.010, 0.006, 0.008];
 
   /* ---------------- world ---------------- */
 
-  var SEG_LEN = 12, SEG_COUNT = 16, HALF_W = 4.6, WALL_H = 7.5;
+  var SEG_LEN = 12, SEG_COUNT = 16, HALF_W = 4.6, WALL_H = 9.4, CEIL_Y = 8.6;
+  var MAX_LIGHTS = 8;
   var LANE_MIN = -3.5, LANE_MAX = 3.5;
 
   var state = {
@@ -882,25 +908,62 @@
   /* ---------------- frame ---------------- */
 
   var lightVP = new Float32Array(16);
-  var lightPosArr = new Float32Array(18), lightColArr = new Float32Array(18);
+  var lightPosArr = new Float32Array(MAX_LIGHTS * 3), lightColArr = new Float32Array(MAX_LIGHTS * 3);
   var drawCalls = 0, triCount = 0, lastFps = 0;
 
+  // Dust hanging in the shafts. Deterministic, so they drift rather than pop.
+  var MOTES = 36, motes = [];
+  for (var mi = 0; mi < MOTES; mi++) {
+    motes.push({
+      x: rand(-HALF_W + 0.6, HALF_W - 0.6),
+      y: rand(0.5, CEIL_Y - 1.2),
+      z0: rand(0, 64),
+      drift: rand(1.1, 2.6),
+      sp: rand(0.5, 1.3),
+      ph: rand(0, 6.28)
+    });
+  }
+
+  function flickerOf(br) {
+    return 0.72 + 0.28 * Math.sin(state.t * 9.1 + br.phase) * Math.sin(state.t * 3.7 + br.phase * 2.1);
+  }
+
   function buildInstances() {
-    boxes.reset(); orbs.reset();
+    boxes.reset(); orbs.reset(); dust.reset();
 
     var baseZ = Math.floor(state.z / SEG_LEN) * SEG_LEN;
     for (var s = 2; s > -SEG_COUNT; s--) {
       var z = baseZ + s * SEG_LEN;
       var seed = Math.abs(z * 0.37) % 40;
+      var si = ((Math.round(z / SEG_LEN) % 6) + 6) % 6;
+
       boxes.push(0, -0.25, z, HALF_W * 2, 0.5, SEG_LEN, 0, STONE, 0, 0.92, 0.0, seed);
       boxes.push(-HALF_W, WALL_H * 0.5 - 0.25, z, 0.6, WALL_H, SEG_LEN, 0, STONE_D, 0, 0.88, 0.0, seed + 3);
       boxes.push(HALF_W, WALL_H * 0.5 - 0.25, z, 0.6, WALL_H, SEG_LEN, 0, STONE_D, 0, 0.88, 0.0, seed + 7);
 
+      // Tomb lids set flush into the floor, to break up the empty foreground.
+      boxes.push(-2.2, 0.02, z - 2.6, 2.5, 0.10, 4.4, 0, PALE, 0, 0.72, 0.0, seed + 21);
+      boxes.push(2.2, 0.02, z + 2.6, 2.5, 0.10, 4.4, 0, PALE, 0, 0.72, 0.0, seed + 23);
+
+      // The vault, breached every third bay so the moon can reach the floor.
+      // Those shafts are what the shadow map is really for.
+      // Skip the bay overhead: a slab right above the camera just caps the
+      // frame with a bright band. Ahead of the player it reads as vaulting.
+      if (si % 3 !== 0 && z < state.z - 2) {
+        boxes.push(0, CEIL_Y, z, HALF_W * 2, 0.7, SEG_LEN, 0, STONE_D, 0, 0.9, 0.0, seed + 27);
+        boxes.push(0, CEIL_Y - 0.55, z, HALF_W * 2 - 0.5, 0.45, 1.0, 0, PALE, 0, 0.6, 0.0, seed + 29);
+      }
+
       // An arch every other segment: two posts and a lintel, in bone.
-      if (((Math.round(z / SEG_LEN) % 2) + 2) % 2 === 0) {
+      if (si % 2 === 0) {
         boxes.push(-HALF_W + 0.75, 2.6, z, 0.5, 5.6, 0.7, 0, BONE, 0, 0.55, 0.0, seed + 11);
         boxes.push(HALF_W - 0.75, 2.6, z, 0.5, 5.6, 0.7, 0, BONE, 0, 0.55, 0.0, seed + 13);
         boxes.push(0, 5.7, z, HALF_W * 2 - 1.0, 0.7, 0.9, 0, BONE, 0, 0.55, 0.0, seed + 17);
+
+        // Niche cut into the wall, with an urn standing in it.
+        var side = (si % 4 === 0) ? -1 : 1;
+        boxes.push(side * (HALF_W - 0.34), 1.9, z + 5.5, 0.42, 2.1, 1.5, 0, STONE_D, 0, 0.95, 0.0, seed + 31);
+        orbs.push(side * (HALF_W - 0.72), 1.35, z + 5.5, 0.62, 0.78, 0.62, 0, PALE, 0, 0.5, 0.0, seed + 33);
       }
     }
 
@@ -909,19 +972,21 @@
       if (o.z > state.z + 12 || o.z < state.z - SEG_COUNT * SEG_LEN) continue;
       boxes.push(o.x, o.h * 0.5 - 0.25, o.z, 1.05, o.h, 1.05, o.r, BONE, 0, 0.42, 0.0, o.seed);
       boxes.push(o.x, o.h - 0.1, o.z, 1.35, 0.3, 1.35, o.r, BONE, 0, 0.42, 0.0, o.seed + 5);
+      boxes.push(o.x, 0.12, o.z, 1.45, 0.24, 1.45, o.r, PALE, 0, 0.6, 0.0, o.seed + 9);
     }
 
     for (var b = 0; b < state.braziers.length; b++) {
       var br = state.braziers[b];
       if (br.z > state.z + 12 || br.z < state.z - SEG_COUNT * SEG_LEN) continue;
-      var flick = 0.72 + 0.28 * Math.sin(state.t * 9.1 + br.phase) * Math.sin(state.t * 3.7 + br.phase * 2.1);
-      boxes.push(br.x, 3.1, br.z, 0.45, 0.45, 0.45, 0.7, EMBER, 1.8 * flick, 0.5, 0.0, 0);
+      var flick = flickerOf(br);
+      boxes.push(br.x, 2.55, br.z, 0.22, 1.3, 0.22, 0, STONE_D, 0, 0.8, 0.0, 0);
+      boxes.push(br.x, 3.1, br.z, 0.45, 0.45, 0.45, 0.7, EMBER, 1.8 * flick, 0.5, 0.0, 0, 1);
     }
 
     // Player orb, riding a little above the floor with a slow bob.
     var bob = Math.sin(state.t * 3.4) * 0.09;
     orbs.push(state.px, 0.85 + bob, state.z, 1.05, 1.05, 1.05, state.t * 1.7,
-              BONE, 0.28, 0.30, 0.1, 0);
+              BONE, 0.30, 0.30, 0.1, 0, 1);
 
     for (var d = 0; d < state.drops.length; d++) {
       var dr = state.drops[d];
@@ -929,13 +994,32 @@
       if (dr.z > state.z + 12 || dr.z < state.z - SEG_COUNT * SEG_LEN) continue;
       var spin = state.t * 2.2 + dr.x;
       orbs.push(dr.x, 1.15 + Math.sin(state.t * 2.6 + dr.x) * 0.16, dr.z,
-                0.52, 0.72, 0.52, spin, BLOOD, 1.05, 0.35, 0.0, 0);
+                0.52, 0.72, 0.52, spin, BLOOD, 1.05, 0.35, 0.0, 0, 1);
     }
 
-    boxes.upload(); orbs.upload();
+    for (var m = 0; m < motes.length; m++) {
+      var mo = motes[m];
+      var span = 64;
+      var mz = state.z + 8 - (((mo.z0 + state.t * mo.drift) % span) + span) % span;
+      dust.push(mo.x + Math.sin(state.t * mo.sp + mo.ph) * 0.5,
+                mo.y + Math.sin(state.t * mo.sp * 0.7 + mo.ph) * 0.35, mz,
+                0.07, 0.07, 0.07, 0, BONE, 0.6, 1.0, 0.0, 0, 1);
+    }
+
+    boxes.upload(); orbs.upload(); dust.upload();
   }
 
   function pickLights() {
+    // The orb is a lantern: pallor travelling with the player, against the
+    // arterial braziers fixed to the walls. It is always light 0.
+    var lanternPow = 9;
+    lightPosArr[0] = state.px;
+    lightPosArr[1] = 1.15;
+    lightPosArr[2] = state.z;
+    lightColArr[0] = BONE[0] * lanternPow;
+    lightColArr[1] = BONE[1] * lanternPow;
+    lightColArr[2] = BONE[2] * lanternPow;
+
     var near = [];
     for (var i = 0; i < state.braziers.length; i++) {
       var b = state.braziers[i];
@@ -944,17 +1028,17 @@
       near.push({ b: b, d: Math.abs(dz) });
     }
     near.sort(function (a, b) { return a.d - b.d; });
-    var n = Math.min(6, near.length);
+    var n = Math.min(MAX_LIGHTS - 1, near.length);
     for (var k = 0; k < n; k++) {
       var br = near[k].b;
-      var flick = 0.72 + 0.28 * Math.sin(state.t * 9.1 + br.phase) * Math.sin(state.t * 3.7 + br.phase * 2.1);
-      var power = 46 * flick;
-      lightPosArr[k * 3] = br.x; lightPosArr[k * 3 + 1] = 3.1; lightPosArr[k * 3 + 2] = br.z;
-      lightColArr[k * 3] = EMBER[0] * power;
-      lightColArr[k * 3 + 1] = EMBER[1] * power;
-      lightColArr[k * 3 + 2] = EMBER[2] * power;
+      var power = 46 * flickerOf(br);
+      var o = (k + 1) * 3;
+      lightPosArr[o] = br.x; lightPosArr[o + 1] = 3.1; lightPosArr[o + 2] = br.z;
+      lightColArr[o] = EMBER[0] * power;
+      lightColArr[o + 1] = EMBER[1] * power;
+      lightColArr[o + 2] = EMBER[2] * power;
     }
-    return n;
+    return n + 1;
   }
 
   var SUN = [-0.42, -1.0, -0.28];
@@ -966,8 +1050,8 @@
     var shakeX = state.shake * Math.sin(state.t * 47) * 0.22;
     var shakeY = state.shake * Math.sin(state.t * 39) * 0.18;
 
-    var eyeX = state.px * 0.5 + shakeX, eyeY = 3.1 + shakeY, eyeZ = state.z + 7.2;
-    var atX = state.px * 0.72, atY = 1.35, atZ = state.z - 11;
+    var eyeX = state.px * 0.5 + shakeX, eyeY = 2.45 + shakeY, eyeZ = state.z + 5.9;
+    var atX = state.px * 0.8, atY = 2.05, atZ = state.z - 14;
     var view = m4lookAt(eyeX, eyeY, eyeZ, atX, atY, atZ, 0, 1, 0);
     var proj = m4perspective(1.05, aspect, 0.15, 190);
     var vp = m4mul(proj, view);
@@ -976,7 +1060,7 @@
     var tz = state.z - 16;
     var lx = state.px * 0.4 - SUN[0] * 46, ly = -SUN[1] * 46, lz = tz - SUN[2] * 46;
     var lview = m4lookAt(lx, ly, lz, state.px * 0.4, 0, tz, 0, 1, 0);
-    var lproj = m4ortho(-26, 26, -26, 26, 1, 105);
+    var lproj = m4ortho(-19, 19, -19, 19, 1, 105);
     m4mul(lproj, lview, lightVP);
 
     drawCalls = 0; triCount = 0;
@@ -1014,11 +1098,13 @@
     gl.uniform3fv(progScene.u.uLightPos, lightPosArr);
     gl.uniform3fv(progScene.u.uLightColor, lightColArr);
     gl.uniform1f(progScene.u.uShadowTexel, 1 / SHADOW_SIZE);
+    gl.uniform1f(progScene.u.uHalfW, HALF_W);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, shadow.tex);
     gl.uniform1i(progScene.u.uShadow, 0);
     drawCalls += boxes.draw(); triCount += boxes.tris * boxes.n;
     drawCalls += orbs.draw();  triCount += orbs.tris * orbs.n;
+    drawCalls += dust.draw();  triCount += dust.tris * dust.n;
 
     /* --- pass 3-5: bright pass, then a separable blur at quarter res --- */
     gl.disable(gl.DEPTH_TEST);
@@ -1036,7 +1122,7 @@
 
     gl.useProgram(progBlur);
     gl.uniform1i(progBlur.u.uTex, 0);
-    for (var pass = 0; pass < 2; pass++) {
+    for (var pass = 0; pass < 3; pass++) {
       gl.bindFramebuffer(gl.FRAMEBUFFER, bloomB.fbo);
       gl.viewport(0, 0, bloomB.w, bloomB.h);
       gl.bindTexture(gl.TEXTURE_2D, bloomA.tex);
@@ -1060,11 +1146,11 @@
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_2D, bloomA.tex);
     gl.uniform1i(progComposite.u.uBloom, 1);
-    gl.uniform1f(progComposite.u.uBloomAmount, 1.15);
+    gl.uniform1f(progComposite.u.uBloomAmount, 0.85);
     gl.uniform1f(progComposite.u.uTime, state.t);
     gl.uniform1f(progComposite.u.uGrain, 0.022);
     gl.uniform1f(progComposite.u.uFlash, state.flash * (state.dead ? 0.9 : 0.35));
-    gl.uniform1f(progComposite.u.uExposure, 1.28);
+    gl.uniform1f(progComposite.u.uExposure, 1.12);
     gl.drawArrays(gl.TRIANGLES, 0, 3); drawCalls++;
 
     gl.bindVertexArray(null);
@@ -1072,16 +1158,13 @@
 
   /* ---------------- adaptive resolution + loop ---------------- */
 
-  var frameEMA = 16.7, lastT = 0, acc = 0, frames = 0, scaleCooldown = 0;
+  var lastT = 0, acc = 0, frames = 0, scaleCooldown = 0;
 
   function tick(now) {
     requestAnimationFrame(tick);
     if (!lastT) { lastT = now; return; }
     var dt = Math.min((now - lastT) / 1000, 0.05);
     lastT = now;
-
-    frameEMA += ((now - (tick.prev || now)) - frameEMA) * 0.08;
-    tick.prev = now;
 
     update(dt);
     buildInstances();
@@ -1090,11 +1173,11 @@
     // Trade resolution for frame rate rather than dropping frames — and show
     // the trade in the HUD, so the cost of any effect is always visible.
     scaleCooldown -= dt;
-    if (scaleCooldown <= 0) {
-      if (frameEMA > 21 && renderScale > 0.62) {
-        renderScale = Math.max(0.62, renderScale - 0.1); applyScale(); scaleCooldown = 1.2;
-      } else if (frameEMA < 13.5 && renderScale < 1.0) {
-        renderScale = Math.min(1.0, renderScale + 0.1); applyScale(); scaleCooldown = 1.8;
+    if (scaleCooldown <= 0 && lastFps > 0) {
+      if (lastFps <= 48 && renderScale > 0.62) {
+        renderScale = Math.max(0.62, renderScale - 0.1); applyScale(); scaleCooldown = 1.4;
+      } else if (lastFps >= 57 && renderScale < 1.0) {
+        renderScale = Math.min(1.0, renderScale + 0.1); applyScale(); scaleCooldown = 1.4;
       }
     }
 
