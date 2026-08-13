@@ -70,6 +70,9 @@
     max-width: 760px; margin: 0 auto;
     min-height: 100%;
     min-height: 100dvh;      /* survives Safari's collapsing toolbars */
+    /* ...and this overrides it with the measured height, because dvh is itself
+       short by the safe-area strip once installed to the home screen. */
+    min-height: var(--vh, 100dvh);
     display: flex; flex-direction: column;
   }
 
@@ -302,26 +305,12 @@
   .pspec:active { background: var(--ov-active); color: var(--accent); }
   .player iframe { flex: 1; width: 100%; border: 0; background: var(--s-0); display: block; }
 
-  /* Fullscreen: a game can ask for the bar to go. Something has to stay
-     reachable or the only way out is killing the app, so a floating chevron
-     replaces it. */
+  /* Fullscreen: a game can ask for the bar to go, and nothing of the
+     launcher's replaces it — a floating chevron parked over the game's own HUD
+     is exactly what fullscreen was asked for to get rid of. The way out is the
+     game's settings sheet, which is where fullscreen was turned on and which
+     carries a Leave button of its own. */
   .player.fs .bar { display: none; }
-  /* Fullscreen still needs a way out, but it should not camp on top of the
-     game's own HUD. It fades back after a few seconds; while faded a tap
-     only brings it back, so the corner cannot be exited by accident. */
-  .fsback {
-    position: fixed; z-index: 55; display: none;
-    top: calc(var(--safe-t) + 4px); left: calc(var(--safe-l) + 4px);
-    width: 44px; height: 44px; appearance: none;
-    border: 1px solid var(--line-2); border-radius: var(--radius);
-    background: rgba(11,6,9,.55); color: var(--accent);
-    place-items: center; backdrop-filter: blur(8px);
-    transition: opacity 240ms var(--ease);
-  }
-  .player.fs ~ .fsback { display: grid; }
-  .fsback.dim { opacity: .10; border-color: transparent; background: transparent;
-                backdrop-filter: none; }
-  .fsback:active { background: var(--ov-active); }
 
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation: none !important; transition-duration: 1ms !important; }
@@ -422,11 +411,6 @@
     </div>
   </div>
 </div>
-
-<button class="fsback" id="fsback" aria-label="Back to Arcade">
-  <svg width="9" height="15" viewBox="0 0 12 20" fill="none" stroke="currentColor"
-       stroke-width="2" stroke-linecap="square" aria-hidden="true"><path d="M10 2 2 10l8 8"/></svg>
-</button>
 
 <script>
 (function () {
@@ -658,22 +642,8 @@
     }, 220);
   }
 
-  document.getElementById('back').addEventListener('click', function () {
-    if (location.hash) history.back(); else close();
-  });
-  var fsback = document.getElementById('fsback');
-  var fsTimer = null;
-  function wakeFsBack() {
-    fsback.classList.remove('dim');
-    clearTimeout(fsTimer);
-    fsTimer = setTimeout(function () { fsback.classList.add('dim'); }, 4000);
-  }
-  fsback.addEventListener('click', function () {
-    // Faded is a safety catch: the first tap only reveals it.
-    if (fsback.classList.contains('dim')) { wakeFsBack(); return; }
-    clearTimeout(fsTimer);
-    if (location.hash) history.back(); else close();
-  });
+  document.getElementById('back').addEventListener('click', function () { leave(); });
+  function leave() { if (location.hash) history.back(); else close(); }
 
   // Games ask for fullscreen by message; only the running game may ask, and
   // leaving one always clears it.
@@ -682,8 +652,10 @@
     if (!d || e.source !== frame.contentWindow) return;
     if (d.type === 'arcade:fullscreen') {
       player.classList.toggle('fs', !!d.on);
-      if (d.on) wakeFsBack(); else { clearTimeout(fsTimer); fsback.classList.remove('dim'); }
       fitPlayer();
+    } else if (d.type === 'arcade:exit') {
+      // Fullscreen leaves no launcher chrome at all, so the game asks for us.
+      leave();
     } else if (d.type === 'arcade:spec') {
       gameSpec = sanitizeSpec(d); gameSpecAt = Date.now();
     }
@@ -720,20 +692,36 @@
              b: parseFloat(cs.paddingBottom) || 0, l: parseFloat(cs.paddingLeft)  || 0 };
   }
 
+  function isStandalone() {
+    if (window.navigator.standalone === true) return true;
+    return !!(window.matchMedia &&
+              (matchMedia('(display-mode: standalone)').matches ||
+               matchMedia('(display-mode: fullscreen)').matches));
+  }
+
   function measure() {
     var vv = window.visualViewport, doc = document.documentElement;
-    return {
-      w: Math.max(doc.clientWidth || 0, window.innerWidth || 0,
-                  vv ? Math.round(vv.width + (vv.offsetLeft || 0)) : 0),
-      h: Math.max(doc.clientHeight || 0, window.innerHeight || 0,
-                  vv ? Math.round(vv.height + (vv.offsetTop || 0)) : 0)
-    };
+    var w = Math.max(doc.clientWidth || 0, window.innerWidth || 0,
+                     vv ? Math.round(vv.width + (vv.offsetLeft || 0)) : 0);
+    var h = Math.max(doc.clientHeight || 0, window.innerHeight || 0,
+                     vv ? Math.round(vv.height + (vv.offsetTop || 0)) : 0);
+    // Installed to the home screen there is no browser chrome that could
+    // explain a short viewport, so a report 59px under the screen is Safari
+    // being wrong rather than something owning those pixels — take the screen.
+    if (isStandalone() && screen.width && screen.height) {
+      var lng = Math.max(screen.width, screen.height);
+      var sht = Math.min(screen.width, screen.height);
+      if (h >= w) { h = Math.max(h, lng); w = Math.max(w, sht); }
+      else        { h = Math.max(h, sht); w = Math.max(w, lng); }
+    }
+    return { w: w, h: h };
   }
 
   function fitPlayer() {
     var m = measure();
     player.style.width  = m.w + 'px';
     player.style.height = m.h + 'px';
+    document.documentElement.style.setProperty('--vh', m.h + 'px');
   }
   fitPlayer();
   window.addEventListener('resize', fitPlayer);

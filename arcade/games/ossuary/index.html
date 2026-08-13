@@ -170,6 +170,7 @@
   .mini.spaced { margin-top: 14px; }
 
   button.go.wide { display: block; width: 100%; margin-top: 18px; }
+  button.go.ghost { background: transparent; color: var(--accent); border-color: var(--line-2); }
   .diag.off, .gear.off { display: none; }
 
   @media (prefers-reduced-motion: reduce) {
@@ -228,7 +229,7 @@
     <div class="opt" id="rowFs">
       <div>
         <div class="optk">Fullscreen</div>
-        <div class="optd">Hide the Arcade bar. A floating chevron takes you back.</div>
+        <div class="optd">Hide the Arcade bar entirely. Leave, below, still gets you out.</div>
       </div>
       <button class="sw" id="swFs" role="switch" aria-checked="false"><span></span></button>
     </div>
@@ -282,6 +283,7 @@
     </div>
 
     <button class="go wide" id="closeSettings">Resume</button>
+    <button class="go ghost wide" id="leaveGame" style="margin-top:8px">Leave to Arcade</button>
   </div>
 </div>
 
@@ -843,6 +845,21 @@
 
   // visualViewport is the only height iOS reports honestly across Safari,
   // standalone and inside an iframe.
+  // The game owns the whole screen only when nothing is above it: opened
+  // directly, or framed with the launcher bar hidden.
+  function fsCovering() {
+    return !framed || (typeof settings === 'object' && settings && settings.fullscreen);
+  }
+
+  function standaloneApp() {
+    var w = window.top || window;
+    try { if (w.navigator.standalone === true) return true; } catch (e) {}
+    if (window.navigator.standalone === true) return true;
+    return !!(window.matchMedia &&
+              (matchMedia('(display-mode: standalone)').matches ||
+               matchMedia('(display-mode: fullscreen)').matches));
+  }
+
   function fitStage() {
     var vv = window.visualViewport;
     var doc = document.documentElement;
@@ -854,6 +871,15 @@
                      vv ? Math.round(vv.width + (vv.offsetLeft || 0)) : 0);
     var h = Math.max(doc.clientHeight || 0, window.innerHeight || 0,
                      vv ? Math.round(vv.height + (vv.offsetTop || 0)) : 0);
+    // Installed to the home screen and running fullscreen there is no browser
+    // chrome that could explain a short viewport, so a report under the screen
+    // is Safari being wrong rather than something owning those pixels.
+    if (fsCovering() && standaloneApp() && screen.width && screen.height) {
+      var lng = Math.max(screen.width, screen.height);
+      var sht = Math.min(screen.width, screen.height);
+      if (h >= w) { h = Math.max(h, lng); w = Math.max(w, sht); }
+      else        { h = Math.max(h, sht); w = Math.max(w, lng); }
+    }
     stageEl.style.width = w + 'px';
     stageEl.style.height = h + 'px';
   }
@@ -1642,6 +1668,13 @@
     sheet.classList.add('hide');
     state.paused = false;
   }
+  // Tapping the scrim dismisses it; the card itself must not.
+  sheet.addEventListener('click', function (e) { if (e.target === sheet) closeSettings(); });
+  document.getElementById('leaveGame').addEventListener('click', function () {
+    closeSettings();
+    if (framed) { try { window.parent.postMessage({ type: 'arcade:exit' }, '*'); } catch (e) {} }
+    else if (history.length > 1) history.back();
+  });
 
   swFs.addEventListener('click', function () {
     settings.fullscreen = !settings.fullscreen; applySettings();

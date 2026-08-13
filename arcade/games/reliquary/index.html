@@ -329,7 +329,7 @@
 
     <div class="opt" id="rowFs">
       <div><div class="optk">Fullscreen</div>
-      <div class="optd">Hide the Arcade bar. A floating chevron takes you back.</div></div>
+      <div class="optd">Hide the Arcade bar entirely. Leave, below, still gets you out.</div></div>
       <button class="sw" id="swFs" role="switch" aria-checked="false"><span></span></button>
     </div>
 
@@ -372,6 +372,7 @@
     </div>
 
     <button class="go wide" id="closeSettings">Resume</button>
+    <button class="go ghost wide" id="leaveGame" style="margin-top:8px">Leave to Arcade</button>
   </div>
 </div>
 
@@ -901,6 +902,21 @@
 
   // visualViewport is the only number iOS reports honestly across Safari,
   // standalone and an iframe; innerHeight is the fallback for the rest.
+  // The game owns the whole screen only when nothing is above it: opened
+  // directly, or framed with the launcher bar hidden.
+  function fsCovering() {
+    return !framed || (typeof settings === 'object' && settings && settings.fullscreen);
+  }
+
+  function standaloneApp() {
+    var w = window.top || window;
+    try { if (w.navigator.standalone === true) return true; } catch (e) {}
+    if (window.navigator.standalone === true) return true;
+    return !!(window.matchMedia &&
+              (matchMedia('(display-mode: standalone)').matches ||
+               matchMedia('(display-mode: fullscreen)').matches));
+  }
+
   function fitStage() {
     var vv = window.visualViewport;
     var doc = document.documentElement;
@@ -912,6 +928,15 @@
                      vv ? Math.round(vv.width + (vv.offsetLeft || 0)) : 0);
     var h = Math.max(doc.clientHeight || 0, window.innerHeight || 0,
                      vv ? Math.round(vv.height + (vv.offsetTop || 0)) : 0);
+    // Installed to the home screen and running fullscreen there is no browser
+    // chrome that could explain a short viewport, so a report under the screen
+    // is Safari being wrong rather than something owning those pixels.
+    if (fsCovering() && standaloneApp() && screen.width && screen.height) {
+      var lng = Math.max(screen.width, screen.height);
+      var sht = Math.min(screen.width, screen.height);
+      if (h >= w) { h = Math.max(h, lng); w = Math.max(w, sht); }
+      else        { h = Math.max(h, sht); w = Math.max(w, lng); }
+    }
     stageEl.style.width = w + 'px';
     stageEl.style.height = h + 'px';
   }
@@ -2292,10 +2317,14 @@
       elDraws.textContent = drawCalls;
       elTris.textContent = triCount >= 1000 ? (triCount/1000).toFixed(1) + 'k' : triCount;
       elView.textContent = Math.round(cssW) + '×' + Math.round(cssH);
-      // How much of the physical screen the stage is not covering. Should
-      // read 0; anything else is Safari handing us a short viewport.
-      var screenH = Math.max(screen.width || 0, screen.height || 0);
-      elGap.textContent = screenH ? Math.round(screenH - cssH) + 'px' : '—';
+      // How much of the physical screen the stage is not covering. Should read
+      // 0; anything else is Safari handing us a short viewport. The screen's
+      // long side is the height in portrait and the width in landscape —
+      // comparing against the wrong axis was reporting a 502px phantom gap.
+      var lng = Math.max(screen.width || 0, screen.height || 0);
+      var sht = Math.min(screen.width || 0, screen.height || 0);
+      var wantH = cssH >= cssW ? lng : sht;
+      elGap.textContent = lng ? Math.round(Math.max(0, wantH - cssH)) + 'px' : '—';
       var vv = window.visualViewport;
       elHts.textContent = (document.documentElement.clientHeight || 0) + '/' +
         (window.innerHeight || 0) + '/' + (vv ? Math.round(vv.height) : 0);
@@ -2336,6 +2365,13 @@
   }
   function openSettings() { state.paused = true; sheet.classList.remove('hide'); applySettings(); }
   function closeSettings() { sheet.classList.add('hide'); state.paused = false; }
+  // Tapping the scrim dismisses it; the card itself must not.
+  sheet.addEventListener('click', function (e) { if (e.target === sheet) closeSettings(); });
+  document.getElementById('leaveGame').addEventListener('click', function () {
+    closeSettings();
+    if (framed) { try { window.parent.postMessage({ type: 'arcade:exit' }, '*'); } catch (e) {} }
+    else if (history.length > 1) history.back();
+  });
 
   var viewBtn = document.getElementById('view3');
   var viewLbl = document.getElementById('viewLbl');
