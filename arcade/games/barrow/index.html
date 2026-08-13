@@ -119,15 +119,18 @@
   /* The touch zone is large and invisible; the stick is drawn wherever the
      thumb lands. That is what makes a faded — or fully invisible — stick still
      usable: you are never aiming at a thing, you are just touching a corner. */
+  /* Sits *under* the action buttons: a positioned zone with a z-index above
+     them swallows every tap meant for Strike or Guard. */
   .zone {
-    position: absolute; bottom: 0; height: 46%; pointer-events: auto;
-    touch-action: none; z-index: 1;
+    position: absolute; bottom: 0; height: 44%; pointer-events: auto;
+    touch-action: none; z-index: 0;
   }
   .zone.left  { left: 0; right: 50%; }
   .zone.right { left: 50%; right: 0; }
 
   .stick {
     position: absolute; width: 120px; height: 120px; margin: -60px 0 0 -60px;
+    z-index: 1;
     border: 1px solid var(--line-1); background: rgba(233,216,197,.03);
     pointer-events: none;
     opacity: var(--stick-a, .55);
@@ -169,7 +172,7 @@
   /* Attack and block sit above the right pad, under the thumb in both
      orientations (DESIGN.md: controls reposition, they do not just shrink). */
   .act {
-    position: absolute; pointer-events: auto; appearance: none;
+    position: absolute; pointer-events: auto; appearance: none; z-index: 2;
     border: 1px solid var(--line-2); border-radius: var(--radius);
     background: rgba(11,6,9,.6); color: var(--t-1);
     font: 500 9px/1 var(--font-ui); letter-spacing: .16em; text-transform: uppercase;
@@ -1390,8 +1393,8 @@
     function home() {
       var r = stageEl.getBoundingClientRect();
       var ins = insetsNow();
-      var y = r.height - ins.b - 74;
-      var x = homeSide === 'left' ? ins.l + 78 : r.width - ins.r - 78;
+      var y = r.height - ins.b - 76;
+      var x = homeSide === 'left' ? ins.l + 80 : r.width - ins.r - 80;
       originX = x; originY = y;
       place(x, y);
     }
@@ -1403,13 +1406,14 @@
       var dx = (cx - r.left) - originX, dy = (cy - r.top) - originY;
       var d = Math.hypot(dx, dy);
       if (d > STICK_R) { dx = dx/d*STICK_R; dy = dy/d*STICK_R; }
-      setKnob(dx, dy);
       pad.x = dx/STICK_R; pad.y = dy/STICK_R;
+      setKnob(pad.x*KNOB_MAX, pad.y*KNOB_MAX);
     }
     function grab(cx, cy, id) {
       var r = stageEl.getBoundingClientRect();
+      // The origin is where the thumb landed, so there is no jump; the stick
+      // itself never leaves its corner, so you always know where it is.
       originX = cx - r.left; originY = cy - r.top;
-      place(originX, originY);
       pad.id = id; stickEl.classList.add('active');
       setKnob(0, 0); pad.x = 0; pad.y = 0;
     }
@@ -1418,6 +1422,9 @@
       stickEl.classList.remove('active');
       home();
     }
+    // The knob can travel a little past the ring, so a wide drag still reads
+    // as full deflection without the stick appearing to break out of itself.
+    var KNOB_MAX = STICK_R * 0.62;
     zone.addEventListener('touchstart', function (e) {
       if (pad.id !== null) return;
       e.preventDefault();
@@ -1949,15 +1956,15 @@
     var em = d.hit*0.35;
     // Base, post, body, crossbar arms, sacking head.
     boxes.push(d.x, 0.10, d.z, 1.10, 0.20, 1.10, 0, STONE_D, 0, 0.85, 0.0, 61);
-    bones.pushSeg(d.x, 0.18, d.z, d.x + lx*0.95, 1.10, d.z + lz*0.95, 0.13, LEATHER, 0, 0.9, 0.0, 62, 3);
-    bones.pushSeg(d.x + lx*0.90, 1.00, d.z + lz*0.90, d.x + lx*1.42, 1.48, d.z + lz*1.42,
-                  0.52, col, em, 0.92, 0.0, 63, 3, 0.82, 0);
+    bones.pushSeg(d.x, 0.18, d.z, d.x + lx*0.90, 1.00, d.z + lz*0.90, 0.12, LEATHER, 0, 0.9, 0.0, 62, 3);
+    bones.pushSeg(d.x + lx*0.82, 0.80, d.z + lz*0.82, d.x + lx*1.46, 1.52, d.z + lz*1.46,
+                  0.42, col, em, 0.92, 0.0, 63, 3, 0.80, 0);
     var ax = Math.cos(d.yaw + d.twist), az = -Math.sin(d.yaw + d.twist);
     bones.pushSeg(d.x + lx*1.28 - ax*0.46, 1.34, d.z + lz*1.28 - az*0.46,
                   d.x + lx*1.28 + ax*0.46, 1.34, d.z + lz*1.28 + az*0.46,
                   0.14, LEATHER, em, 0.9, 0.0, 64, 3, 1.0);
-    bones.pushSeg(d.x + lx*1.52, 1.56, d.z + lz*1.52, d.x + lx*1.62, 1.72, d.z + lz*1.62,
-                  0.34, col, em, 0.95, 0.0, 65, 3, 0.95, 0);
+    bones.pushSeg(d.x + lx*1.54, 1.58, d.z + lz*1.54, d.x + lx*1.64, 1.74, d.z + lz*1.64,
+                  0.30, col, em, 0.95, 0.0, 65, 3, 0.92, 0);
     // A painted mark, so there is something to aim at.
     boxes.pushSeg(d.x + lx*1.30 + ax*0.16, 1.30, d.z + lz*1.30 + az*0.16,
                   d.x + lx*1.30 - ax*0.16, 1.30, d.z + lz*1.30 - az*0.16,
@@ -1974,10 +1981,14 @@
     world.walls.push({ x: 0, z:  R, hw: R + 0.5, hd: 0.5, seed: 9 });
     world.walls.push({ x: -R, z: 0, hw: 0.5, hd: R + 0.5, seed: 14 });
     world.walls.push({ x:  R, z: 0, hw: 0.5, hd: R + 0.5, seed: 21 });
-    for (var i = 0; i < 4; i++) {
-      var a = i*Math.PI/2 + Math.PI/4;
-      world.torches.push({ x: Math.sin(a)*(R-0.7), y: 2.05, z: Math.cos(a)*(R-0.7),
-                           ph: rand(0,6.28), nx: 0, nz: 0 });
+    var face = R - 0.5 - 0.16;      // inner wall face, plus the bracket depth
+    // Offset from the centre line, or a torch sits directly behind the dummy
+    // and lights it from the wrong side. n points from the wall into the room.
+    var spots = [[-3.2, -face, 0,  1], [ 3.2, -face, 0,  1],
+                 [-3.2,  face, 0, -1], [ 3.2,  face, 0, -1]];
+    for (var i = 0; i < spots.length; i++) {
+      world.torches.push({ x: spots[i][0], y: 2.05, z: spots[i][1],
+                           ph: rand(0,6.28), nx: spots[i][2], nz: spots[i][3] });
     }
     world.props.push({ x: -3.4, z: 3.6, rot: 0, seed: 12 });
   }
@@ -2362,7 +2373,12 @@
     for (var t = 0; t < world.torches.length; t++) {
       var tc = world.torches[t];
       if (Math.abs(tc.x - state.x) > 22 || Math.abs(tc.z - state.z) > 22) continue;
-      boxes.push(tc.x, tc.y - 0.28, tc.z, 0.10, 0.46, 0.10, 0, IRON_D, 0, 0.7, 0.5, t);
+      // Bracket: an arm back into the wall and a stub holding the head, so the
+      // flame is mounted on something rather than hanging in the air.
+      var bx = tc.nx || 0, bz = tc.nz || 0;
+      boxes.pushSeg(tc.x - bx*0.30, tc.y - 0.30, tc.z - bz*0.30,
+                    tc.x, tc.y - 0.16, tc.z, 0.055, IRON_D, 0, 0.6, 0.55, t, 0, 1, 1);
+      boxes.push(tc.x, tc.y - 0.20, tc.z, 0.10, 0.34, 0.10, 0, IRON_D, 0, 0.7, 0.5, t + 1);
       drawFlame(tc.x, tc.y, tc.z, state.t*6.1 + tc.ph, 1.0);
     }
 
