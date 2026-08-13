@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Arcade</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Arcade">
+<meta name="theme-color" content="#0b0b12">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<style>
+  :root {
+    --bg: #0b0b12;
+    --card: #16161f;
+    --card-hi: #1e1e2b;
+    --line: #272733;
+    --text: #f2f2f7;
+    --dim: #8e8e99;
+    --accent: #7c5cff;
+    --accent-2: #ff5c9d;
+    --safe-t: env(safe-area-inset-top, 0px);
+    --safe-b: env(safe-area-inset-bottom, 0px);
+    --safe-l: env(safe-area-inset-left, 0px);
+    --safe-r: env(safe-area-inset-right, 0px);
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: var(--bg); color: var(--text);
+    font: 400 17px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    overscroll-behavior-y: none;
+  }
+  body { overflow-x: hidden; }
+
+  /* ---------- shell ---------- */
+  .wrap {
+    padding: calc(var(--safe-t) + 14px) calc(var(--safe-r) + 16px)
+             calc(var(--safe-b) + 40px) calc(var(--safe-l) + 16px);
+    max-width: 760px; margin: 0 auto;
+  }
+  header { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
+  h1 {
+    font: 700 34px/1.1 -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
+    letter-spacing: -0.02em; margin: 0;
+    background: linear-gradient(100deg, var(--accent), var(--accent-2));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .sub { color: var(--dim); font-size: 13px; margin-top: 4px; letter-spacing: .01em; }
+  .refresh {
+    appearance: none; border: 1px solid var(--line); background: var(--card);
+    color: var(--text); width: 40px; height: 40px; border-radius: 20px;
+    font-size: 17px; display: grid; place-items: center; flex: none;
+    transition: transform .15s ease, background .15s ease;
+  }
+  .refresh:active { transform: scale(.92); background: var(--card-hi); }
+  .refresh.spin svg { animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ---------- grid ---------- */
+  .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  @media (min-width: 560px) { .grid { grid-template-columns: repeat(3, 1fr); } }
+
+  .card {
+    position: relative; display: block; text-align: left;
+    appearance: none; border: 1px solid var(--line); border-radius: 20px;
+    background: linear-gradient(160deg, var(--card-hi), var(--card));
+    color: inherit; padding: 16px 14px 14px; overflow: hidden;
+    transition: transform .18s cubic-bezier(.2,.9,.3,1.2), border-color .18s ease;
+    min-height: 138px;
+  }
+  .card:active { transform: scale(.955); border-color: var(--accent); }
+  .card .glow {
+    position: absolute; inset: -40% -30% auto auto; width: 130px; height: 130px;
+    border-radius: 50%; filter: blur(28px); opacity: .5; pointer-events: none;
+  }
+  .card .emoji { font-size: 34px; line-height: 1; display: block; margin-bottom: 10px; }
+  .card .name { font-weight: 600; font-size: 16px; letter-spacing: -.01em; }
+  .card .desc { color: var(--dim); font-size: 12.5px; margin-top: 3px; line-height: 1.35;
+                display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+  /* ---------- states ---------- */
+  .state { text-align: center; color: var(--dim); padding: 56px 20px; font-size: 14.5px; line-height: 1.6; }
+  .state code { background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 2px 6px; font-size: 12.5px; }
+  .skel { min-height: 138px; border-radius: 20px; border: 1px solid var(--line);
+          background: linear-gradient(100deg, var(--card) 30%, var(--card-hi) 50%, var(--card) 70%);
+          background-size: 300% 100%; animation: shimmer 1.3s ease-in-out infinite; }
+  @keyframes shimmer { to { background-position: -150% 0; } }
+
+  .foot { margin-top: 26px; color: #55555f; font-size: 11.5px; text-align: center; line-height: 1.7; }
+  .foot b { color: var(--dim); font-weight: 500; }
+
+  /* ---------- player ---------- */
+  .player {
+    position: fixed; inset: 0; background: #000; z-index: 50;
+    display: flex; flex-direction: column;
+    transform: translateY(100%); transition: transform .32s cubic-bezier(.32,.72,0,1);
+    visibility: hidden;
+  }
+  .player.open { transform: translateY(0); visibility: visible; }
+  .player .bar {
+    flex: none; display: flex; align-items: center; gap: 10px;
+    padding: calc(var(--safe-t) + 8px) calc(var(--safe-r) + 12px) 8px calc(var(--safe-l) + 8px);
+    background: rgba(11,11,18,.82); backdrop-filter: blur(20px) saturate(180%);
+    border-bottom: 1px solid var(--line);
+  }
+  .back {
+    appearance: none; border: 0; background: transparent; color: var(--accent);
+    font-size: 16px; font-weight: 500; display: flex; align-items: center; gap: 3px;
+    padding: 8px 10px 8px 6px; border-radius: 10px;
+  }
+  .back:active { opacity: .5; }
+  .player .title { font-size: 15px; font-weight: 600; flex: 1; text-align: center;
+                   margin-right: 66px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .player iframe { flex: 1; width: 100%; border: 0; background: #000; display: block; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Arcade</h1>
+      <div class="sub" id="sub">Loading…</div>
+    </div>
+    <button class="refresh" id="refresh" aria-label="Refresh game list">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+        <path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/>
+      </svg>
+    </button>
+  </header>
+
+  <div class="grid" id="grid">
+    <div class="skel"></div><div class="skel"></div><div class="skel"></div><div class="skel"></div>
+  </div>
+
+  <div class="foot">
+    <b>Add a game:</b> drop a folder into <code>arcade/games/</code> with an
+    <code>index.html</code>, push, then pull-to-refresh here.
+  </div>
+</div>
+
+<div class="player" id="player">
+  <div class="bar">
+    <button class="back" id="back">
+      <svg width="11" height="18" viewBox="0 0 12 20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2 2 10l8 8"/></svg>
+      Arcade
+    </button>
+    <div class="title" id="ptitle"></div>
+  </div>
+  <iframe id="frame" allow="autoplay; fullscreen; gamepad; accelerometer; gyroscope"
+          referrerpolicy="no-referrer" title="Game"></iframe>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  // Where the games live. Discovery hits the GitHub API so that dropping a new
+  // folder into arcade/games/ is all it takes — no index file to hand-edit.
+  var REPO   = 'mioutic/games';
+  var DIR    = 'arcade/games';
+  var REFS   = ['claude/iphone-game-browser-5qg6ng', 'main'];   // tried in order
+  var TTL    = 5 * 60 * 1000;
+  var CKEY   = 'arcade.cache.v1';
+
+  var PALETTE = ['#7c5cff', '#ff5c9d', '#3ecf8e', '#ffb020', '#4aa8ff', '#ff6b5c', '#c05cff', '#2fd8c6'];
+
+  var grid   = document.getElementById('grid');
+  var sub    = document.getElementById('sub');
+  var player = document.getElementById('player');
+  var frame  = document.getElementById('frame');
+  var ptitle = document.getElementById('ptitle');
+
+  /* ---------------- discovery ---------------- */
+
+  function listFolders() {
+    var i = 0;
+    function attempt() {
+      if (i >= REFS.length) return Promise.reject(new Error('no ref matched'));
+      var ref = REFS[i++];
+      var url = 'https://api.github.com/repos/' + REPO + '/contents/' + DIR + '?ref=' + encodeURIComponent(ref);
+      return fetch(url, { headers: { Accept: 'application/vnd.github+json' } })
+        .then(function (r) { return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)); })
+        .then(function (items) {
+          var dirs = (items || []).filter(function (it) { return it.type === 'dir'; })
+                                  .map(function (it) { return it.name; });
+          return dirs.length ? dirs : attempt();
+        })
+        .catch(attempt);
+    }
+    return attempt();
+  }
+
+  // Metadata comes from the site itself (same origin, no rate limit). A game.json
+  // is optional — without one we derive a decent title from the folder name.
+  function describe(slug) {
+    return fetch('games/' + slug + '/game.json', { cache: 'no-cache' })
+      .then(function (r) { return r.ok ? r.json() : {}; })
+      .catch(function () { return {}; })
+      .then(function (meta) {
+        return {
+          slug:  slug,
+          name:  meta.name || titleize(slug),
+          desc:  meta.description || '',
+          emoji: meta.emoji || '🎮',
+          color: meta.color || PALETTE[hash(slug) % PALETTE.length],
+          entry: meta.entry || 'index.html'
+        };
+      });
+  }
+
+  function titleize(s) {
+    return s.replace(/[-_]+/g, ' ').replace(/\b\w/g, function (c) { return c.toUpperCase(); });
+  }
+  function hash(s) {
+    var h = 0;
+    for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+    return h;
+  }
+
+  /* ---------------- render ---------------- */
+
+  function render(games) {
+    grid.innerHTML = '';
+    if (!games.length) {
+      sub.textContent = 'No games yet';
+      var s = document.createElement('div');
+      s.className = 'state';
+      s.style.gridColumn = '1 / -1';
+      s.innerHTML = 'Nothing here yet.<br>Drop a folder with an <code>index.html</code> into <code>arcade/games/</code>.';
+      grid.appendChild(s);
+      return;
+    }
+    sub.textContent = games.length + (games.length === 1 ? ' game' : ' games') + ' · tap to play';
+
+    games.forEach(function (g) {
+      var b = document.createElement('button');
+      b.className = 'card';
+
+      var glow = document.createElement('div');
+      glow.className = 'glow';
+      glow.style.background = g.color;
+
+      var em = document.createElement('span');
+      em.className = 'emoji';
+      em.textContent = g.emoji;
+
+      var nm = document.createElement('div');
+      nm.className = 'name';
+      nm.textContent = g.name;
+
+      b.appendChild(glow);
+      b.appendChild(em);
+      b.appendChild(nm);
+
+      if (g.desc) {
+        var d = document.createElement('div');
+        d.className = 'desc';
+        d.textContent = g.desc;
+        b.appendChild(d);
+      }
+
+      b.addEventListener('click', function () { open(g); });
+      grid.appendChild(b);
+    });
+  }
+
+  function showError(msg) {
+    sub.textContent = 'Offline';
+    grid.innerHTML = '';
+    var s = document.createElement('div');
+    s.className = 'state';
+    s.style.gridColumn = '1 / -1';
+    s.textContent = msg;
+    grid.appendChild(s);
+  }
+
+  /* ---------------- player ---------------- */
+
+  function open(g) {
+    ptitle.textContent = g.name;
+    frame.src = 'games/' + g.slug + '/' + g.entry;
+    player.classList.add('open');
+    document.body.style.overflow = 'hidden';
+    if (history.pushState) history.pushState({ game: g.slug }, '', '#' + g.slug);
+  }
+
+  function close() {
+    player.classList.remove('open');
+    document.body.style.overflow = '';
+    setTimeout(function () { if (!player.classList.contains('open')) frame.src = 'about:blank'; }, 340);
+  }
+
+  document.getElementById('back').addEventListener('click', function () {
+    if (location.hash) history.back(); else close();
+  });
+  window.addEventListener('popstate', close);
+
+  /* ---------------- load ---------------- */
+
+  function load(force) {
+    var cached = null;
+    try { cached = JSON.parse(localStorage.getItem(CKEY) || 'null'); } catch (e) {}
+
+    if (cached && cached.games && !force && Date.now() - cached.at < TTL) {
+      render(cached.games);
+      return Promise.resolve();
+    }
+    if (cached && cached.games && cached.games.length) render(cached.games);  // instant paint, refresh behind
+
+    return listFolders()
+      .then(function (slugs) { return Promise.all(slugs.sort().map(describe)); })
+      .then(function (games) {
+        try { localStorage.setItem(CKEY, JSON.stringify({ at: Date.now(), games: games })); } catch (e) {}
+        render(games);
+      })
+      .catch(function (err) {
+        if (cached && cached.games && cached.games.length) {
+          sub.textContent = cached.games.length + ' games · cached';
+        } else {
+          showError('Could not reach GitHub to list games. Check your connection and pull down to refresh.');
+        }
+      });
+  }
+
+  var btn = document.getElementById('refresh');
+  btn.addEventListener('click', function () {
+    btn.classList.add('spin');
+    load(true).then(function () { btn.classList.remove('spin'); });
+  });
+
+  // Pull-to-refresh, for when the list is already at the top.
+  var startY = 0, pulling = false;
+  window.addEventListener('touchstart', function (e) {
+    if (window.scrollY <= 0 && !player.classList.contains('open')) {
+      startY = e.touches[0].clientY; pulling = true;
+    }
+  }, { passive: true });
+  window.addEventListener('touchend', function (e) {
+    if (pulling && e.changedTouches[0].clientY - startY > 90) btn.click();
+    pulling = false;
+  }, { passive: true });
+
+  load(false);
+})();
+</script>
+</body>
+</html>
