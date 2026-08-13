@@ -1,7 +1,7 @@
 {
   "name": "Reliquary",
   "glyph": "chalice",
-  "description": "Free roam a pillared hall. Twin pads, mirrored floor.",
+  "description": "Free roam, weather, and things in the dark that want a turn.",
   "ink": "#a884c9",
   "stat": { "key": "reliquary.best", "label": "Fastest", "format": "sec" }
 }

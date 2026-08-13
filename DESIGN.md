@@ -84,6 +84,34 @@ separate knobs.** Conflating them is what produced all three bugs — an object
 was made brighter to make it self-lit, or dimmer to stop it blowing out. Carry
 an explicit material flag instead.
 
+## Rotation, and panels that outgrow the screen
+
+The phone turns. Landscape on an iPhone leaves roughly 390px of height, and a
+settings sheet laid out for portrait will silently push its buttons off the
+bottom where they cannot be reached at all.
+
+Every overlay, sheet and dialog therefore caps its height and scrolls:
+
+```css
+.sheet .card { max-height: 100%; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.overlay { padding: calc(var(--safe-t) + 16px) 16px calc(var(--safe-b) + 16px); }
+```
+
+The rules that follow from it:
+
+- **Never trust the viewport to be tall.** A panel is finished only when it
+  still works at 380px of height with the keyboard up.
+- **Safe-area insets are four values, not one.** Landscape moves the notch to
+  a side, so `--safe-l` and `--safe-r` matter as much as `--safe-t`.
+- **On-screen controls reposition, they do not just shrink.** Thumbs reach the
+  bottom corners in both orientations; a control anchored to the portrait
+  layout ends up under the palm in landscape.
+- **Readouts drop before they wrap.** A HUD rail that fits portrait will
+  overflow landscape — hide the least important cell at a breakpoint rather
+  than letting the panel reflow into two lines.
+- A game may lock itself to portrait in the manifest, but the launcher chrome
+  and every settings sheet still have to survive being turned.
+
 ## Typography
 
 Display face is a serif — `Georgia, "Times New Roman", serif` — against a normal

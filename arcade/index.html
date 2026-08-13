@@ -218,6 +218,21 @@
   }
   .player iframe { flex: 1; width: 100%; border: 0; background: var(--s-0); display: block; }
 
+  /* Fullscreen: a game can ask for the bar to go. Something has to stay
+     reachable or the only way out is killing the app, so a floating chevron
+     replaces it. */
+  .player.fs .bar { display: none; }
+  .fsback {
+    position: fixed; z-index: 55; display: none;
+    top: calc(var(--safe-t) + 8px); left: calc(var(--safe-l) + 8px);
+    width: 38px; height: 38px; appearance: none;
+    border: 1px solid var(--line-2); border-radius: var(--radius);
+    background: rgba(11,6,9,.55); color: var(--accent);
+    place-items: center; backdrop-filter: blur(8px);
+  }
+  .player.fs ~ .fsback { display: grid; }
+  .fsback:active { background: var(--ov-active); }
+
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation: none !important; transition-duration: 1ms !important; }
   }
@@ -276,6 +291,11 @@
   <iframe id="frame" allow="autoplay; fullscreen; gamepad; accelerometer; gyroscope"
           referrerpolicy="no-referrer" title="Game"></iframe>
 </div>
+
+<button class="fsback" id="fsback" aria-label="Back to Arcade">
+  <svg width="9" height="15" viewBox="0 0 12 20" fill="none" stroke="currentColor"
+       stroke-width="2" stroke-linecap="square" aria-hidden="true"><path d="M10 2 2 10l8 8"/></svg>
+</button>
 
 <div class="version" id="version" hidden></div>
 
@@ -497,6 +517,7 @@
 
   function close() {
     player.classList.remove('open');
+    player.classList.remove('fs');
     document.body.style.overflow = '';
     setTimeout(function () {
       if (player.classList.contains('open')) return;
@@ -510,6 +531,18 @@
 
   document.getElementById('back').addEventListener('click', function () {
     if (location.hash) history.back(); else close();
+  });
+  document.getElementById('fsback').addEventListener('click', function () {
+    if (location.hash) history.back(); else close();
+  });
+
+  // Games ask for fullscreen by message; only the running game may ask, and
+  // leaving one always clears it.
+  window.addEventListener('message', function (e) {
+    var d = e.data;
+    if (!d || d.type !== 'arcade:fullscreen') return;
+    if (e.source !== frame.contentWindow) return;
+    player.classList.toggle('fs', !!d.on);
   });
   window.addEventListener('popstate', close);
 

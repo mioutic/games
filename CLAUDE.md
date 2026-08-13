@@ -23,6 +23,9 @@ The four rules that get broken most often, restated so they are hard to miss:
    No 20px pill geometry, no bouncy easing — motion is 120–200ms and mechanical.
 4. **Serif for display, sans for body, mono for numerals.** The serif is the
    gothic read; keep it to headers, the wordmark and section titles.
+5. **The phone rotates.** Landscape leaves ~390px of height, so every sheet
+   caps its height and scrolls, and on-screen controls reposition rather than
+   just shrink. A panel that only works in portrait is a broken panel.
 
 ## Repo map
 
