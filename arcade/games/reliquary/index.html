@@ -1878,7 +1878,8 @@
   swFs.addEventListener('click', function () {
     settings.fullscreen = !settings.fullscreen;
     applySettings();
-    setTimeout(resize, 140);
+    // The frame is still animating to its new height for a moment.
+    setTimeout(resize, 60); setTimeout(resize, 240); setTimeout(resize, 600);
   });
   swReflect.addEventListener('click', function () { settings.reflect = !settings.reflect; applySettings(); });
   swShafts.addEventListener('click', function () { settings.shafts = !settings.shafts; applySettings(); });

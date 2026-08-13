@@ -241,15 +241,21 @@
      reachable or the only way out is killing the app, so a floating chevron
      replaces it. */
   .player.fs .bar { display: none; }
+  /* Fullscreen still needs a way out, but it should not camp on top of the
+     game's own HUD. It fades back after a few seconds; while faded a tap
+     only brings it back, so the corner cannot be exited by accident. */
   .fsback {
     position: fixed; z-index: 55; display: none;
-    top: calc(var(--safe-t) + 8px); left: calc(var(--safe-l) + 8px);
-    width: 38px; height: 38px; appearance: none;
+    top: calc(var(--safe-t) + 4px); left: calc(var(--safe-l) + 4px);
+    width: 44px; height: 44px; appearance: none;
     border: 1px solid var(--line-2); border-radius: var(--radius);
     background: rgba(11,6,9,.55); color: var(--accent);
     place-items: center; backdrop-filter: blur(8px);
+    transition: opacity 240ms var(--ease);
   }
   .player.fs ~ .fsback { display: grid; }
+  .fsback.dim { opacity: .10; border-color: transparent; background: transparent;
+                backdrop-filter: none; }
   .fsback:active { background: var(--ov-active); }
 
   @media (prefers-reduced-motion: reduce) {
@@ -552,7 +558,17 @@
   document.getElementById('back').addEventListener('click', function () {
     if (location.hash) history.back(); else close();
   });
-  document.getElementById('fsback').addEventListener('click', function () {
+  var fsback = document.getElementById('fsback');
+  var fsTimer = null;
+  function wakeFsBack() {
+    fsback.classList.remove('dim');
+    clearTimeout(fsTimer);
+    fsTimer = setTimeout(function () { fsback.classList.add('dim'); }, 4000);
+  }
+  fsback.addEventListener('click', function () {
+    // Faded is a safety catch: the first tap only reveals it.
+    if (fsback.classList.contains('dim')) { wakeFsBack(); return; }
+    clearTimeout(fsTimer);
     if (location.hash) history.back(); else close();
   });
 
@@ -563,6 +579,7 @@
     if (!d || d.type !== 'arcade:fullscreen') return;
     if (e.source !== frame.contentWindow) return;
     player.classList.toggle('fs', !!d.on);
+    if (d.on) wakeFsBack(); else { clearTimeout(fsTimer); fsback.classList.remove('dim'); }
   });
   window.addEventListener('popstate', close);
 

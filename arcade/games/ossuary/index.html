@@ -1607,7 +1607,8 @@
   }
 
   swFs.addEventListener('click', function () {
-    settings.fullscreen = !settings.fullscreen; applySettings(); setTimeout(resize, 140);
+    settings.fullscreen = !settings.fullscreen; applySettings();
+    setTimeout(resize, 60); setTimeout(resize, 240); setTimeout(resize, 600);
   });
 
   gearBtn.addEventListener('click', openSettings);
