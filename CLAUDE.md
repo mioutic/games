@@ -27,6 +27,16 @@ The four rules that get broken most often, restated so they are hard to miss:
    caps its height and scrolls, and on-screen controls reposition rather than
    just shrink. A panel that only works in portrait is a broken panel.
 
+## Platform — read this before writing a renderer or a layout
+
+[`PLATFORM.md`](./PLATFORM.md) is imported below. It holds the measured device
+numbers (430×932, dpr 3 capped to 2, a 59px Dynamic Island inset, 60fps at
+45–80k triangles and ~20 draws), the render budget, and a list of the WebGL2
+and iOS-viewport bugs that have already been hit here — with their fixes. Read
+it before guessing at a limit; every number in it came off the actual phone.
+
+@PLATFORM.md
+
 ## Repo map
 
 ```
