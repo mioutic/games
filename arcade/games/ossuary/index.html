@@ -1,0 +1,1127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Ossuary</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<style>
+  /* Sanguine — see DESIGN.md */
+  :root {
+    --s-0: #0b0609;  --s-1: #12080c;
+    --t-0: #f2e6e6;  --t-2: #8f6f76;  --t-3: #5c434a;
+    --accent: #e9d8c5;  --accent-2: #b81d3a;  --brand: #d9557a;
+    --line-0: #150a0e;  --line-1: #2a141c;  --line-2: #3d1f28;
+    --success: #5fa777;  --warning: #d9a441;  --error: #ff5470;
+    --bloom: 0 0 12px rgba(216,58,88,.45), 0 0 26px rgba(216,58,88,.16);
+    --font-display: Georgia, "Times New Roman", serif;
+    --font-ui: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+    --radius: 2px;  --dur: 160ms;  --ease: cubic-bezier(.2,.6,.2,1);
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent;
+      user-select: none; -webkit-user-select: none; }
+  html, body {
+    margin: 0; height: 100%; overflow: hidden; touch-action: none;
+    background: var(--s-0); color: var(--t-0);
+    font: 400 16px/1.45 var(--font-ui); -webkit-font-smoothing: antialiased;
+    overscroll-behavior: none;
+  }
+  #stage { position: fixed; inset: 0; }
+  canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+
+  .hud {
+    position: fixed; left: calc(env(safe-area-inset-left,0px) + 12px);
+    right: calc(env(safe-area-inset-right,0px) + 12px);
+    top: calc(env(safe-area-inset-top,0px) + 12px);
+    display: flex; gap: 8px; pointer-events: none;
+  }
+  .panel { border: 1px solid var(--line-1); border-radius: var(--radius);
+           background: rgba(11,6,9,.72); backdrop-filter: blur(8px); }
+  .rail { flex: none; display: flex; }
+  .stat { padding: 7px 13px 6px; text-align: center; border-right: 1px solid var(--line-0); }
+  .stat:last-child { border-right: 0; }
+  .k { font: 500 8.5px/1 var(--font-ui); letter-spacing: .16em; text-transform: uppercase; color: var(--t-2); }
+  .v { margin-top: 5px; font: 500 17px/1 var(--font-mono); font-variant-numeric: tabular-nums; }
+  .v.brandish { color: var(--brand); }
+
+  /* the diagnostics readout — what this hardware is actually doing */
+  .diag { margin-left: auto; padding: 7px 10px 6px; min-width: 118px; }
+  .row { display: flex; justify-content: space-between; gap: 10px; line-height: 1.55; }
+  .row span:first-child { font: 500 8.5px/1.7 var(--font-ui); letter-spacing: .14em;
+                          text-transform: uppercase; color: var(--t-3); }
+  .row span:last-child { font: 500 10px/1.5 var(--font-mono); font-variant-numeric: tabular-nums; color: var(--t-2); }
+  #fps.good { color: var(--success); } #fps.fair { color: var(--warning); } #fps.poor { color: var(--error); }
+
+  .gauge { position: fixed; left: calc(env(safe-area-inset-left,0px) + 12px);
+           right: calc(env(safe-area-inset-right,0px) + 12px);
+           bottom: calc(env(safe-area-inset-bottom,0px) + 34px);
+           display: flex; gap: 2px; pointer-events: none; }
+  .seg { flex: 1; height: 3px; background: var(--line-1); transition: background 120ms var(--ease); }
+  .seg.on { background: var(--accent-2); }
+
+  .hint { position: fixed; left: 0; right: 0; bottom: calc(env(safe-area-inset-bottom,0px) + 13px);
+          text-align: center; font: 500 8.5px/1 var(--font-ui); letter-spacing: .16em;
+          text-transform: uppercase; color: var(--t-3); pointer-events: none; }
+
+  .overlay { position: fixed; inset: 0; display: grid; place-items: center; padding: 24px;
+             background: rgba(5,2,3,.9); text-align: center; z-index: 5; }
+  .overlay.hide { display: none; }
+  .overlay h2 { font: 400 30px/1.1 var(--font-display); letter-spacing: .04em; margin: 0 0 10px; }
+  .overlay p { color: var(--t-2); font-size: 13.5px; margin: 0 0 24px; max-width: 300px;
+               line-height: 1.65; margin-inline: auto; }
+  .big { font: 500 54px/1 var(--font-mono); font-variant-numeric: tabular-nums;
+         color: var(--accent); letter-spacing: -.02em; }
+  .big small { font: 500 11px/1 var(--font-ui); letter-spacing: .16em; text-transform: uppercase;
+               color: var(--t-2); display: block; margin-top: 10px; }
+  .ornament { color: var(--accent-2); font-size: 15px; margin-bottom: 14px; }
+  button.go {
+    appearance: none; border: 1px solid var(--accent); border-radius: var(--radius);
+    padding: 13px 34px; background: var(--accent); color: var(--s-0);
+    font: 500 11px/1 var(--font-ui); letter-spacing: .18em; text-transform: uppercase;
+    transition: box-shadow var(--dur) var(--ease), transform 90ms var(--ease);
+  }
+  button.go:active { transform: scale(.97); box-shadow: var(--bloom); }
+  button.go:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+  .spec { margin-top: 22px; font: 500 8.5px/1.9 var(--font-ui); letter-spacing: .14em;
+          text-transform: uppercase; color: var(--t-3); }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { transition-duration: 1ms !important; }
+  }
+</style>
+</head>
+<body>
+<div id="stage"><canvas id="cv"></canvas></div>
+
+<div class="hud">
+  <div class="panel rail">
+    <div class="stat"><div class="k">Depth</div><div class="v" id="score">0</div></div>
+    <div class="stat"><div class="k">Best</div><div class="v brandish" id="best">0</div></div>
+  </div>
+  <div class="panel diag">
+    <div class="row"><span>Fps</span><span id="fps">—</span></div>
+    <div class="row"><span>Scale</span><span id="scale">—</span></div>
+    <div class="row"><span>Draws</span><span id="draws">—</span></div>
+    <div class="row"><span>Tris</span><span id="tris">—</span></div>
+  </div>
+</div>
+
+<div class="gauge" id="gauge"></div>
+<div class="hint">Drag to steer</div>
+
+<div class="overlay" id="overlay">
+  <div>
+    <div id="head">
+      <div class="ornament">❦</div>
+      <h2>Ossuary</h2>
+      <p>Descend the bone corridor. Drag to steer, take the drops, and do not touch the pillars.</p>
+    </div>
+    <button class="go" id="go">Descend</button>
+    <div class="spec" id="spec"></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ============================================================
+     Ossuary — a WebGL2 renderer built to show what this setup can
+     actually do on a phone: instanced geometry, a shadow map, HDR
+     lighting with real point lights, and a bloom/tonemap/grain
+     post chain. Everything is procedural; nothing is downloaded.
+     ============================================================ */
+
+  var BKEY = 'ossuary.best';
+  var cv = document.getElementById('cv');
+  var overlay = document.getElementById('overlay');
+  var head = document.getElementById('head');
+  var elScore = document.getElementById('score');
+  var elBest = document.getElementById('best');
+  var elFps = document.getElementById('fps');
+  var elScale = document.getElementById('scale');
+  var elDraws = document.getElementById('draws');
+  var elTris = document.getElementById('tris');
+  var elSpec = document.getElementById('spec');
+  var gaugeEl = document.getElementById('gauge');
+
+  var gl = cv.getContext('webgl2', {
+    antialias: false, alpha: false, depth: true,
+    powerPreference: 'high-performance', preserveDrawingBuffer: false
+  });
+
+  if (!gl) {
+    head.innerHTML = '<div class="ornament">❦</div><h2>Ossuary</h2>' +
+      '<p>This browser has no WebGL2, so the corridor cannot be lit. ' +
+      'On iPhone that means Safari 15 or newer.</p>';
+    document.getElementById('go').style.display = 'none';
+    throw new Error('no webgl2');
+  }
+
+  /* ---------------- matrices (column-major, as WebGL wants) ---------------- */
+
+  function m4mul(a, b, out) {
+    out = out || new Float32Array(16);
+    for (var c = 0; c < 4; c++) {
+      var b0 = b[c * 4], b1 = b[c * 4 + 1], b2 = b[c * 4 + 2], b3 = b[c * 4 + 3];
+      out[c * 4]     = a[0] * b0 + a[4] * b1 + a[8]  * b2 + a[12] * b3;
+      out[c * 4 + 1] = a[1] * b0 + a[5] * b1 + a[9]  * b2 + a[13] * b3;
+      out[c * 4 + 2] = a[2] * b0 + a[6] * b1 + a[10] * b2 + a[14] * b3;
+      out[c * 4 + 3] = a[3] * b0 + a[7] * b1 + a[11] * b2 + a[15] * b3;
+    }
+    return out;
+  }
+
+  function m4perspective(fovy, aspect, near, far) {
+    var f = 1 / Math.tan(fovy / 2), nf = 1 / (near - far);
+    return new Float32Array([
+      f / aspect, 0, 0, 0,
+      0, f, 0, 0,
+      0, 0, (far + near) * nf, -1,
+      0, 0, 2 * far * near * nf, 0
+    ]);
+  }
+
+  function m4ortho(l, r, b, t, n, f) {
+    return new Float32Array([
+      2 / (r - l), 0, 0, 0,
+      0, 2 / (t - b), 0, 0,
+      0, 0, -2 / (f - n), 0,
+      -(r + l) / (r - l), -(t + b) / (t - b), -(f + n) / (f - n), 1
+    ]);
+  }
+
+  function m4lookAt(ex, ey, ez, cx, cy, cz, ux, uy, uz) {
+    var zx = ex - cx, zy = ey - cy, zz = ez - cz;
+    var zl = Math.hypot(zx, zy, zz) || 1; zx /= zl; zy /= zl; zz /= zl;
+    var xx = uy * zz - uz * zy, xy = uz * zx - ux * zz, xz = ux * zy - uy * zx;
+    var xl = Math.hypot(xx, xy, xz) || 1; xx /= xl; xy /= xl; xz /= xl;
+    var yx = zy * xz - zz * xy, yy = zz * xx - zx * xz, yz = zx * xy - zy * xx;
+    return new Float32Array([
+      xx, yx, zx, 0,
+      xy, yy, zy, 0,
+      xz, yz, zz, 0,
+      -(xx * ex + xy * ey + xz * ez),
+      -(yx * ex + yy * ey + yz * ez),
+      -(zx * ex + zy * ey + zz * ez), 1
+    ]);
+  }
+
+  // Translate * RotateY * Scale, written straight into an instance buffer.
+  function writeTRS(buf, o, px, py, pz, sx, sy, sz, ry) {
+    var c = Math.cos(ry), s = Math.sin(ry);
+    buf[o]      = c * sx; buf[o + 1]  = 0;  buf[o + 2]  = -s * sx; buf[o + 3]  = 0;
+    buf[o + 4]  = 0;      buf[o + 5]  = sy; buf[o + 6]  = 0;       buf[o + 7]  = 0;
+    buf[o + 8]  = s * sz; buf[o + 9]  = 0;  buf[o + 10] = c * sz;  buf[o + 11] = 0;
+    buf[o + 12] = px;     buf[o + 13] = py; buf[o + 14] = pz;      buf[o + 15] = 1;
+  }
+
+  /* ---------------- gl helpers ---------------- */
+
+  function compile(type, src, label) {
+    var sh = gl.createShader(type);
+    gl.shaderSource(sh, src);
+    gl.compileShader(sh);
+    if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
+      throw new Error(label + ': ' + gl.getShaderInfoLog(sh));
+    }
+    return sh;
+  }
+
+  function program(vs, fs, label) {
+    var p = gl.createProgram();
+    gl.attachShader(p, compile(gl.VERTEX_SHADER, vs, label + '.vert'));
+    gl.attachShader(p, compile(gl.FRAGMENT_SHADER, fs, label + '.frag'));
+    gl.linkProgram(p);
+    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) {
+      throw new Error(label + ' link: ' + gl.getProgramInfoLog(p));
+    }
+    p.u = {};
+    var n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS);
+    for (var i = 0; i < n; i++) {
+      var name = gl.getActiveUniform(p, i).name.replace(/\[0\]$/, '');
+      p.u[name] = gl.getUniformLocation(p, name);
+    }
+    return p;
+  }
+
+  /* ---------------- procedural meshes ---------------- */
+
+  function boxMesh() {
+    var v = [], idx = [];
+    var faces = [
+      [[0,0,1],[1,0,0],[0,1,0]], [[0,0,-1],[-1,0,0],[0,1,0]],
+      [[1,0,0],[0,0,-1],[0,1,0]], [[-1,0,0],[0,0,1],[0,1,0]],
+      [[0,1,0],[1,0,0],[0,0,-1]], [[0,-1,0],[1,0,0],[0,0,1]]
+    ];
+    for (var f = 0; f < 6; f++) {
+      var n = faces[f][0], t = faces[f][1], b = faces[f][2], base = v.length / 8;
+      for (var j = 0; j < 4; j++) {
+        var su = (j === 1 || j === 2) ? 1 : -1, sv = (j >= 2) ? 1 : -1;
+        v.push(
+          (n[0] + t[0] * su + b[0] * sv) * 0.5,
+          (n[1] + t[1] * su + b[1] * sv) * 0.5,
+          (n[2] + t[2] * su + b[2] * sv) * 0.5,
+          n[0], n[1], n[2], (su + 1) * 0.5, (sv + 1) * 0.5
+        );
+      }
+      idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+    }
+    return { v: new Float32Array(v), i: new Uint16Array(idx) };
+  }
+
+  function sphereMesh(seg, ring) {
+    var v = [], idx = [];
+    for (var y = 0; y <= ring; y++) {
+      var phi = y / ring * Math.PI, sp = Math.sin(phi), cp = Math.cos(phi);
+      for (var x = 0; x <= seg; x++) {
+        var th = x / seg * Math.PI * 2, st = Math.sin(th), ct = Math.cos(th);
+        var nx = sp * ct, ny = cp, nz = sp * st;
+        v.push(nx * 0.5, ny * 0.5, nz * 0.5, nx, ny, nz, x / seg, y / ring);
+      }
+    }
+    for (var yy = 0; yy < ring; yy++) {
+      for (var xx = 0; xx < seg; xx++) {
+        var a = yy * (seg + 1) + xx, b = a + seg + 1;
+        idx.push(a, b, a + 1, a + 1, b, b + 1);
+      }
+    }
+    return { v: new Float32Array(v), i: new Uint16Array(idx) };
+  }
+
+  var INST_FLOATS = 24;   // mat4(16) + albedo/emissive(4) + rough/metal/seed/_(4)
+
+  function makeDrawable(mesh, maxInstances) {
+    var d = { count: mesh.i.length, tris: mesh.i.length / 3, n: 0, max: maxInstances };
+    d.data = new Float32Array(maxInstances * INST_FLOATS);
+    d.vao = gl.createVertexArray();
+    gl.bindVertexArray(d.vao);
+
+    var vb = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, vb);
+    gl.bufferData(gl.ARRAY_BUFFER, mesh.v, gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 32, 0);
+    gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 32, 12);
+    gl.enableVertexAttribArray(2); gl.vertexAttribPointer(2, 2, gl.FLOAT, false, 32, 24);
+
+    var ib = gl.createBuffer();
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, mesh.i, gl.STATIC_DRAW);
+
+    d.ib = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, d.ib);
+    gl.bufferData(gl.ARRAY_BUFFER, d.data.byteLength, gl.DYNAMIC_DRAW);
+    var stride = INST_FLOATS * 4;
+    for (var k = 0; k < 4; k++) {
+      gl.enableVertexAttribArray(3 + k);
+      gl.vertexAttribPointer(3 + k, 4, gl.FLOAT, false, stride, k * 16);
+      gl.vertexAttribDivisor(3 + k, 1);
+    }
+    gl.enableVertexAttribArray(7);
+    gl.vertexAttribPointer(7, 4, gl.FLOAT, false, stride, 64);
+    gl.vertexAttribDivisor(7, 1);
+    gl.enableVertexAttribArray(8);
+    gl.vertexAttribPointer(8, 4, gl.FLOAT, false, stride, 80);
+    gl.vertexAttribDivisor(8, 1);
+
+    gl.bindVertexArray(null);
+
+    d.reset = function () { d.n = 0; };
+    d.push = function (px, py, pz, sx, sy, sz, ry, col, emis, rough, metal, seed) {
+      if (d.n >= d.max) return;
+      var o = d.n * INST_FLOATS;
+      writeTRS(d.data, o, px, py, pz, sx, sy, sz, ry);
+      d.data[o + 16] = col[0]; d.data[o + 17] = col[1]; d.data[o + 18] = col[2]; d.data[o + 19] = emis;
+      d.data[o + 20] = rough;  d.data[o + 21] = metal;  d.data[o + 22] = seed;   d.data[o + 23] = 0;
+      d.n++;
+    };
+    d.upload = function () {
+      if (!d.n) return;
+      gl.bindBuffer(gl.ARRAY_BUFFER, d.ib);
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, d.data.subarray(0, d.n * INST_FLOATS));
+    };
+    d.draw = function () {
+      if (!d.n) return 0;
+      gl.bindVertexArray(d.vao);
+      gl.drawElementsInstanced(gl.TRIANGLES, d.count, gl.UNSIGNED_SHORT, 0, d.n);
+      return 1;
+    };
+    return d;
+  }
+
+  var boxes = makeDrawable(boxMesh(), 420);
+  var orbs  = makeDrawable(sphereMesh(20, 14), 48);
+
+  /* ---------------- shaders ---------------- */
+
+  var COMMON_VS_IN =
+    'layout(location=0) in vec3 aPos;\n' +
+    'layout(location=1) in vec3 aNormal;\n' +
+    'layout(location=2) in vec2 aUV;\n' +
+    'layout(location=3) in mat4 aModel;\n' +
+    'layout(location=7) in vec4 aColor;\n' +
+    'layout(location=8) in vec4 aMat;\n';
+
+  var shadowVS = '#version 300 es\n' + COMMON_VS_IN +
+    'uniform mat4 uLightVP;\n' +
+    'void main(){ gl_Position = uLightVP * aModel * vec4(aPos,1.0); }\n';
+
+  var shadowFS = '#version 300 es\nprecision highp float;\nvoid main(){}\n';
+
+  var sceneVS = '#version 300 es\n' + COMMON_VS_IN +
+    'uniform mat4 uVP;\nuniform mat4 uLightVP;\n' +
+    'out vec3 vWorld; out vec3 vNormal; out vec2 vUV;\n' +
+    'out vec4 vColor; out vec4 vMat; out vec4 vLightPos;\n' +
+    'void main(){\n' +
+    '  vec4 wp = aModel * vec4(aPos, 1.0);\n' +
+    '  vWorld = wp.xyz;\n' +
+    // Non-uniform scale is everywhere here (walls, slabs), so normals need
+    // the inverse-transpose rather than the model matrix itself.
+    '  vNormal = normalize(transpose(inverse(mat3(aModel))) * aNormal);\n' +
+    '  vUV = aUV; vColor = aColor; vMat = aMat;\n' +
+    '  vLightPos = uLightVP * wp;\n' +
+    '  gl_Position = uVP * wp;\n' +
+    '}\n';
+
+  var sceneFS = '#version 300 es\n' +
+    'precision highp float;\nprecision highp sampler2DShadow;\n' +
+    'in vec3 vWorld; in vec3 vNormal; in vec2 vUV;\n' +
+    'in vec4 vColor; in vec4 vMat; in vec4 vLightPos;\n' +
+    'out vec4 outColor;\n' +
+    'uniform vec3 uEye;\n' +
+    'uniform vec3 uSunDir;\n' +
+    'uniform vec3 uSunColor;\n' +
+    'uniform vec3 uAmbient;\n' +
+    'uniform vec3 uFogColor;\n' +
+    'uniform float uFogDensity;\n' +
+    'uniform int uNumLights;\n' +
+    'uniform vec3 uLightPos[6];\n' +
+    'uniform vec3 uLightColor[6];\n' +
+    'uniform sampler2DShadow uShadow;\n' +
+    'uniform float uShadowTexel;\n' +
+
+    'float hash13(vec3 p){\n' +
+    '  p = fract(p * 0.1031);\n' +
+    '  p += dot(p, p.zyx + 31.32);\n' +
+    '  return fract((p.x + p.y) * p.z);\n' +
+    '}\n' +
+    'float vnoise(vec3 x){\n' +
+    '  vec3 i = floor(x), f = fract(x);\n' +
+    '  f = f * f * (3.0 - 2.0 * f);\n' +
+    '  float n000 = hash13(i), n100 = hash13(i + vec3(1,0,0));\n' +
+    '  float n010 = hash13(i + vec3(0,1,0)), n110 = hash13(i + vec3(1,1,0));\n' +
+    '  float n001 = hash13(i + vec3(0,0,1)), n101 = hash13(i + vec3(1,0,1));\n' +
+    '  float n011 = hash13(i + vec3(0,1,1)), n111 = hash13(i + vec3(1,1,1));\n' +
+    '  return mix(mix(mix(n000,n100,f.x), mix(n010,n110,f.x), f.y),\n' +
+    '             mix(mix(n001,n101,f.x), mix(n011,n111,f.x), f.y), f.z);\n' +
+    '}\n' +
+    'float fbm(vec3 p){\n' +
+    '  return 0.6 * vnoise(p) + 0.3 * vnoise(p * 2.07) + 0.1 * vnoise(p * 4.13);\n' +
+    '}\n' +
+
+    'float distGGX(float ndh, float a){\n' +
+    '  float a2 = a * a, d = ndh * ndh * (a2 - 1.0) + 1.0;\n' +
+    '  return a2 / max(3.14159265 * d * d, 1e-7);\n' +
+    '}\n' +
+    'float smithG(float ndv, float ndl, float a){\n' +
+    '  float k = (a + 1.0) * (a + 1.0) / 8.0;\n' +
+    '  return (ndv / (ndv * (1.0 - k) + k)) * (ndl / (ndl * (1.0 - k) + k));\n' +
+    '}\n' +
+
+    'vec3 brdf(vec3 N, vec3 V, vec3 L, vec3 albedo, float rough, float metal, vec3 radiance){\n' +
+    '  float ndl = max(dot(N, L), 0.0);\n' +
+    '  if (ndl <= 0.0) return vec3(0.0);\n' +
+    '  vec3 H = normalize(V + L);\n' +
+    '  float ndv = max(dot(N, V), 1e-4), ndh = max(dot(N, H), 0.0), vdh = max(dot(V, H), 0.0);\n' +
+    '  float a = max(rough * rough, 0.002);\n' +
+    '  vec3 F0 = mix(vec3(0.04), albedo, metal);\n' +
+    '  vec3 F = F0 + (1.0 - F0) * pow(1.0 - vdh, 5.0);\n' +
+    '  vec3 spec = distGGX(ndh, a) * smithG(ndv, ndl, rough) * F / max(4.0 * ndv * ndl, 1e-4);\n' +
+    '  vec3 kd = (1.0 - F) * (1.0 - metal);\n' +
+    '  return (kd * albedo / 3.14159265 + spec) * radiance * ndl;\n' +
+    '}\n' +
+
+    'float shadowAt(vec3 N, vec3 L){\n' +
+    '  vec3 pc = vLightPos.xyz / vLightPos.w * 0.5 + 0.5;\n' +
+    '  if (pc.z > 1.0 || pc.x < 0.0 || pc.x > 1.0 || pc.y < 0.0 || pc.y > 1.0) return 1.0;\n' +
+    '  float bias = max(0.0016 * (1.0 - dot(N, L)), 0.0006);\n' +
+    '  float sum = 0.0;\n' +
+    '  for (int y = -1; y <= 1; y++)\n' +
+    '    for (int x = -1; x <= 1; x++)\n' +
+    '      sum += texture(uShadow, vec3(pc.xy + vec2(float(x), float(y)) * uShadowTexel, pc.z - bias));\n' +
+    '  return sum / 9.0;\n' +
+    '}\n' +
+
+    'void main(){\n' +
+    '  vec3 albedo = vColor.rgb;\n' +
+    '  float emissive = vColor.a, rough = vMat.x, metal = vMat.y, seed = vMat.z;\n' +
+    '  vec3 N = normalize(vNormal);\n' +
+    '  vec3 V = normalize(uEye - vWorld);\n' +
+
+    // Bump the surface without a texture: build the gradient of a noise field
+    // from screen-space derivatives and bend the normal along it.
+    '  if (emissive < 0.5) {\n' +
+    '    vec3 np = vWorld * 5.0 + seed;\n' +
+    '    float h = fbm(np);\n' +
+    '    vec3 dpx = dFdx(vWorld), dpy = dFdy(vWorld);\n' +
+    '    vec3 r1 = cross(dpy, N), r2 = cross(N, dpx);\n' +
+    '    float det = dot(dpx, r1);\n' +
+    '    vec3 grad = (r1 * dFdx(h) + r2 * dFdy(h)) / (abs(det) < 1e-9 ? 1e-9 : det);\n' +
+    // Once a noise cell shrinks below a pixel the detail can only alias into
+    // static, so fade both the bump and the albedo break-up out with distance.
+    '    float fade = clamp(1.35 - length(fwidth(np)), 0.0, 1.0);\n' +
+    '    N = normalize(N - 0.22 * fade * grad);\n' +
+    '    albedo *= mix(1.0, 0.90 + 0.18 * h, fade);\n' +
+    '  }\n' +
+
+    '  vec3 L = normalize(-uSunDir);\n' +
+    '  float sh = shadowAt(N, L);\n' +
+    '  vec3 col = brdf(N, V, L, albedo, rough, metal, uSunColor) * sh;\n' +
+
+    '  for (int i = 0; i < 6; i++) {\n' +
+    '    if (i >= uNumLights) break;\n' +
+    '    vec3 d = uLightPos[i] - vWorld;\n' +
+    '    float dist2 = max(dot(d, d), 0.06);\n' +
+    '    col += brdf(N, V, normalize(d), albedo, rough, metal, uLightColor[i] / dist2);\n' +
+    '  }\n' +
+
+    '  col += uAmbient * albedo;\n' +
+    '  col += albedo * emissive;\n' +
+
+    '  float dist = length(uEye - vWorld);\n' +
+    '  float fog = 1.0 - exp(-pow(dist * uFogDensity, 2.0));\n' +
+    '  col = mix(col, uFogColor, clamp(fog, 0.0, 1.0));\n' +
+
+    '  outColor = vec4(col, 1.0);\n' +
+    '}\n';
+
+  var fsTriVS = '#version 300 es\n' +
+    'out vec2 vUV;\n' +
+    'void main(){\n' +
+    '  vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2));\n' +
+    '  vUV = p;\n' +
+    '  gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);\n' +
+    '}\n';
+
+  var brightFS = '#version 300 es\nprecision highp float;\n' +
+    'in vec2 vUV; out vec4 outColor;\n' +
+    'uniform sampler2D uTex; uniform float uThreshold;\n' +
+    'void main(){\n' +
+    '  vec3 c = texture(uTex, vUV).rgb;\n' +
+    '  float l = dot(c, vec3(0.2126, 0.7152, 0.0722));\n' +
+    '  float k = max(l - uThreshold, 0.0) / max(l, 1e-4);\n' +
+    '  outColor = vec4(c * k, 1.0);\n' +
+    '}\n';
+
+  var blurFS = '#version 300 es\nprecision highp float;\n' +
+    'in vec2 vUV; out vec4 outColor;\n' +
+    'uniform sampler2D uTex; uniform vec2 uDir;\n' +
+    'void main(){\n' +
+    '  float w[5];\n' +
+    '  w[0] = 0.2270; w[1] = 0.1946; w[2] = 0.1216; w[3] = 0.0540; w[4] = 0.0162;\n' +
+    '  vec3 c = texture(uTex, vUV).rgb * w[0];\n' +
+    '  for (int i = 1; i < 5; i++) {\n' +
+    '    vec2 o = uDir * float(i);\n' +
+    '    c += texture(uTex, vUV + o).rgb * w[i];\n' +
+    '    c += texture(uTex, vUV - o).rgb * w[i];\n' +
+    '  }\n' +
+    '  outColor = vec4(c, 1.0);\n' +
+    '}\n';
+
+  var compositeFS = '#version 300 es\nprecision highp float;\n' +
+    'in vec2 vUV; out vec4 outColor;\n' +
+    'uniform sampler2D uScene; uniform sampler2D uBloom;\n' +
+    'uniform float uBloomAmount, uTime, uGrain, uFlash, uExposure;\n' +
+
+    // ACES filmic curve, fitted — keeps the crimson from clipping to pink.
+    'vec3 aces(vec3 x){\n' +
+    '  return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n' +
+    '}\n' +
+    'float hash12(vec2 p){\n' +
+    '  vec3 p3 = fract(vec3(p.xyx) * 0.1031);\n' +
+    '  p3 += dot(p3, p3.yzx + 33.33);\n' +
+    '  return fract((p3.x + p3.y) * p3.z);\n' +
+    '}\n' +
+    'void main(){\n' +
+    '  vec2 uv = vUV;\n' +
+    '  vec2 d = uv - 0.5;\n' +
+    '  float r2 = dot(d, d);\n' +
+    // Chromatic aberration, strengthening toward the edges of the lens.
+    '  float ca = 0.0016 + 0.006 * r2;\n' +
+    '  vec3 scene;\n' +
+    '  scene.r = texture(uScene, uv - d * ca).r;\n' +
+    '  scene.g = texture(uScene, uv).g;\n' +
+    '  scene.b = texture(uScene, uv + d * ca).b;\n' +
+
+    '  vec3 bloom = texture(uBloom, uv).rgb;\n' +
+    '  vec3 col = scene + bloom * uBloomAmount;\n' +
+    '  col += vec3(0.55, 0.05, 0.12) * uFlash;\n' +
+    '  col = aces(col * uExposure);\n' +
+
+    '  float vig = smoothstep(1.15, 0.18, r2 * 2.0);\n' +
+    '  col *= mix(0.60, 1.0, vig);\n' +
+
+    '  float g = hash12(uv * 1024.0 + fract(uTime) * 331.0) - 0.5;\n' +
+    '  col += g * uGrain;\n' +
+
+    '  outColor = vec4(pow(max(col, 0.0), vec3(1.0 / 2.2)), 1.0);\n' +
+    '}\n';
+
+  var progShadow, progScene, progBright, progBlur, progComposite;
+  try {
+    progShadow    = program(shadowVS, shadowFS, 'shadow');
+    progScene     = program(sceneVS, sceneFS, 'scene');
+    progBright    = program(fsTriVS, brightFS, 'bright');
+    progBlur      = program(fsTriVS, blurFS, 'blur');
+    progComposite = program(fsTriVS, compositeFS, 'composite');
+  } catch (e) {
+    head.innerHTML = '<div class="ornament">❦</div><h2>Ossuary</h2>' +
+      '<p>The renderer failed to build on this device.</p>' +
+      '<p style="font:400 10px/1.5 var(--font-mono);color:var(--t-3)">' +
+      String(e.message).slice(0, 300) + '</p>';
+    document.getElementById('go').style.display = 'none';
+    throw e;
+  }
+
+  var emptyVAO = gl.createVertexArray();
+
+  /* ---------------- render targets ---------------- */
+
+  // Half-float gives real HDR headroom for the bloom; if the device will not
+  // render to it we drop to 8-bit and the glow just clips a little sooner.
+  var hdrFormat = gl.RGBA8, hdrType = gl.UNSIGNED_BYTE, hdrLabel = 'rgba8';
+  if (gl.getExtension('EXT_color_buffer_float')) {
+    hdrFormat = gl.RGBA16F; hdrType = gl.HALF_FLOAT; hdrLabel = 'rgba16f';
+  } else if (gl.getExtension('EXT_color_buffer_half_float')) {
+    hdrFormat = gl.RGBA16F; hdrType = gl.HALF_FLOAT; hdrLabel = 'rgba16f';
+  }
+  gl.getExtension('OES_texture_float_linear');
+
+  function makeTarget(w, h, internal, type, withDepth) {
+    var t = { w: w, h: h };
+    t.tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, t.tex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, internal, w, h, 0, gl.RGBA, type, null);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    t.fbo = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, t.fbo);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, t.tex, 0);
+    if (withDepth) {
+      t.depth = gl.createRenderbuffer();
+      gl.bindRenderbuffer(gl.RENDERBUFFER, t.depth);
+      gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT24, w, h);
+      gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, t.depth);
+    }
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    return t;
+  }
+
+  function destroyTarget(t) {
+    if (!t) return;
+    gl.deleteTexture(t.tex);
+    gl.deleteFramebuffer(t.fbo);
+    if (t.depth) gl.deleteRenderbuffer(t.depth);
+  }
+
+  var SHADOW_SIZE = 1024;
+  var shadow = { w: SHADOW_SIZE, h: SHADOW_SIZE };
+  shadow.tex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, shadow.tex);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.DEPTH_COMPONENT24, SHADOW_SIZE, SHADOW_SIZE, 0,
+                gl.DEPTH_COMPONENT, gl.UNSIGNED_INT, null);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_COMPARE_MODE, gl.COMPARE_REF_TO_TEXTURE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_COMPARE_FUNC, gl.LEQUAL);
+  shadow.fbo = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, shadow.fbo);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, shadow.tex, 0);
+  gl.drawBuffers([gl.NONE]);
+  gl.readBuffer(gl.NONE);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+  var scene = null, bloomA = null, bloomB = null;
+  var renderScale = 1.0, viewW = 1, viewH = 1;
+
+  function allocTargets(w, h) {
+    destroyTarget(scene); destroyTarget(bloomA); destroyTarget(bloomB);
+    scene  = makeTarget(w, h, hdrFormat, hdrType, true);
+    var bw = Math.max(1, w >> 2), bh = Math.max(1, h >> 2);
+    bloomA = makeTarget(bw, bh, hdrFormat, hdrType, false);
+    bloomB = makeTarget(bw, bh, hdrFormat, hdrType, false);
+  }
+
+  var dpr = 1, cssW = 1, cssH = 1;
+
+  function resize() {
+    var stage = document.getElementById('stage');
+    cssW = Math.max(1, stage.clientWidth);
+    cssH = Math.max(1, stage.clientHeight);
+    // Phones report dpr 3; rendering all of it costs more than it shows, so
+    // cap at 2 and let the adaptive scaler take it down further if needed.
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    cv.width = Math.round(cssW * dpr);
+    cv.height = Math.round(cssH * dpr);
+    applyScale();
+  }
+
+  function applyScale() {
+    viewW = Math.max(1, Math.round(cv.width * renderScale));
+    viewH = Math.max(1, Math.round(cv.height * renderScale));
+    allocTargets(viewW, viewH);
+  }
+
+  window.addEventListener('resize', resize);
+
+  /* ---------------- palette (linear light) ---------------- */
+
+  function srgb(hex) {
+    var n = parseInt(hex.slice(1), 16);
+    var c = [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
+    return [Math.pow(c[0], 2.2), Math.pow(c[1], 2.2), Math.pow(c[2], 2.2)];
+  }
+  function scale3(c, k) { return [c[0] * k, c[1] * k, c[2] * k]; }
+
+  var BONE    = srgb('#e9d8c5');
+  var BLOOD   = srgb('#b81d3a');
+  var MOON    = srgb('#7e9cc4');
+  // Surface tiers 3 and 2 are the *design* ground, but as albedo they are so
+  // dark that lit stone reads as pure black. These are the same oxblood hue
+  // raised to a value the lighting can actually work with.
+  var EMBER   = [0.52, 0.10, 0.032];
+  var STONE   = srgb('#4a3138');
+  var STONE_D = srgb('#38242a');
+  var FOG     = [0.010, 0.006, 0.008];
+
+  /* ---------------- world ---------------- */
+
+  var SEG_LEN = 12, SEG_COUNT = 16, HALF_W = 4.6, WALL_H = 7.5;
+  var LANE_MIN = -3.5, LANE_MAX = 3.5;
+
+  var state = {
+    running: false, dead: false,
+    z: 0, speed: 15, targetSpeed: 15,
+    px: 0, targetX: 0,
+    score: 0, flash: 0, shake: 0,
+    segBase: 0, obstacles: [], drops: [], braziers: [], t: 0
+  };
+
+  var best = parseInt(localStorage.getItem(BKEY) || '0', 10) || 0;
+  elBest.textContent = best;
+
+  var GAUGE_SEGS = 24, segEls = [];
+  for (var gi = 0; gi < GAUGE_SEGS; gi++) {
+    var se = document.createElement('div');
+    se.className = 'seg';
+    gaugeEl.appendChild(se);
+    segEls.push(se);
+  }
+
+  function rand(a, b) { return a + Math.random() * (b - a); }
+
+  // Pillars are placed so a gap of at least GAP always survives, otherwise the
+  // corridor eventually becomes unrunnable rather than merely hard.
+  function spawnRow(z) {
+    var GAP = 2.05;
+    var count = Math.random() < 0.42 ? 2 : 1;
+    var slots = [];
+    var tries = 0;
+    while (slots.length < count && tries++ < 40) {
+      var x = rand(LANE_MIN, LANE_MAX);
+      var ok = true;
+      for (var i = 0; i < slots.length; i++) if (Math.abs(slots[i] - x) < GAP + 1.2) ok = false;
+      if (ok) slots.push(x);
+    }
+    // Verify a passable lane remains; if not, drop the last pillar.
+    var sorted = slots.slice().sort(function (a, b) { return a - b; });
+    var widest = sorted.length ? (sorted[0] - LANE_MIN) : 99;
+    for (var j = 1; j < sorted.length; j++) widest = Math.max(widest, sorted[j] - sorted[j - 1] - 1.1);
+    if (sorted.length) widest = Math.max(widest, LANE_MAX - sorted[sorted.length - 1]);
+    if (widest < GAP) slots.pop();
+
+    for (var k = 0; k < slots.length; k++) {
+      state.obstacles.push({ x: slots[k], z: z, h: rand(2.6, 5.2), r: rand(0, Math.PI), seed: rand(0, 40) });
+    }
+
+    // A drop sits in the gap, so taking it is a line through the pillars.
+    var dx = rand(LANE_MIN, LANE_MAX), safe = true;
+    for (var m = 0; m < slots.length; m++) if (Math.abs(slots[m] - dx) < 1.4) safe = false;
+    if (safe && Math.random() < 0.85) state.drops.push({ x: dx, z: z - rand(2, 7), got: false });
+  }
+
+  function resetWorld() {
+    state.z = 0; state.speed = 15; state.targetSpeed = 15;
+    state.px = 0; state.targetX = 0; state.score = 0;
+    state.flash = 0; state.shake = 0; state.dead = false;
+    state.obstacles.length = 0; state.drops.length = 0; state.braziers.length = 0;
+    state.segBase = 0;
+    for (var z = -30; z > -SEG_COUNT * SEG_LEN; z -= rand(11, 16)) spawnRow(z);
+    for (var b = 0; b > -SEG_COUNT * SEG_LEN; b -= SEG_LEN * 2) {
+      state.braziers.push({ x: -HALF_W + 0.5, z: b, phase: rand(0, 6.28) });
+      state.braziers.push({ x: HALF_W - 0.5, z: b - SEG_LEN, phase: rand(0, 6.28) });
+    }
+    elScore.textContent = '0';
+  }
+
+  function recycle() {
+    var behind = state.z + 14;
+    var far = state.z - SEG_COUNT * SEG_LEN;
+
+    for (var i = state.obstacles.length - 1; i >= 0; i--) {
+      if (state.obstacles[i].z > behind) state.obstacles.splice(i, 1);
+    }
+    for (var j = state.drops.length - 1; j >= 0; j--) {
+      if (state.drops[j].z > behind) state.drops.splice(j, 1);
+    }
+    for (var k = state.braziers.length - 1; k >= 0; k--) {
+      if (state.braziers[k].z > behind) {
+        state.braziers[k].z -= SEG_COUNT * SEG_LEN;
+        state.braziers[k].phase = rand(0, 6.28);
+      }
+    }
+    // Keep the corridor stocked ahead of the camera.
+    var lowest = 0;
+    for (var m = 0; m < state.obstacles.length; m++) lowest = Math.min(lowest, state.obstacles[m].z);
+    while (lowest > far) {
+      lowest -= rand(11, 16);
+      spawnRow(lowest);
+    }
+  }
+
+  /* ---------------- input ---------------- */
+
+  var dragging = false, dragX = 0, dragStartTarget = 0;
+
+  function pointerDown(x) { dragging = true; dragX = x; dragStartTarget = state.targetX; }
+  function pointerMove(x) {
+    if (!dragging) return;
+    var k = 9.0 / Math.max(cssW, 1);
+    state.targetX = Math.max(LANE_MIN, Math.min(LANE_MAX, dragStartTarget + (x - dragX) * k));
+  }
+  function pointerUp() { dragging = false; }
+
+  cv.addEventListener('touchstart', function (e) { pointerDown(e.touches[0].clientX); }, { passive: true });
+  cv.addEventListener('touchmove', function (e) { pointerMove(e.touches[0].clientX); }, { passive: true });
+  cv.addEventListener('touchend', pointerUp, { passive: true });
+  cv.addEventListener('mousedown', function (e) { pointerDown(e.clientX); });
+  window.addEventListener('mousemove', function (e) { pointerMove(e.clientX); });
+  window.addEventListener('mouseup', pointerUp);
+
+  var keys = {};
+  window.addEventListener('keydown', function (e) {
+    keys[e.key] = true;
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') e.preventDefault();
+  });
+  window.addEventListener('keyup', function (e) { keys[e.key] = false; });
+
+  /* ---------------- simulation ---------------- */
+
+  function update(dt) {
+    state.t += dt;
+    if (!state.running) return;
+
+    if (keys.ArrowLeft || keys.a) state.targetX = Math.max(LANE_MIN, state.targetX - 9 * dt);
+    if (keys.ArrowRight || keys.d) state.targetX = Math.min(LANE_MAX, state.targetX + 9 * dt);
+
+    state.px += (state.targetX - state.px) * Math.min(1, dt * 11);
+    state.speed += (state.targetSpeed - state.speed) * Math.min(1, dt * 1.4);
+    state.z -= state.speed * dt;
+
+    state.flash = Math.max(0, state.flash - dt * 3.2);
+    state.shake = Math.max(0, state.shake - dt * 3.0);
+
+    // Depth travelled is the score; it reads better than a bare counter.
+    var depth = Math.floor(-state.z);
+    if (depth !== state.score) { state.score = depth; elScore.textContent = depth; }
+
+    for (var i = 0; i < state.drops.length; i++) {
+      var d = state.drops[i];
+      if (d.got) continue;
+      if (Math.abs(d.z - state.z) < 1.2 && Math.abs(d.x - state.px) < 1.15) {
+        d.got = true;
+        state.flash = Math.min(1, state.flash + 0.45);
+        state.targetSpeed = Math.min(34, state.targetSpeed + 0.55);
+        if (navigator.vibrate) navigator.vibrate(8);
+      }
+    }
+
+    for (var j = 0; j < state.obstacles.length; j++) {
+      var o = state.obstacles[j];
+      if (Math.abs(o.z - state.z) < 0.95 && Math.abs(o.x - state.px) < 1.05) return die();
+    }
+
+    recycle();
+
+    var frac = (state.speed - 15) / (34 - 15);
+    var lit = Math.round(frac * GAUGE_SEGS);
+    for (var s = 0; s < GAUGE_SEGS; s++) segEls[s].classList.toggle('on', s < lit);
+  }
+
+  function die() {
+    state.running = false;
+    state.dead = true;
+    state.flash = 1;
+    state.shake = 1;
+    if (navigator.vibrate) navigator.vibrate([20, 45, 20]);
+    if (state.score > best) { best = state.score; localStorage.setItem(BKEY, String(best)); elBest.textContent = best; }
+    head.innerHTML =
+      '<div class="big">' + state.score + '<small>metres down</small></div>' +
+      '<p>' + (state.score >= best && state.score > 0
+        ? 'A new personal best.' : 'Your best stands at ' + best + 'm.') + '</p>';
+    document.getElementById('go').textContent = 'Again';
+    elSpec.textContent = lastFps + ' fps · ' + Math.round(renderScale * 100) + '% scale';
+    overlay.classList.remove('hide');
+  }
+
+  /* ---------------- frame ---------------- */
+
+  var lightVP = new Float32Array(16);
+  var lightPosArr = new Float32Array(18), lightColArr = new Float32Array(18);
+  var drawCalls = 0, triCount = 0, lastFps = 0;
+
+  function buildInstances() {
+    boxes.reset(); orbs.reset();
+
+    var baseZ = Math.floor(state.z / SEG_LEN) * SEG_LEN;
+    for (var s = 2; s > -SEG_COUNT; s--) {
+      var z = baseZ + s * SEG_LEN;
+      var seed = Math.abs(z * 0.37) % 40;
+      boxes.push(0, -0.25, z, HALF_W * 2, 0.5, SEG_LEN, 0, STONE, 0, 0.92, 0.0, seed);
+      boxes.push(-HALF_W, WALL_H * 0.5 - 0.25, z, 0.6, WALL_H, SEG_LEN, 0, STONE_D, 0, 0.88, 0.0, seed + 3);
+      boxes.push(HALF_W, WALL_H * 0.5 - 0.25, z, 0.6, WALL_H, SEG_LEN, 0, STONE_D, 0, 0.88, 0.0, seed + 7);
+
+      // An arch every other segment: two posts and a lintel, in bone.
+      if (((Math.round(z / SEG_LEN) % 2) + 2) % 2 === 0) {
+        boxes.push(-HALF_W + 0.75, 2.6, z, 0.5, 5.6, 0.7, 0, BONE, 0, 0.55, 0.0, seed + 11);
+        boxes.push(HALF_W - 0.75, 2.6, z, 0.5, 5.6, 0.7, 0, BONE, 0, 0.55, 0.0, seed + 13);
+        boxes.push(0, 5.7, z, HALF_W * 2 - 1.0, 0.7, 0.9, 0, BONE, 0, 0.55, 0.0, seed + 17);
+      }
+    }
+
+    for (var i = 0; i < state.obstacles.length; i++) {
+      var o = state.obstacles[i];
+      if (o.z > state.z + 12 || o.z < state.z - SEG_COUNT * SEG_LEN) continue;
+      boxes.push(o.x, o.h * 0.5 - 0.25, o.z, 1.05, o.h, 1.05, o.r, BONE, 0, 0.42, 0.0, o.seed);
+      boxes.push(o.x, o.h - 0.1, o.z, 1.35, 0.3, 1.35, o.r, BONE, 0, 0.42, 0.0, o.seed + 5);
+    }
+
+    for (var b = 0; b < state.braziers.length; b++) {
+      var br = state.braziers[b];
+      if (br.z > state.z + 12 || br.z < state.z - SEG_COUNT * SEG_LEN) continue;
+      var flick = 0.72 + 0.28 * Math.sin(state.t * 9.1 + br.phase) * Math.sin(state.t * 3.7 + br.phase * 2.1);
+      boxes.push(br.x, 3.1, br.z, 0.45, 0.45, 0.45, 0.7, EMBER, 1.8 * flick, 0.5, 0.0, 0);
+    }
+
+    // Player orb, riding a little above the floor with a slow bob.
+    var bob = Math.sin(state.t * 3.4) * 0.09;
+    orbs.push(state.px, 0.85 + bob, state.z, 1.05, 1.05, 1.05, state.t * 1.7,
+              BONE, 0.28, 0.30, 0.1, 0);
+
+    for (var d = 0; d < state.drops.length; d++) {
+      var dr = state.drops[d];
+      if (dr.got) continue;
+      if (dr.z > state.z + 12 || dr.z < state.z - SEG_COUNT * SEG_LEN) continue;
+      var spin = state.t * 2.2 + dr.x;
+      orbs.push(dr.x, 1.15 + Math.sin(state.t * 2.6 + dr.x) * 0.16, dr.z,
+                0.52, 0.72, 0.52, spin, BLOOD, 1.05, 0.35, 0.0, 0);
+    }
+
+    boxes.upload(); orbs.upload();
+  }
+
+  function pickLights() {
+    var near = [];
+    for (var i = 0; i < state.braziers.length; i++) {
+      var b = state.braziers[i];
+      var dz = b.z - state.z;
+      if (dz > 6 || dz < -46) continue;
+      near.push({ b: b, d: Math.abs(dz) });
+    }
+    near.sort(function (a, b) { return a.d - b.d; });
+    var n = Math.min(6, near.length);
+    for (var k = 0; k < n; k++) {
+      var br = near[k].b;
+      var flick = 0.72 + 0.28 * Math.sin(state.t * 9.1 + br.phase) * Math.sin(state.t * 3.7 + br.phase * 2.1);
+      var power = 46 * flick;
+      lightPosArr[k * 3] = br.x; lightPosArr[k * 3 + 1] = 3.1; lightPosArr[k * 3 + 2] = br.z;
+      lightColArr[k * 3] = EMBER[0] * power;
+      lightColArr[k * 3 + 1] = EMBER[1] * power;
+      lightColArr[k * 3 + 2] = EMBER[2] * power;
+    }
+    return n;
+  }
+
+  var SUN = [-0.42, -1.0, -0.28];
+  var sunLen = Math.hypot(SUN[0], SUN[1], SUN[2]);
+  SUN = [SUN[0] / sunLen, SUN[1] / sunLen, SUN[2] / sunLen];
+
+  function render() {
+    var aspect = cv.width / cv.height;
+    var shakeX = state.shake * Math.sin(state.t * 47) * 0.22;
+    var shakeY = state.shake * Math.sin(state.t * 39) * 0.18;
+
+    var eyeX = state.px * 0.5 + shakeX, eyeY = 3.1 + shakeY, eyeZ = state.z + 7.2;
+    var atX = state.px * 0.72, atY = 1.35, atZ = state.z - 11;
+    var view = m4lookAt(eyeX, eyeY, eyeZ, atX, atY, atZ, 0, 1, 0);
+    var proj = m4perspective(1.05, aspect, 0.15, 190);
+    var vp = m4mul(proj, view);
+
+    // Shadow frustum tracks the stretch of corridor the camera can see.
+    var tz = state.z - 16;
+    var lx = state.px * 0.4 - SUN[0] * 46, ly = -SUN[1] * 46, lz = tz - SUN[2] * 46;
+    var lview = m4lookAt(lx, ly, lz, state.px * 0.4, 0, tz, 0, 1, 0);
+    var lproj = m4ortho(-26, 26, -26, 26, 1, 105);
+    m4mul(lproj, lview, lightVP);
+
+    drawCalls = 0; triCount = 0;
+
+    /* --- pass 1: shadow depth --- */
+    gl.bindFramebuffer(gl.FRAMEBUFFER, shadow.fbo);
+    gl.viewport(0, 0, SHADOW_SIZE, SHADOW_SIZE);
+    gl.enable(gl.DEPTH_TEST);
+    gl.depthMask(true);
+    gl.clear(gl.DEPTH_BUFFER_BIT);
+    gl.enable(gl.CULL_FACE);
+    gl.cullFace(gl.FRONT);          // front-face culling trims peter-panning
+    gl.useProgram(progShadow);
+    gl.uniformMatrix4fv(progShadow.u.uLightVP, false, lightVP);
+    drawCalls += boxes.draw(); triCount += boxes.tris * boxes.n;
+    drawCalls += orbs.draw();  triCount += orbs.tris * orbs.n;
+
+    /* --- pass 2: lit scene into HDR --- */
+    gl.bindFramebuffer(gl.FRAMEBUFFER, scene.fbo);
+    gl.viewport(0, 0, scene.w, scene.h);
+    gl.cullFace(gl.BACK);
+    gl.clearColor(FOG[0], FOG[1], FOG[2], 1);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    gl.useProgram(progScene);
+    gl.uniformMatrix4fv(progScene.u.uVP, false, vp);
+    gl.uniformMatrix4fv(progScene.u.uLightVP, false, lightVP);
+    gl.uniform3f(progScene.u.uEye, eyeX, eyeY, eyeZ);
+    gl.uniform3f(progScene.u.uSunDir, SUN[0], SUN[1], SUN[2]);
+    gl.uniform3f(progScene.u.uSunColor, MOON[0] * 2.1, MOON[1] * 2.1, MOON[2] * 2.1);
+    gl.uniform3f(progScene.u.uAmbient, 0.030, 0.021, 0.025);
+    gl.uniform3f(progScene.u.uFogColor, FOG[0], FOG[1], FOG[2]);
+    gl.uniform1f(progScene.u.uFogDensity, 0.0132);
+    var nl = pickLights();
+    gl.uniform1i(progScene.u.uNumLights, nl);
+    gl.uniform3fv(progScene.u.uLightPos, lightPosArr);
+    gl.uniform3fv(progScene.u.uLightColor, lightColArr);
+    gl.uniform1f(progScene.u.uShadowTexel, 1 / SHADOW_SIZE);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, shadow.tex);
+    gl.uniform1i(progScene.u.uShadow, 0);
+    drawCalls += boxes.draw(); triCount += boxes.tris * boxes.n;
+    drawCalls += orbs.draw();  triCount += orbs.tris * orbs.n;
+
+    /* --- pass 3-5: bright pass, then a separable blur at quarter res --- */
+    gl.disable(gl.DEPTH_TEST);
+    gl.disable(gl.CULL_FACE);
+    gl.bindVertexArray(emptyVAO);
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, bloomA.fbo);
+    gl.viewport(0, 0, bloomA.w, bloomA.h);
+    gl.useProgram(progBright);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, scene.tex);
+    gl.uniform1i(progBright.u.uTex, 0);
+    gl.uniform1f(progBright.u.uThreshold, 0.11);
+    gl.drawArrays(gl.TRIANGLES, 0, 3); drawCalls++;
+
+    gl.useProgram(progBlur);
+    gl.uniform1i(progBlur.u.uTex, 0);
+    for (var pass = 0; pass < 2; pass++) {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, bloomB.fbo);
+      gl.viewport(0, 0, bloomB.w, bloomB.h);
+      gl.bindTexture(gl.TEXTURE_2D, bloomA.tex);
+      gl.uniform2f(progBlur.u.uDir, 1.35 / bloomA.w, 0);
+      gl.drawArrays(gl.TRIANGLES, 0, 3); drawCalls++;
+
+      gl.bindFramebuffer(gl.FRAMEBUFFER, bloomA.fbo);
+      gl.viewport(0, 0, bloomA.w, bloomA.h);
+      gl.bindTexture(gl.TEXTURE_2D, bloomB.tex);
+      gl.uniform2f(progBlur.u.uDir, 0, 1.35 / bloomA.h);
+      gl.drawArrays(gl.TRIANGLES, 0, 3); drawCalls++;
+    }
+
+    /* --- pass 6: tonemap, bloom, aberration, vignette, grain --- */
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, cv.width, cv.height);
+    gl.useProgram(progComposite);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, scene.tex);
+    gl.uniform1i(progComposite.u.uScene, 0);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, bloomA.tex);
+    gl.uniform1i(progComposite.u.uBloom, 1);
+    gl.uniform1f(progComposite.u.uBloomAmount, 1.15);
+    gl.uniform1f(progComposite.u.uTime, state.t);
+    gl.uniform1f(progComposite.u.uGrain, 0.022);
+    gl.uniform1f(progComposite.u.uFlash, state.flash * (state.dead ? 0.9 : 0.35));
+    gl.uniform1f(progComposite.u.uExposure, 1.28);
+    gl.drawArrays(gl.TRIANGLES, 0, 3); drawCalls++;
+
+    gl.bindVertexArray(null);
+  }
+
+  /* ---------------- adaptive resolution + loop ---------------- */
+
+  var frameEMA = 16.7, lastT = 0, acc = 0, frames = 0, scaleCooldown = 0;
+
+  function tick(now) {
+    requestAnimationFrame(tick);
+    if (!lastT) { lastT = now; return; }
+    var dt = Math.min((now - lastT) / 1000, 0.05);
+    lastT = now;
+
+    frameEMA += ((now - (tick.prev || now)) - frameEMA) * 0.08;
+    tick.prev = now;
+
+    update(dt);
+    buildInstances();
+    render();
+
+    // Trade resolution for frame rate rather than dropping frames — and show
+    // the trade in the HUD, so the cost of any effect is always visible.
+    scaleCooldown -= dt;
+    if (scaleCooldown <= 0) {
+      if (frameEMA > 21 && renderScale > 0.62) {
+        renderScale = Math.max(0.62, renderScale - 0.1); applyScale(); scaleCooldown = 1.2;
+      } else if (frameEMA < 13.5 && renderScale < 1.0) {
+        renderScale = Math.min(1.0, renderScale + 0.1); applyScale(); scaleCooldown = 1.8;
+      }
+    }
+
+    acc += dt; frames++;
+    if (acc >= 0.4) {
+      lastFps = Math.round(frames / acc);
+      elFps.textContent = lastFps;
+      elFps.className = lastFps >= 50 ? 'good' : (lastFps >= 30 ? 'fair' : 'poor');
+      elScale.textContent = Math.round(renderScale * 100) + '%';
+      elDraws.textContent = drawCalls;
+      elTris.textContent = triCount >= 1000 ? (triCount / 1000).toFixed(1) + 'k' : triCount;
+      acc = 0; frames = 0;
+    }
+  }
+
+  document.getElementById('go').addEventListener('click', function () {
+    overlay.classList.add('hide');
+    resetWorld();
+    state.running = true;
+  });
+
+  resize();
+  resetWorld();
+  elSpec.textContent = hdrLabel + ' hdr · ' + SHADOW_SIZE + '² shadow · ' +
+                       Math.min(window.devicePixelRatio || 1, 2).toFixed(1) + '× dpr';
+  requestAnimationFrame(tick);
+})();
+</script>
+</body>
+</html>
