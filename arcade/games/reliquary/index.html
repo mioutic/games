@@ -31,12 +31,17 @@
     font: 400 16px/1.45 var(--font-ui); -webkit-font-smoothing: antialiased;
     overscroll-behavior: none;
   }
-  #stage { position: fixed; inset: 0; }
+  /* Sized in JS from visualViewport: iOS reports 100vh, 100dvh and the
+     fixed-position viewport inconsistently, and a canvas game cannot afford
+     to be wrong about any of them. Everything else lives inside it. */
+  #stage { position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+           overflow: hidden; }
   canvas { display: block; width: 100%; height: 100%; touch-action: none; }
 
   .hud {
-    position: fixed; left: calc(var(--safe-l) + 12px); right: calc(var(--safe-r) + 12px);
-    top: calc(var(--safe-t) + 12px); display: flex; gap: 8px; pointer-events: none;
+    position: absolute; left: calc(var(--safe-l) + 12px); right: calc(var(--safe-r) + 12px);
+    top: calc(var(--safe-t) + 12px); display: flex; gap: 8px;
+    pointer-events: none; z-index: 7;
   }
   .panel { border: 1px solid var(--line-1); border-radius: var(--radius);
            background: rgba(11,6,9,.72); backdrop-filter: blur(8px); }
@@ -51,7 +56,9 @@
   .bearing { display: grid; place-items: center; padding: 0 10px; border-right: 1px solid var(--line-0); }
   .bearing svg { color: var(--accent); transition: transform 90ms linear; }
 
-  .diag { margin-left: auto; padding: 7px 10px 6px; min-width: 112px; }
+  .rightcol { margin-left: auto; display: flex; flex-direction: column;
+              align-items: flex-end; gap: 8px; }
+  .diag { padding: 7px 10px 6px; min-width: 112px; }
   .row { display: flex; justify-content: space-between; gap: 10px; line-height: 1.55; }
   .row span:first-child { font: 500 8.5px/1.7 var(--font-ui); letter-spacing: .14em;
                           text-transform: uppercase; color: var(--t-3); }
@@ -66,7 +73,7 @@
 
   /* ---------- on-screen controls ---------- */
   .pad {
-    position: fixed; bottom: calc(var(--safe-b) + 14px);
+    position: absolute; bottom: calc(var(--safe-b) + 14px);
     width: 116px; height: 116px; z-index: 3;
     border: 1px solid var(--line-2); border-radius: var(--radius);
     background: rgba(11,6,9,.34); touch-action: none;
@@ -93,7 +100,7 @@
   .pad.hidden, .flare.hidden { display: none; }
 
   .flare, .gear {
-    position: fixed; z-index: 3; appearance: none;
+    position: absolute; z-index: 3; appearance: none;
     border: 1px solid var(--line-2); border-radius: var(--radius);
     background: rgba(11,6,9,.6); color: var(--accent); overflow: hidden;
   }
@@ -112,9 +119,7 @@
      in z-order: this is the escape hatch, so it has to stay reachable
      precisely when a fight is covering the bottom of the screen. */
   .fight {
-    position: fixed; z-index: 7; appearance: none;
-    right: calc(var(--safe-r) + 12px);
-    top: calc(var(--safe-t) + 92px);
+    appearance: none; pointer-events: auto; flex: none;
     padding: 9px 14px; border: 1px solid var(--line-2); border-radius: var(--radius);
     background: rgba(11,6,9,.6); color: var(--t-3);
     font: 500 9px/1 var(--font-ui); letter-spacing: .16em; text-transform: uppercase;
@@ -125,14 +130,14 @@
   .fight.on { color: var(--accent); border-color: var(--accent-2); }
   .fight.on i { background: var(--accent-2); box-shadow: 0 0 8px rgba(184,29,58,.8); }
   .fight:active { background: rgba(233,216,197,.14); }
-  @media (max-height: 460px) { .fight { top: calc(var(--safe-t) + 84px); padding: 7px 11px; } }
+  @media (max-height: 460px) { .fight { padding: 7px 11px; } }
   @media (max-height: 460px) {
     .flare, .gear { bottom: calc(var(--safe-b) + 118px); }
   }
 
   /* ---------- battle ---------- */
   .battle {
-    position: fixed; z-index: 6; left: calc(var(--safe-l) + 12px); right: calc(var(--safe-r) + 12px);
+    position: absolute; z-index: 6; left: calc(var(--safe-l) + 12px); right: calc(var(--safe-r) + 12px);
     bottom: calc(var(--safe-b) + 8px); padding: 12px; display: none;
     max-height: 62%; overflow-y: auto; -webkit-overflow-scrolling: touch;
   }
@@ -166,7 +171,7 @@
 
   /* ---------- overlays ---------- */
   .overlay {
-    position: fixed; inset: 0; z-index: 5; display: flex;
+    position: absolute; inset: 0; z-index: 5; display: flex;
     align-items: center; justify-content: center; text-align: center;
     padding: calc(var(--safe-t) + 16px) calc(var(--safe-r) + 16px)
              calc(var(--safe-b) + 16px) calc(var(--safe-l) + 16px);
@@ -234,7 +239,7 @@
 </style>
 </head>
 <body>
-<div id="stage"><canvas id="cv"></canvas></div>
+<div id="stage"><canvas id="cv"></canvas>
 
 <div class="hud">
   <div class="panel rail">
@@ -249,11 +254,18 @@
     <div class="stat" id="cellSky"><div class="k">Sky</div><div class="v sm" id="sky">Night</div></div>
     <div class="stat" id="cellBest"><div class="k">Best</div><div class="v brandish" id="best">—</div></div>
   </div>
+  <div class="rightcol">
   <div class="panel diag">
     <div class="row"><span>Fps</span><span id="fps">—</span></div>
     <div class="row"><span>Scale</span><span id="scale">—</span></div>
     <div class="row"><span>Draws</span><span id="draws">—</span></div>
     <div class="row"><span>Tris</span><span id="tris">—</span></div>
+    <div class="row"><span>View</span><span id="view">—</span></div>
+    <div class="row"><span>Unused</span><span id="gap">—</span></div>
+  </div>
+  <button class="fight on" id="fight" aria-pressed="true">
+    <i></i><span id="fightLbl">Fights on</span>
+  </button>
   </div>
 </div>
 
@@ -267,10 +279,6 @@
 </div>
 
 <button class="flare" id="flare"><div class="fill" id="flareFill"></div><span>Flare</span></button>
-<button class="fight on" id="fight" aria-pressed="true">
-  <i></i><span id="fightLbl">Fights on</span>
-</button>
-
 <button class="gear" id="gear" aria-label="Settings">
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
        stroke-width="1.6" stroke-linecap="square" aria-hidden="true">
@@ -328,6 +336,12 @@
     </div>
 
     <div class="opt">
+      <div><div class="optk">Light shafts</div>
+      <div class="optd">Moonlight through the breaks in the vault. Thickens in rain.</div></div>
+      <button class="sw" id="swShafts" role="switch" aria-checked="true"><span></span></button>
+    </div>
+
+    <div class="opt">
       <div><div class="optk">Rain</div>
       <div class="optd">Falls through the broken vault, and wets the floor.</div></div>
       <button class="sw" id="swRain" role="switch" aria-checked="true"><span></span></button>
@@ -357,6 +371,8 @@
   </div>
 </div>
 
+</div>
+
 <script>
 (function () {
   'use strict';
@@ -382,6 +398,8 @@
   var elScale = document.getElementById('scale');
   var elDraws = document.getElementById('draws');
   var elTris = document.getElementById('tris');
+  var elView = document.getElementById('view');
+  var elGap = document.getElementById('gap');
   var elSpec = document.getElementById('spec');
   var arrow = document.getElementById('arrow');
 
@@ -556,6 +574,7 @@
   var parts  = makeDrawable(sphereMesh(6, 4), 640);
   var rainD  = makeDrawable(boxMesh(), 520);
   var floorD = makeDrawable(boxMesh(), 2);
+  var shaftD = makeDrawable(boxMesh(), 96);
 
   /* ---------------- shaders ---------------- */
 
@@ -573,19 +592,21 @@
 
   var sceneVS = '#version 300 es\n' + VS_IN +
     'uniform mat4 uVP;\nuniform mat4 uLightVP;\n' +
-    'out vec3 vWorld; out vec3 vNormal; out vec4 vColor; out vec4 vMat; out vec4 vLightPos;\n' +
+    'out vec3 vWorld; out vec3 vNormal; out vec2 vUV;\n' +
+    'out vec4 vColor; out vec4 vMat; out vec4 vLightPos;\n' +
     'void main(){\n' +
     '  vec4 wp = aModel * vec4(aPos,1.0);\n' +
     '  vWorld = wp.xyz;\n' +
     '  vNormal = normalize(transpose(inverse(mat3(aModel))) * aNormal);\n' +
-    '  vColor = aColor; vMat = aMat;\n' +
+    '  vColor = aColor; vMat = aMat; vUV = aUV;\n' +
     '  vLightPos = uLightVP * wp;\n' +
     '  gl_Position = uVP * wp;\n' +
     '}\n';
 
   var sceneFS = '#version 300 es\n' +
     'precision highp float;\nprecision highp sampler2DShadow;\n' +
-    'in vec3 vWorld; in vec3 vNormal; in vec4 vColor; in vec4 vMat; in vec4 vLightPos;\n' +
+    'in vec3 vWorld; in vec3 vNormal; in vec2 vUV;\n'  +
+    'in vec4 vColor; in vec4 vMat; in vec4 vLightPos;\n' +
     'out vec4 outColor;\n' +
     'uniform vec3 uEye, uSunDir, uSunColor, uAmbient, uFogColor;\n' +
     'uniform float uFogDensity, uShadowTexel, uClipY, uReflectOn, uWet;\n' +
@@ -625,6 +646,15 @@
 
     'void main(){\n' +
     '  if (vWorld.y < uClipY) discard;\n' +
+    '  if (vMat.w > 2.5) {\n' +
+    '    float e = smoothstep(0.0, 0.5, vUV.x) * smoothstep(1.0, 0.5, vUV.x);\n' +
+    '    float edge = e * e;\n' +
+    '    float drop = smoothstep(0.0, 0.55, vUV.y);\n' +
+    '    float d2 = length(uEye - vWorld);\n' +
+    '    float near = smoothstep(1.0, 5.0, d2);\n' +
+    '    outColor = vec4(vColor.rgb * vColor.a * edge * drop * near, 1.0);\n' +
+    '    return;\n' +
+    '  }\n' +
     '  vec3 albedo = vColor.rgb;\n' +
     '  float emissive=vColor.a, rough=vMat.x, metal=vMat.y, seed=vMat.z, mode=vMat.w;\n' +
     '  vec3 N = normalize(vNormal);\n' +
@@ -820,8 +850,21 @@
     allocTargets(Math.max(1, Math.round(cv.width*renderScale)),
                  Math.max(1, Math.round(cv.height*renderScale)));
   }
+  var stageEl = document.getElementById('stage');
+
+  // visualViewport is the only number iOS reports honestly across Safari,
+  // standalone and an iframe; innerHeight is the fallback for the rest.
+  function fitStage() {
+    var vv = window.visualViewport;
+    var w = Math.round(vv ? vv.width : window.innerWidth);
+    var h = Math.round(vv ? vv.height : window.innerHeight);
+    stageEl.style.width = w + 'px';
+    stageEl.style.height = h + 'px';
+  }
+
   function resize() {
-    var stage = document.getElementById('stage');
+    fitStage();
+    var stage = stageEl;
     cssW = Math.max(1, stage.clientWidth);
     cssH = Math.max(1, stage.clientHeight);
     dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -831,7 +874,13 @@
   }
   window.addEventListener('resize', resize);
   // Safari reports the old size during the rotation itself.
-  window.addEventListener('orientationchange', function () { setTimeout(resize, 250); });
+  window.addEventListener('orientationchange', function () {
+    setTimeout(resize, 60); setTimeout(resize, 260); setTimeout(resize, 600);
+  });
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', resize);
+    window.visualViewport.addEventListener('scroll', resize);
+  }
 
   /* ---------------- palette ---------------- */
 
@@ -989,13 +1038,15 @@
   /* ---------------- day / night + weather ---------------- */
 
   var weather = { rain: 0, target: 0, next: 20 };
-  var sky = { t: 0, sun: [0,-1,0], color: MOON, ambient: 0.03, fog: NIGHT_FOG, label: 'Night' };
+  var sky = { t: 0, day: 0, sun: [0,-1,0], color: MOON, ambient: 0.03,
+              fog: NIGHT_FOG, label: 'Night' };
 
   function updateSky(dt) {
     sky.t = (sky.t + dt/DAY_LEN) % 1;
     var ang = sky.t*Math.PI*2;
     var elev = Math.sin(ang);
     var day = clamp((elev + 0.25)/1.0, 0, 1);
+    sky.day = day;
 
     var dy = -(0.35 + 0.6*day);
     var dx = -0.38*Math.cos(ang*0.5), dz = -0.30;
@@ -1023,8 +1074,8 @@
 
   /* ---------------- settings ---------------- */
 
-  var settings = { fullscreen: false, reflect: true, rain: true, look: 10,
-                   haptics: true, grain: true, diag: true, fights: true };
+  var settings = { fullscreen: false, reflect: true, rain: true, shafts: true,
+                   look: 10, haptics: true, grain: true, diag: true, fights: true };
   try {
     var sv = JSON.parse(localStorage.getItem(SKEY) || 'null');
     if (sv) for (var sk in settings) if (sv[sk] !== undefined) settings[sk] = sv[sk];
@@ -1481,7 +1532,8 @@
   }
 
   function buildInstances() {
-    boxes.reset(); orbs.reset(); dust.reset(); parts.reset(); rainD.reset(); floorD.reset();
+    boxes.reset(); orbs.reset(); dust.reset(); parts.reset();
+    rainD.reset(); floorD.reset(); shaftD.reset();
 
     floorD.push(0, -0.25, 0, HALL*2, 0.5, HALL*2, 0, STONE, 0, 0.34, 0.0, 1, 2);
 
@@ -1555,7 +1607,24 @@
       rainD.push(dr.x, dr.y, dr.z, 0.028, dr.len, 0.028, 0, BONE, 0.45, 1.0, 0.0, 0, 1);
     }
 
-    boxes.upload(); orbs.upload(); dust.upload(); parts.upload(); rainD.upload(); floorD.upload();
+    if (settings.shafts) {
+      // The moon alone has to throw a visible beam — it is the key light of
+      // the whole scene — and rain gives it more to catch.
+      var glow = (0.085 + 0.20 * sky.day) * (0.5 + 0.5 * weather.rain);
+      var tint = mix3(MOON, PALEDAY, sky.day);
+      for (var q = 0; q < world.open.length; q++) {
+        var oc = world.open[q];
+        if (Math.hypot(oc.x - state.x, oc.z - state.z) > 24) continue;
+        // Leaning with the sun, so the shafts move as the day turns.
+        var leanX = -sky.sun[0] / Math.abs(sky.sun[1]) * CEIL_Y * 0.5;
+        var leanZ = -sky.sun[2] / Math.abs(sky.sun[1]) * CEIL_Y * 0.5;
+        shaftD.push(oc.x + leanX, CEIL_Y * 0.5, oc.z + leanZ,
+                    COL_STEP * 0.5, CEIL_Y, COL_STEP * 0.5, 0, tint, glow, 1, 0, 0, 3);
+      }
+    }
+
+    boxes.upload(); orbs.upload(); dust.upload(); parts.upload();
+    rainD.upload(); floorD.upload(); shaftD.upload();
   }
 
   function pickLights() {
@@ -1663,6 +1732,17 @@
     drawCalls += rainD.draw();  triCount += rainD.tris*rainD.n;
     drawCalls += floorD.draw(); triCount += floorD.tris*floorD.n;
 
+    if (settings.shafts && shaftD.n) {
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.ONE, gl.ONE);
+      gl.depthMask(false);
+      gl.disable(gl.CULL_FACE);          // you can stand inside a shaft
+      drawCalls += shaftD.draw(); triCount += shaftD.tris * shaftD.n;
+      gl.depthMask(true);
+      gl.disable(gl.BLEND);
+      gl.enable(gl.CULL_FACE);
+    }
+
     gl.disable(gl.DEPTH_TEST); gl.disable(gl.CULL_FACE);
     gl.bindVertexArray(emptyVAO);
     gl.bindFramebuffer(gl.FRAMEBUFFER, bloomA.fbo);
@@ -1737,6 +1817,11 @@
       elScale.textContent = Math.round(renderScale*100) + '%';
       elDraws.textContent = drawCalls;
       elTris.textContent = triCount >= 1000 ? (triCount/1000).toFixed(1) + 'k' : triCount;
+      elView.textContent = Math.round(cssW) + '×' + Math.round(cssH);
+      // How much of the physical screen the stage is not covering. Should
+      // read 0; anything else is Safari handing us a short viewport.
+      var screenH = Math.max(screen.width || 0, screen.height || 0);
+      elGap.textContent = screenH ? Math.round(screenH - cssH) + 'px' : '—';
       acc = 0; frames = 0;
     }
   }
@@ -1747,6 +1832,7 @@
   var diagEl = document.querySelector('.diag');
   var swFs = document.getElementById('swFs');
   var swReflect = document.getElementById('swReflect');
+  var swShafts = document.getElementById('swShafts');
   var swRain = document.getElementById('swRain');
   var swHaptic = document.getElementById('swHaptic');
   var swGrain = document.getElementById('swGrain');
@@ -1759,6 +1845,7 @@
     applyFights();
     setSwitch(swFs, settings.fullscreen);
     setSwitch(swReflect, settings.reflect);
+    setSwitch(swShafts, settings.shafts);
     setSwitch(swRain, settings.rain);
     setSwitch(swHaptic, settings.haptics);
     setSwitch(swGrain, settings.grain);
@@ -1794,6 +1881,7 @@
     setTimeout(resize, 140);
   });
   swReflect.addEventListener('click', function () { settings.reflect = !settings.reflect; applySettings(); });
+  swShafts.addEventListener('click', function () { settings.shafts = !settings.shafts; applySettings(); });
   swRain.addEventListener('click', function () { settings.rain = !settings.rain; applySettings(); });
   swHaptic.addEventListener('click', function () { settings.haptics = !settings.haptics; applySettings(); buzz(10); });
   swGrain.addEventListener('click', function () { settings.grain = !settings.grain; applySettings(); });

@@ -112,6 +112,38 @@ The rules that follow from it:
 - A game may lock itself to portrait in the manifest, but the launcher chrome
   and every settings sheet still have to survive being turned.
 
+### Safari's viewport cannot be trusted — measure it
+
+iOS reports its viewport several different ways and they disagree, so anything
+that must cover the screen exactly is measured at runtime, never inferred from
+a unit.
+
+- `100vh` is the **largest** viewport, with the browser toolbars retracted, so
+  it overflows whenever they are showing. `100svh` is the smallest, `100lvh`
+  the largest, `100dvh` tracks the current state — and recent Safari versions
+  have shipped a bug where `100dvh` leaves a gap at the bottom anyway.
+- `position: fixed; inset: 0` sizes to the *layout* viewport, which is not the
+  visible area while a toolbar is overlaying it.
+- `env(safe-area-inset-bottom)` is 0 in Safari while the bottom toolbar is
+  present and about 34px when it is not, so it silently changes meaning. Cap it
+  — `min(env(safe-area-inset-bottom, 0px), 34px)` — so an inflated value can
+  never claim a band of screen.
+
+**The pattern that works:** one `#stage` element, `position: fixed; top: 0;
+left: 0`, whose width and height are set in JavaScript from
+`window.visualViewport` (falling back to `innerWidth/innerHeight`). Every other
+element — HUD, controls, overlays — lives *inside* that stage and is positioned
+`absolute`, so the whole interface is bounded by the measured area rather than
+by whichever viewport the browser felt like reporting.
+
+Re-measure on `resize`, on `visualViewport`'s own `resize` and `scroll`, and on
+`orientationchange` — the last one several times over about half a second,
+because Safari reports the pre-rotation size during the rotation itself.
+
+Where the fit matters, **put the number on screen**. A readout of the stage
+size against `screen.height` turns "it looks like there's a gap" into a figure
+that can be acted on; guessing at someone else's device is not a technique.
+
 ## Typography
 
 Display face is a serif — `Georgia, "Times New Roman", serif` — against a normal
