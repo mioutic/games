@@ -1,0 +1,2331 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Barrow</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<style>
+  /* Sanguine — see DESIGN.md. Bone is the accent, crimson is decorative. */
+  :root {
+    --s-0: #0b0609;  --s-1: #12080c;  --s-2: #1a0d12;
+    --t-0: #f2e6e6;  --t-1: #c3a9ad;  --t-2: #8f6f76;  --t-3: #5c434a;
+    --accent: #e9d8c5;  --accent-2: #b81d3a;  --brand: #d9557a;
+    --line-0: #150a0e;  --line-1: #2a141c;  --line-2: #3d1f28;
+    --success: #5fa777;  --warning: #d9a441;  --error: #ff5470;
+    --bloom: 0 0 12px rgba(216,58,88,.45), 0 0 26px rgba(216,58,88,.16);
+    --lit-within: inset 0 0 60px rgba(184,29,58,.05);
+    --font-display: Georgia, "Times New Roman", serif;
+    --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+    --radius: 2px;  --dur: 160ms;  --ease: cubic-bezier(.2,.6,.2,1);
+
+    --safe-t: env(safe-area-inset-top, 0px);
+    --safe-r: env(safe-area-inset-right, 0px);
+    --safe-b: min(env(safe-area-inset-bottom, 0px), 34px);
+    --safe-l: env(safe-area-inset-left, 0px);
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent;
+      -webkit-user-select: none; user-select: none; }
+  html, body {
+    margin: 0; padding: 0; height: 100%; overflow: hidden;
+    background: #000; color: var(--t-0);
+    font: 400 15px/1.5 var(--font-ui);
+    overscroll-behavior: none; touch-action: none;
+  }
+  /* One measured stage; everything else is absolute inside it (PLATFORM.md). */
+  #stage { position: fixed; top: 0; left: 0; overflow: hidden; background: #000; }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+  .micro { font: 500 9px/1 var(--font-ui); letter-spacing: .18em;
+           text-transform: uppercase; color: var(--t-2); }
+
+  .panel {
+    background: rgba(11,6,9,.62); border: 1px solid var(--line-1);
+    border-radius: var(--radius); backdrop-filter: blur(7px);
+    box-shadow: var(--lit-within);
+  }
+
+  /* ---------- HUD ---------- */
+  .hud { position: absolute; inset: 0; pointer-events: none; z-index: 4; }
+
+  .vitals {
+    position: absolute; left: calc(var(--safe-l) + 12px); top: calc(var(--safe-t) + 12px);
+    width: 168px; padding: 8px 10px 8px;
+  }
+  .meter { margin-bottom: 6px; }
+  .meter:last-child { margin-bottom: 0; }
+  .meterhead { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .meterhead b { font: 500 11px/1 var(--font-mono); font-variant-numeric: tabular-nums;
+                 color: var(--t-1); }
+  .track { height: 5px; margin-top: 4px; background: rgba(233,216,197,.10);
+           border: 1px solid var(--line-1); position: relative; overflow: hidden; }
+  .track i { position: absolute; inset: 0 auto 0 0; display: block;
+             transition: width 120ms linear; }
+  .track.hp i  { background: linear-gradient(90deg, #b81d3a, #ff5470); }
+  .track.hp.low i { background: var(--error); animation: pulse 700ms steps(2) infinite; }
+  .track.sta i { background: var(--accent); opacity: .82; }
+  @keyframes pulse { 50% { opacity: .35; } }
+  /* Segment ticks, so the bars read as instruments not progress bars. */
+  .track::after {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    background: repeating-linear-gradient(90deg, transparent 0 15px,
+                rgba(11,6,9,.85) 15px 16px);
+  }
+
+  .diag {
+    position: absolute; right: calc(var(--safe-r) + 12px); top: calc(var(--safe-t) + 12px);
+    width: 132px; padding: 7px 9px; font: 500 10px/1.5 var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+  .diag.off { display: none; }
+  .diag .row { display: flex; justify-content: space-between; gap: 8px; color: var(--t-3); }
+  .diag .row span:last-child { color: var(--t-1); }
+  .diag .good { color: var(--success); } .diag .fair { color: var(--warning); }
+  .diag .poor { color: var(--error); }
+
+  /* The objective rides inside the vitals panel. A separate centred banner
+     collided with it at 390px wide, and the notch owns that strip anyway. */
+  .objective { padding-bottom: 7px; margin-bottom: 7px;
+               border-bottom: 1px solid var(--line-1); }
+  .objective .v { font: 400 14px/1.2 var(--font-display); letter-spacing: .03em;
+                  color: var(--t-0); margin-top: 3px; }
+
+  /* Crosshair: a bracket, not a dot. Opens while a swing is live. */
+  .reticle {
+    position: absolute; left: 50%; top: 50%; width: 26px; height: 26px;
+    margin: -13px 0 0 -13px; opacity: .55;
+    transition: transform 90ms var(--ease), opacity 90ms var(--ease);
+  }
+  .reticle.hot { transform: scale(1.5); opacity: .9; }
+  .reticle i {
+    position: absolute; width: 7px; height: 7px; border: 1px solid var(--accent);
+  }
+  .reticle i:nth-child(1) { left: 0; top: 0; border-right: 0; border-bottom: 0; }
+  .reticle i:nth-child(2) { right: 0; top: 0; border-left: 0; border-bottom: 0; }
+  .reticle i:nth-child(3) { left: 0; bottom: 0; border-right: 0; border-top: 0; }
+  .reticle i:nth-child(4) { right: 0; bottom: 0; border-left: 0; border-top: 0; }
+
+  /* ---------- controls ---------- */
+  .pad {
+    position: absolute; width: 118px; height: 118px; pointer-events: auto;
+    border: 1px solid var(--line-1); border-radius: var(--radius);
+    background: rgba(233,216,197,.03); touch-action: none;
+    bottom: calc(var(--safe-b) + 14px);
+  }
+  .pad.left  { left: calc(var(--safe-l) + 16px); }
+  .pad.right { right: calc(var(--safe-r) + 16px); }
+  .pad::before, .pad::after {
+    content: ""; position: absolute; background: var(--line-1);
+  }
+  .pad::before { left: 8px; right: 8px; top: 50%; height: 1px; }
+  .pad::after { top: 8px; bottom: 8px; left: 50%; width: 1px; }
+  .pad .knob {
+    position: absolute; left: 50%; top: 50%; width: 42px; height: 42px;
+    margin: -21px 0 0 -21px; border-radius: var(--radius);
+    background: rgba(233,216,197,.16); border: 1px solid var(--line-2);
+  }
+  .pad.active .knob { background: rgba(233,216,197,.26); border-color: var(--accent-2); }
+  .pad .lbl { position: absolute; left: 0; right: 0; bottom: -15px; text-align: center; }
+  .pad.hidden { display: none; }
+
+  /* Attack and block sit above the right pad, under the thumb in both
+     orientations (DESIGN.md: controls reposition, they do not just shrink). */
+  .act {
+    position: absolute; pointer-events: auto; appearance: none;
+    border: 1px solid var(--line-2); border-radius: var(--radius);
+    background: rgba(11,6,9,.6); color: var(--t-1);
+    font: 500 9px/1 var(--font-ui); letter-spacing: .16em; text-transform: uppercase;
+    display: grid; place-items: center; touch-action: none;
+  }
+  .act:active, .act.on { background: rgba(233,216,197,.16); color: var(--accent);
+                         border-color: var(--accent-2); }
+  .act[disabled] { color: var(--t-3); border-color: var(--line-1); }
+  .strike { right: calc(var(--safe-r) + 16px); bottom: calc(var(--safe-b) + 146px);
+            width: 118px; height: 54px; }
+  .guard  { right: calc(var(--safe-r) + 146px); bottom: calc(var(--safe-b) + 146px);
+            width: 76px; height: 54px; }
+  .gear   { left: calc(var(--safe-l) + 16px); bottom: calc(var(--safe-b) + 146px);
+            width: 46px; height: 46px; }
+
+  @media (max-height: 460px) {
+    .pad { width: 96px; height: 96px; }
+    .strike { bottom: calc(var(--safe-b) + 118px); height: 46px; }
+    .guard  { bottom: calc(var(--safe-b) + 118px); height: 46px; }
+    .gear   { bottom: calc(var(--safe-b) + 118px); }
+    .diag { display: none; }
+  }
+
+  /* ---------- overlays ---------- */
+  .overlay {
+    position: absolute; inset: 0; z-index: 6; display: flex;
+    align-items: center; justify-content: center; text-align: center;
+    padding: calc(var(--safe-t) + 16px) calc(var(--safe-r) + 16px)
+             calc(var(--safe-b) + 16px) calc(var(--safe-l) + 16px);
+    background: rgba(5,2,3,.9); overflow-y: auto; -webkit-overflow-scrolling: touch;
+  }
+  .overlay.hide { display: none; }
+  .card { width: 100%; max-width: 340px; max-height: 100%; overflow-y: auto;
+          -webkit-overflow-scrolling: touch; padding: 18px 16px 16px; text-align: left; }
+  .cardhead { display: flex; align-items: center; gap: 9px; margin-bottom: 4px; }
+  .ornament { color: var(--accent-2); font-size: 12px; }
+  h2 { font: 400 27px/1.1 var(--font-display); letter-spacing: .04em; margin: 0 0 10px;
+       text-align: center; }
+  h3 { font: 400 17px/1 var(--font-display); letter-spacing: .04em; margin: 0; }
+  .lede { color: var(--t-2); font-size: 13px; line-height: 1.65; margin: 0 0 18px;
+          text-align: center; }
+  .big { font: 500 44px/1 var(--font-mono); font-variant-numeric: tabular-nums;
+         color: var(--accent); text-align: center; }
+  .big small { font: 500 10px/1 var(--font-ui); letter-spacing: .18em;
+               text-transform: uppercase; color: var(--t-2); display: block; margin-top: 9px; }
+
+  button.go {
+    appearance: none; border: 1px solid var(--accent); border-radius: var(--radius);
+    padding: 13px 30px; background: var(--accent); color: var(--s-0);
+    font: 500 11px/1 var(--font-ui); letter-spacing: .18em; text-transform: uppercase;
+  }
+  button.go:active { transform: scale(.98); box-shadow: var(--bloom); }
+  button.go.wide { display: block; width: 100%; margin-top: 16px; }
+  button.go.ghost { background: transparent; color: var(--accent); border-color: var(--line-2); }
+
+  .opt { display: flex; align-items: center; justify-content: space-between; gap: 14px;
+         padding: 11px 0; border-bottom: 1px solid var(--line-0); }
+  .opt.off { display: none; }
+  .optk { font-size: 13.5px; color: var(--t-0); }
+  .optd { font-size: 11px; color: var(--t-3); margin-top: 2px; line-height: 1.45; }
+  .sw { appearance: none; flex: none; width: 44px; height: 25px; padding: 2px;
+        border: 1px solid var(--line-2); border-radius: var(--radius);
+        background: var(--s-2); position: relative; }
+  .sw span { display: block; width: 18px; height: 19px; background: var(--t-3);
+             border-radius: 1px; transition: transform var(--dur) var(--ease),
+             background var(--dur) var(--ease); }
+  .sw[aria-checked="true"] { border-color: var(--accent-2); }
+  .sw[aria-checked="true"] span { transform: translateX(19px); background: var(--accent); }
+  .rng { flex: none; width: 132px; accent-color: var(--accent); }
+
+  .keys { display: flex; gap: 8px; justify-content: center; margin-bottom: 18px; }
+  .keyk { flex: 1; text-align: center; padding: 9px 4px; border: 1px solid var(--line-1);
+          border-radius: var(--radius); }
+  .keyk b { display: block; font: 400 15px/1 var(--font-display); color: var(--accent);
+            margin-bottom: 5px; }
+  .keyk span { font-size: 10px; color: var(--t-3); line-height: 1.3; display: block; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition-duration: 1ms !important; }
+  }
+</style>
+</head>
+<body>
+
+<div id="stage">
+<canvas id="cv"></canvas>
+
+<div class="hud">
+  <div class="panel vitals">
+    <div class="objective">
+      <div class="k micro">Objective</div>
+      <div class="v" id="objV">Find the sigil</div>
+    </div>
+    <div class="meter">
+      <div class="meterhead"><span class="micro">Vigour</span><b id="hpNum">100</b></div>
+      <div class="track hp" id="hpTrack"><i id="hpFill" style="width:100%"></i></div>
+    </div>
+    <div class="meter">
+      <div class="meterhead"><span class="micro">Wind</span><b id="stNum">100</b></div>
+      <div class="track sta"><i id="stFill" style="width:100%"></i></div>
+    </div>
+  </div>
+
+  <div class="panel diag">
+    <div class="row"><span>Fps</span><span id="fps">—</span></div>
+    <div class="row"><span>Scale</span><span id="scale">—</span></div>
+    <div class="row"><span>Draws</span><span id="draws">—</span></div>
+    <div class="row"><span>Tris</span><span id="tris">—</span></div>
+    <div class="row"><span>View</span><span id="view">—</span></div>
+    <div class="row"><span>Unused</span><span id="gap">—</span></div>
+  </div>
+
+  <div class="reticle" id="reticle"><i></i><i></i><i></i><i></i></div>
+
+  <div class="pad left" id="padMove"><div class="knob"></div><div class="lbl micro">Move</div></div>
+  <div class="pad right" id="padLook"><div class="knob"></div><div class="lbl micro">Look</div></div>
+
+  <button class="act strike" id="btnStrike">Strike</button>
+  <button class="act guard" id="btnGuard">Guard</button>
+  <button class="act gear" id="btnGear" aria-label="Settings">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="1.5" stroke-linecap="square" aria-hidden="true">
+      <circle cx="12" cy="12" r="3.2"/>
+      <path d="M12 2.6v3M12 18.4v3M2.6 12h3M18.4 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M18.7 5.3l-2.1 2.1M7.4 16.6l-2.1 2.1"/>
+    </svg>
+  </button>
+</div>
+
+<div class="overlay" id="intro">
+  <div class="panel card">
+    <h2>Barrow</h2>
+    <p class="lede">A tomb under a tomb. Your torch is the only light, and the
+      dead down here still hold their iron.</p>
+    <div class="keys">
+      <div class="keyk"><b>❖</b><span>Left pad<br>moves</span></div>
+      <div class="keyk"><b>✦</b><span>Right pad<br>looks</span></div>
+      <div class="keyk"><b>‡</b><span>Strike<br>and guard</span></div>
+    </div>
+    <p class="lede" style="margin-bottom:14px">The blade is real. It only hits what
+      it actually passes through — aim it, do not point at things.</p>
+    <div style="text-align:center"><button class="go" id="btnGo">Descend</button></div>
+    <button class="go ghost wide" id="btnSettingsFromIntro">Settings</button>
+  </div>
+</div>
+
+<div class="overlay hide" id="over">
+  <div class="panel card">
+    <div id="overHead"></div>
+    <div style="text-align:center;margin-top:18px">
+      <button class="go" id="btnAgain">Again</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay hide" id="settings">
+  <div class="panel card">
+    <div class="cardhead"><span class="ornament">❦</span><h3>Settings</h3></div>
+
+    <div class="opt" id="rowFs">
+      <div><div class="optk">Fullscreen</div>
+      <div class="optd">Hide the Arcade bar entirely. Leave, below, still gets you out.</div></div>
+      <button class="sw" id="swFs" role="switch" aria-checked="false"><span></span></button>
+    </div>
+
+    <div class="opt">
+      <div><div class="optk">Torch shadows</div>
+      <div class="optd">The dungeon is shadow-mapped from your own torch. The most expensive thing here.</div></div>
+      <button class="sw" id="swShadow" role="switch" aria-checked="true"><span></span></button>
+    </div>
+
+    <div class="opt">
+      <div><div class="optk">Look speed</div><div class="optd"><span id="lookVal">1.0</span>×</div></div>
+      <input class="rng" id="look" type="range" min="4" max="22" step="1" value="10">
+    </div>
+
+    <div class="opt">
+      <div><div class="optk">Invert look</div><div class="optd">Drag down to look up.</div></div>
+      <button class="sw" id="swInvert" role="switch" aria-checked="false"><span></span></button>
+    </div>
+
+    <div class="opt">
+      <div><div class="optk">Haptics</div><div class="optd">Buzz on hits and on being hit.</div></div>
+      <button class="sw" id="swHaptic" role="switch" aria-checked="true"><span></span></button>
+    </div>
+
+    <div class="opt">
+      <div><div class="optk">Film grain</div><div class="optd">Sensor noise over the image.</div></div>
+      <button class="sw" id="swGrain" role="switch" aria-checked="true"><span></span></button>
+    </div>
+
+    <div class="opt">
+      <div><div class="optk">Diagnostics</div><div class="optd">Frame rate and render cost.</div></div>
+      <button class="sw" id="swDiag" role="switch" aria-checked="true"><span></span></button>
+    </div>
+
+    <button class="go wide" id="btnResume">Resume</button>
+    <button class="go ghost wide" id="btnLeave" style="margin-top:8px">Leave to Arcade</button>
+  </div>
+</div>
+
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var cv = document.getElementById('cv');
+  var gl = cv.getContext('webgl2', {
+    antialias: false, alpha: false, depth: true,
+    powerPreference: 'high-performance', preserveDrawingBuffer: false
+  });
+  var framed = window.self !== window.top;
+
+  if (!gl) {
+    document.getElementById('intro').innerHTML =
+      '<div class="panel card"><h2>Barrow</h2>' +
+      '<p class="lede">This device has no WebGL2, which is all this game is.</p></div>';
+    return;
+  }
+
+  var BKEY = 'barrow.best', SKEY = 'barrow.settings';
+
+  var elHp = document.getElementById('hpFill'), elHpNum = document.getElementById('hpNum');
+  var elHpTrack = document.getElementById('hpTrack');
+  var elSt = document.getElementById('stFill'), elStNum = document.getElementById('stNum');
+  var elObjV = document.getElementById('objV');
+  var elFps = document.getElementById('fps'), elScale = document.getElementById('scale');
+  var elDraws = document.getElementById('draws'), elTris = document.getElementById('tris');
+  var elView = document.getElementById('view'), elGap = document.getElementById('gap');
+  var reticle = document.getElementById('reticle');
+  var padMoveEl = document.getElementById('padMove'), padLookEl = document.getElementById('padLook');
+  var strikeBtn = document.getElementById('btnStrike'), guardBtn = document.getElementById('btnGuard');
+
+  /* ---------------- matrices ---------------- */
+
+  function m4mul(a, b, out) {
+    out = out || new Float32Array(16);
+    for (var c = 0; c < 4; c++) {
+      var b0=b[c*4], b1=b[c*4+1], b2=b[c*4+2], b3=b[c*4+3];
+      out[c*4]   = a[0]*b0 + a[4]*b1 + a[8]*b2  + a[12]*b3;
+      out[c*4+1] = a[1]*b0 + a[5]*b1 + a[9]*b2  + a[13]*b3;
+      out[c*4+2] = a[2]*b0 + a[6]*b1 + a[10]*b2 + a[14]*b3;
+      out[c*4+3] = a[3]*b0 + a[7]*b1 + a[11]*b2 + a[15]*b3;
+    }
+    return out;
+  }
+  function m4perspective(fovy, aspect, near, far) {
+    var f = 1/Math.tan(fovy/2), nf = 1/(near-far);
+    return new Float32Array([f/aspect,0,0,0, 0,f,0,0, 0,0,(far+near)*nf,-1, 0,0,2*far*near*nf,0]);
+  }
+  function m4lookAt(ex, ey, ez, cx, cy, cz, ux, uy, uz) {
+    var zx=ex-cx, zy=ey-cy, zz=ez-cz;
+    var zl=Math.hypot(zx,zy,zz)||1; zx/=zl; zy/=zl; zz/=zl;
+    var xx=uy*zz-uz*zy, xy=uz*zx-ux*zz, xz=ux*zy-uy*zx;
+    var xl=Math.hypot(xx,xy,xz)||1; xx/=xl; xy/=xl; xz/=xl;
+    var yx=zy*xz-zz*xy, yy=zz*xx-zx*xz, yz=zx*xy-zy*xx;
+    return new Float32Array([xx,yx,zx,0, xy,yy,zy,0, xz,yz,zz,0,
+      -(xx*ex+xy*ey+xz*ez), -(yx*ex+yy*ey+yz*ez), -(zx*ex+zy*ey+zz*ez), 1]);
+  }
+  function writeTRS(buf, o, px, py, pz, sx, sy, sz, ry) {
+    var c=Math.cos(ry), s=Math.sin(ry);
+    buf[o]=c*sx; buf[o+1]=0; buf[o+2]=-s*sx; buf[o+3]=0;
+    buf[o+4]=0; buf[o+5]=sy; buf[o+6]=0; buf[o+7]=0;
+    buf[o+8]=s*sz; buf[o+9]=0; buf[o+10]=c*sz; buf[o+11]=0;
+    buf[o+12]=px; buf[o+13]=py; buf[o+14]=pz; buf[o+15]=1;
+  }
+  // Aims the mesh's local +Y down an arbitrary vector, so a unit mesh centred
+  // on the origin becomes a bone — or a blade — between two points.
+  function writeAim(buf, o, px, py, pz, dx, dy, dz, len, rx, rz, rollX, rollY, rollZ) {
+    var l = Math.hypot(dx, dy, dz) || 1;
+    var yx = dx/l, yy = dy/l, yz = dz/l;
+    // Seed the basis with a reference axis so a blade's flat can be oriented.
+    var ax = rollX, ay = rollY, az = rollZ;
+    if (ax === undefined) {
+      if (Math.abs(yy) > 0.985) { ax = 1; ay = 0; az = 0; }
+      else { ax = 0; ay = 1; az = 0; }
+    }
+    var xx = ay*yz - az*yy, xy = az*yx - ax*yz, xz = ax*yy - ay*yx;
+    var xl = Math.hypot(xx, xy, xz);
+    if (xl < 1e-5) {
+      ax = Math.abs(yy) > 0.985 ? 1 : 0; ay = Math.abs(yy) > 0.985 ? 0 : 1; az = 0;
+      xx = ay*yz - az*yy; xy = az*yx - ax*yz; xz = ax*yy - ay*yx;
+      xl = Math.hypot(xx, xy, xz) || 1;
+    }
+    xx/=xl; xy/=xl; xz/=xl;
+    var zx = xy*yz - xz*yy, zy = xz*yx - xx*yz, zz = xx*yy - xy*yx;
+    buf[o]=xx*rx;    buf[o+1]=xy*rx;   buf[o+2]=xz*rx;   buf[o+3]=0;
+    buf[o+4]=yx*len; buf[o+5]=yy*len;  buf[o+6]=yz*len;  buf[o+7]=0;
+    buf[o+8]=zx*rz;  buf[o+9]=zy*rz;   buf[o+10]=zz*rz;  buf[o+11]=0;
+    buf[o+12]=px; buf[o+13]=py; buf[o+14]=pz; buf[o+15]=1;
+  }
+
+  /* ---------------- gl helpers ---------------- */
+
+  function compile(type, src, label) {
+    var sh = gl.createShader(type);
+    gl.shaderSource(sh, src); gl.compileShader(sh);
+    if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error(label + ': ' + gl.getShaderInfoLog(sh));
+    return sh;
+  }
+  function program(vs, fs, label) {
+    var p = gl.createProgram();
+    gl.attachShader(p, compile(gl.VERTEX_SHADER, vs, label + '.vert'));
+    gl.attachShader(p, compile(gl.FRAGMENT_SHADER, fs, label + '.frag'));
+    gl.linkProgram(p);
+    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(label + ' link: ' + gl.getProgramInfoLog(p));
+    p.u = {};
+    var n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS);
+    for (var i = 0; i < n; i++) {
+      var nm = gl.getActiveUniform(p, i).name.replace(/\[0\]$/, '');
+      p.u[nm] = gl.getUniformLocation(p, nm);
+    }
+    return p;
+  }
+
+  /* ---------------- meshes ---------------- */
+
+  function boxMesh() {
+    var v = [], idx = [];
+    var faces = [
+      [[0,0,1],[1,0,0],[0,1,0]], [[0,0,-1],[-1,0,0],[0,1,0]],
+      [[1,0,0],[0,0,-1],[0,1,0]], [[-1,0,0],[0,0,1],[0,1,0]],
+      [[0,1,0],[1,0,0],[0,0,-1]], [[0,-1,0],[1,0,0],[0,0,1]]
+    ];
+    for (var f = 0; f < 6; f++) {
+      var n=faces[f][0], t=faces[f][1], b=faces[f][2], base=v.length/8;
+      for (var j = 0; j < 4; j++) {
+        var su=(j===1||j===2)?1:-1, sv=(j>=2)?1:-1;
+        v.push((n[0]+t[0]*su+b[0]*sv)*0.5, (n[1]+t[1]*su+b[1]*sv)*0.5, (n[2]+t[2]*su+b[2]*sv)*0.5,
+               n[0], n[1], n[2], (su+1)*0.5, (sv+1)*0.5);
+      }
+      idx.push(base, base+1, base+2, base, base+2, base+3);
+    }
+    return { v: new Float32Array(v), i: new Uint16Array(idx) };
+  }
+  function sphereMesh(seg, ring) {
+    var v = [], idx = [];
+    for (var y = 0; y <= ring; y++) {
+      var phi=y/ring*Math.PI, sp=Math.sin(phi), cp=Math.cos(phi);
+      for (var x = 0; x <= seg; x++) {
+        var th=x/seg*Math.PI*2, nx=sp*Math.cos(th), nz=sp*Math.sin(th);
+        v.push(nx*0.5, cp*0.5, nz*0.5, nx, cp, nz, x/seg, y/ring);
+      }
+    }
+    for (var yy = 0; yy < ring; yy++) for (var xx = 0; xx < seg; xx++) {
+      var a=yy*(seg+1)+xx, b=a+seg+1;
+      idx.push(a,b,a+1, a+1,b,b+1);
+    }
+    return { v: new Float32Array(v), i: new Uint16Array(idx) };
+  }
+
+  var INST_FLOATS = 24;
+
+  function makeDrawable(mesh, maxInstances) {
+    var d = { count: mesh.i.length, tris: mesh.i.length/3, n: 0, max: maxInstances };
+    d.data = new Float32Array(maxInstances * INST_FLOATS);
+    d.vao = gl.createVertexArray();
+    gl.bindVertexArray(d.vao);
+    var vb = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, vb);
+    gl.bufferData(gl.ARRAY_BUFFER, mesh.v, gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0,3,gl.FLOAT,false,32,0);
+    gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1,3,gl.FLOAT,false,32,12);
+    gl.enableVertexAttribArray(2); gl.vertexAttribPointer(2,2,gl.FLOAT,false,32,24);
+    var ib = gl.createBuffer();
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, mesh.i, gl.STATIC_DRAW);
+    d.ib = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, d.ib);
+    gl.bufferData(gl.ARRAY_BUFFER, d.data.byteLength, gl.DYNAMIC_DRAW);
+    var stride = INST_FLOATS*4;
+    for (var k = 0; k < 4; k++) {
+      gl.enableVertexAttribArray(3+k);
+      gl.vertexAttribPointer(3+k,4,gl.FLOAT,false,stride,k*16);
+      gl.vertexAttribDivisor(3+k,1);
+    }
+    gl.enableVertexAttribArray(7); gl.vertexAttribPointer(7,4,gl.FLOAT,false,stride,64);
+    gl.vertexAttribDivisor(7,1);
+    gl.enableVertexAttribArray(8); gl.vertexAttribPointer(8,4,gl.FLOAT,false,stride,80);
+    gl.vertexAttribDivisor(8,1);
+    gl.bindVertexArray(null);
+
+    d.reset = function () { d.n = 0; };
+    // mode: 0 lit stone, 1 self-lit, 2 carried, 3 bone
+    d.push = function (px,py,pz, sx,sy,sz, ry, col, emis, rough, metal, seed, mode) {
+      if (d.n >= d.max) return;
+      var o = d.n * INST_FLOATS;
+      writeTRS(d.data, o, px,py,pz, sx,sy,sz, ry);
+      d.data[o+16]=col[0]; d.data[o+17]=col[1]; d.data[o+18]=col[2]; d.data[o+19]=emis;
+      d.data[o+20]=rough; d.data[o+21]=metal; d.data[o+22]=seed; d.data[o+23]=mode||0;
+      d.n++;
+    };
+    // `rad` is the thickness across; `extend` is how far past the endpoints the
+    // caps run, in thicknesses — 1 for a bone so the caps swallow the joint
+    // seam, 0 for a blade whose two points are its actual ends.
+    d.pushSeg = function (ax,ay,az, bx,by,bz, rad, col, emis, rough, metal, seed, mode,
+                          bulge, extend, roll) {
+      if (d.n >= d.max) return;
+      var o = d.n * INST_FLOATS;
+      var dx=bx-ax, dy=by-ay, dz=bz-az;
+      var len = Math.hypot(dx,dy,dz);
+      writeAim(d.data, o, (ax+bx)*0.5, (ay+by)*0.5, (az+bz)*0.5,
+               dx, dy, dz, len + rad*(extend === undefined ? 1 : extend),
+               rad, rad*(bulge || 1),
+               roll ? roll[0] : undefined, roll ? roll[1] : undefined, roll ? roll[2] : undefined);
+      d.data[o+16]=col[0]; d.data[o+17]=col[1]; d.data[o+18]=col[2]; d.data[o+19]=emis;
+      d.data[o+20]=rough; d.data[o+21]=metal; d.data[o+22]=seed; d.data[o+23]=mode||0;
+      d.n++;
+    };
+    d.upload = function () {
+      if (!d.n) return;
+      gl.bindBuffer(gl.ARRAY_BUFFER, d.ib);
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, d.data.subarray(0, d.n*INST_FLOATS));
+    };
+    // `limit` lets the shadow pass stop short of the instances pushed after
+    // the mark. What is held sits inside the light, and casting from it throws
+    // a shadow of your own hand across the entire dungeon.
+    d.draw = function (limit) {
+      var n = limit === undefined ? d.n : Math.min(limit, d.n);
+      if (!n) return 0;
+      gl.bindVertexArray(d.vao);
+      gl.drawElementsInstanced(gl.TRIANGLES, d.count, gl.UNSIGNED_SHORT, 0, n);
+      return 1;
+    };
+    return d;
+  }
+
+  var boxes = makeDrawable(boxMesh(), 640);        // masonry, blades, coffins
+  var bones = makeDrawable(sphereMesh(10, 7), 420); // skeletons, hands, torch
+  var glow  = makeDrawable(sphereMesh(6, 4), 520);  // flame, embers, sparks
+
+  /* ---------------- shaders ---------------- */
+
+  var VS_IN =
+    'layout(location=0) in vec3 aPos;\n' +
+    'layout(location=1) in vec3 aNormal;\n' +
+    'layout(location=2) in vec2 aUV;\n' +
+    'layout(location=3) in mat4 aModel;\n' +
+    'layout(location=7) in vec4 aColor;\n' +
+    'layout(location=8) in vec4 aMat;\n';
+
+  var shadowVS = '#version 300 es\n' + VS_IN +
+    'uniform mat4 uLightVP;\nvoid main(){ gl_Position = uLightVP * aModel * vec4(aPos,1.0); }\n';
+  var shadowFS = '#version 300 es\nprecision highp float;\nvoid main(){}\n';
+
+  var sceneVS = '#version 300 es\n' + VS_IN +
+    'uniform mat4 uVP;\nuniform mat4 uLightVP;\n' +
+    'out vec3 vWorld; out vec3 vNormal; out vec2 vUV;\n' +
+    'out vec4 vColor; out vec4 vMat; out vec4 vLightPos;\n' +
+    'void main(){\n' +
+    '  vec4 wp = aModel * vec4(aPos,1.0);\n' +
+    '  vWorld = wp.xyz;\n' +
+    '  vNormal = normalize(transpose(inverse(mat3(aModel))) * aNormal);\n' +
+    '  vColor = aColor; vMat = aMat; vUV = aUV;\n' +
+    '  vLightPos = uLightVP * wp;\n' +
+    '  gl_Position = uVP * wp;\n' +
+    '}\n';
+
+  var sceneFS = '#version 300 es\n' +
+    'precision highp float;\nprecision highp sampler2DShadow;\n' +
+    'in vec3 vWorld; in vec3 vNormal; in vec2 vUV;\n' +
+    'in vec4 vColor; in vec4 vMat; in vec4 vLightPos;\n' +
+    'out vec4 outColor;\n' +
+    'uniform vec3 uEye, uAmbient, uFogColor;\n' +
+    'uniform float uFogDensity, uShadowTexel, uShadowOn;\n' +
+    'uniform int uNumLights;\n' +
+    'uniform vec3 uLightPos[8];\nuniform vec3 uLightColor[8];\n' +
+    'uniform sampler2DShadow uShadow;\n' +
+
+    'float hash13(vec3 p){ p = fract(p*0.1031); p += dot(p, p.zyx+31.32); return fract((p.x+p.y)*p.z); }\n' +
+    'float vnoise(vec3 x){\n' +
+    '  vec3 i=floor(x), f=fract(x); f=f*f*(3.0-2.0*f);\n' +
+    '  return mix(mix(mix(hash13(i),hash13(i+vec3(1,0,0)),f.x), mix(hash13(i+vec3(0,1,0)),hash13(i+vec3(1,1,0)),f.x), f.y),\n' +
+    '             mix(mix(hash13(i+vec3(0,0,1)),hash13(i+vec3(1,0,1)),f.x), mix(hash13(i+vec3(0,1,1)),hash13(i+vec3(1,1,1)),f.x), f.y), f.z);\n' +
+    '}\n' +
+    'float fbm(vec3 p){ return 0.58*vnoise(p)+0.30*vnoise(p*2.07)+0.12*vnoise(p*4.13); }\n' +
+    'float distGGX(float ndh, float a){ float a2=a*a, d=ndh*ndh*(a2-1.0)+1.0; return a2/max(3.14159265*d*d,1e-7); }\n' +
+    'float smithG(float ndv, float ndl, float a){ float k=(a+1.0)*(a+1.0)/8.0;\n' +
+    '  return (ndv/(ndv*(1.0-k)+k))*(ndl/(ndl*(1.0-k)+k)); }\n' +
+    'vec3 brdf(vec3 N, vec3 V, vec3 L, vec3 albedo, float rough, float metal, vec3 radiance){\n' +
+    '  float ndl=max(dot(N,L),0.0); if (ndl<=0.0) return vec3(0.0);\n' +
+    '  vec3 H=normalize(V+L);\n' +
+    '  float ndv=max(dot(N,V),1e-4), ndh=max(dot(N,H),0.0), vdh=max(dot(V,H),0.0);\n' +
+    '  float a=max(rough*rough,0.002);\n' +
+    '  vec3 F0=mix(vec3(0.04),albedo,metal);\n' +
+    '  vec3 F=F0+(1.0-F0)*pow(1.0-vdh,5.0);\n' +
+    '  vec3 spec=distGGX(ndh,a)*smithG(ndv,ndl,rough)*F/max(4.0*ndv*ndl,1e-4);\n' +
+    '  return ((1.0-F)*(1.0-metal)*albedo/3.14159265 + spec)*radiance*ndl;\n' +
+    '}\n' +
+    // The shadow map is a perspective spot from the torch, so the divide by w
+    // matters here in a way it does not for an orthographic sun.
+    'float torchShadow(vec3 N, vec3 L){\n' +
+    '  if (uShadowOn < 0.5) return 1.0;\n' +
+    '  vec3 pc = vLightPos.xyz/max(vLightPos.w, 1e-4)*0.5+0.5;\n' +
+    '  if (vLightPos.w <= 0.0 || pc.z>1.0 || pc.x<0.02||pc.x>0.98||pc.y<0.02||pc.y>0.98) return 1.0;\n' +
+    '  float bias = max(0.0035*(1.0-dot(N,L)), 0.0012);\n' +
+    '  float sum=0.0;\n' +
+    '  for (int y=-1;y<=1;y++) for (int x=-1;x<=1;x++)\n' +
+    '    sum += texture(uShadow, vec3(pc.xy+vec2(float(x),float(y))*uShadowTexel, pc.z-bias));\n' +
+    '  return sum/9.0;\n' +
+    '}\n' +
+
+    'void main(){\n' +
+    '  vec3 albedo = vColor.rgb;\n' +
+    '  float emissive=vColor.a, rough=vMat.x, metal=vMat.y, seed=vMat.z, mode=vMat.w;\n' +
+    '  vec3 N = normalize(vNormal);\n' +
+    '  vec3 V = normalize(uEye - vWorld);\n' +
+
+    // Self-lit: flame, embers, sparks. No lighting, no bump — just the colour
+    // and its glow, held under the clip so crimson never breaks to pink.
+    '  if (mode > 0.5 && mode < 1.5) {\n' +
+    '    float d0 = length(uEye - vWorld);\n' +
+    '    float f0 = 1.0 - exp(-uFogDensity*d0*d0*0.55);\n' +
+    '    outColor = vec4(mix(albedo*emissive, uFogColor, clamp(f0,0.0,1.0)), 1.0);\n' +
+    '    return;\n' +
+    '  }\n' +
+
+    // Stone and bone get procedural relief from screen-space derivatives; the
+    // carried gear does not, because up close the noise reads as dirt.
+    '  if (mode < 0.5 || mode > 2.5) {\n' +
+    '    float scl = mode > 2.5 ? 11.0 : 4.4;\n' +
+    '    vec3 np = vWorld*scl + seed;\n' +
+    '    float h = fbm(np);\n' +
+    '    vec3 dpx=dFdx(vWorld), dpy=dFdy(vWorld);\n' +
+    '    vec3 r1=cross(dpy,N), r2=cross(N,dpx);\n' +
+    '    float det=dot(dpx,r1);\n' +
+    '    vec3 grad=(r1*dFdx(h)+r2*dFdy(h))/(abs(det)<1e-9?1e-9:det);\n' +
+    '    float fade=clamp(1.35-length(fwidth(np)),0.0,1.0);\n' +
+    '    N = normalize(N - (mode > 2.5 ? 0.09 : 0.22)*fade*grad);\n' +
+    '    albedo *= mix(1.0, 0.84+0.30*h, fade);\n' +
+    '    rough = clamp(rough*(0.72+0.55*h), 0.05, 1.0);\n' +
+    '  }\n' +
+
+    // Crevice darkening: low geometry and upward faces catch less of the torch.
+    '  float ao = mix(0.55, 1.0, smoothstep(0.0, 1.8, vWorld.y));\n' +
+    '  ao = mix(1.0, ao, 1.0 - abs(N.y)*0.6);\n' +
+
+    '  vec3 col = vec3(0.0);\n' +
+    '  for (int i=0;i<8;i++){\n' +
+    '    if (i>=uNumLights) break;\n' +
+    '    vec3 d = uLightPos[i]-vWorld;\n' +
+    // Light 0 is the torch in your own hand. Carried gear sits inside it, and
+    // an unclamped inverse square would blow it to white (PLATFORM.md), so the
+    // distance gets a floor rather than the light getting dimmer.
+    '    float dist2 = dot(d,d);\n' +
+    '    dist2 = max(dist2, (i == 0 && mode > 1.5 && mode < 2.5) ? 0.80 : 1.30);\n' +
+    '    vec3 L = normalize(d);\n' +
+    '    float sh = (i == 0) ? torchShadow(N, L) : 1.0;\n' +
+    '    col += brdf(N,V,L,albedo,rough,metal,uLightColor[i]/dist2) * sh;\n' +
+    '  }\n' +
+    '  col *= mix(1.0, ao, 0.7);\n' +
+    '  col += uAmbient*albedo*ao;\n' +
+    '  col += albedo*emissive;\n' +
+
+    '  float dist = length(uEye - vWorld);\n' +
+    '  float fog = 1.0 - exp(-uFogDensity*dist*dist);\n' +
+    '  col = mix(col, uFogColor, clamp(fog, 0.0, 1.0));\n' +
+    '  outColor = vec4(col, 1.0);\n' +
+    '}\n';
+
+  var quadVS = '#version 300 es\n' +
+    'out vec2 vUV;\n' +
+    'void main(){ vec2 p = vec2((gl_VertexID<<1)&2, gl_VertexID&2);\n' +
+    '  vUV = p; gl_Position = vec4(p*2.0-1.0, 0.0, 1.0); }\n';
+
+  var brightFS = '#version 300 es\nprecision highp float;\n' +
+    'in vec2 vUV; out vec4 outColor;\n' +
+    'uniform sampler2D uTex; uniform float uThreshold;\n' +
+    'void main(){ vec3 c = texture(uTex, vUV).rgb;\n' +
+    '  float l = dot(c, vec3(0.2126,0.7152,0.0722));\n' +
+    '  outColor = vec4(c*smoothstep(uThreshold, uThreshold*2.2, l), 1.0); }\n';
+
+  var blurFS = '#version 300 es\nprecision highp float;\n' +
+    'in vec2 vUV; out vec4 outColor;\n' +
+    'uniform sampler2D uTex; uniform vec2 uDir;\n' +
+    'void main(){\n' +
+    '  vec3 s = texture(uTex, vUV).rgb*0.2270270;\n' +
+    '  s += (texture(uTex, vUV+uDir*1.3846).rgb + texture(uTex, vUV-uDir*1.3846).rgb)*0.3162162;\n' +
+    '  s += (texture(uTex, vUV+uDir*3.2307).rgb + texture(uTex, vUV-uDir*3.2307).rgb)*0.0702702;\n' +
+    '  outColor = vec4(s, 1.0); }\n';
+
+  var compositeFS = '#version 300 es\nprecision highp float;\n' +
+    'in vec2 vUV; out vec4 outColor;\n' +
+    'uniform sampler2D uScene, uBloom;\n' +
+    'uniform float uBloomAmount, uTime, uGrain, uExposure, uHurt, uShock;\n' +
+    'vec3 aces(vec3 x){ return clamp((x*(2.51*x+0.03))/(x*(2.43*x+0.59)+0.14), 0.0, 1.0); }\n' +
+    'float hash(vec2 p){ return fract(sin(dot(p, vec2(12.9898,78.233)))*43758.5453); }\n' +
+    'void main(){\n' +
+    '  vec2 uv = vUV;\n' +
+    // A short shockwave on a landed hit, radial from the centre.
+    '  vec2 d = uv - 0.5;\n' +
+    '  if (uShock > 0.0) {\n' +
+    '    float r = length(d);\n' +
+    '    uv += normalize(d + 1e-5) * sin((r - uShock)*38.0) * 0.010 * (1.0 - uShock);\n' +
+    '  }\n' +
+    // Chromatic aberration, stronger at the edge and stronger when hurt.
+    '  float ca = (0.0016 + uHurt*0.006) * dot(d,d) * 4.0;\n' +
+    '  vec3 c;\n' +
+    '  c.r = texture(uScene, uv + d*ca).r;\n' +
+    '  c.g = texture(uScene, uv).g;\n' +
+    '  c.b = texture(uScene, uv - d*ca).b;\n' +
+    '  c += texture(uBloom, uv).rgb * uBloomAmount;\n' +
+    '  c = aces(c * uExposure);\n' +
+    // Blood in the corners of the eye.
+    '  float vig = smoothstep(0.86, 0.24, length(d));\n' +
+    '  c *= mix(0.30, 1.0, vig);\n' +
+    '  c = mix(c, vec3(0.42,0.03,0.07), uHurt * (1.0 - vig) * 0.65);\n' +
+    '  if (uGrain > 0.0) c += (hash(uv*vec2(1024.0,768.0) + uTime) - 0.5) * uGrain;\n' +
+    '  outColor = vec4(pow(max(c, 0.0), vec3(1.0/2.2)), 1.0);\n' +
+    '}\n';
+
+  var progShadow = program(shadowVS, shadowFS, 'shadow');
+  var progScene = program(sceneVS, sceneFS, 'scene');
+  var progBright = program(quadVS, brightFS, 'bright');
+  var progBlur = program(quadVS, blurFS, 'blur');
+  var progComposite = program(quadVS, compositeFS, 'composite');
+  var emptyVAO = gl.createVertexArray();
+
+  /* ---------------- targets ---------------- */
+
+  var hdrFormat = gl.RGBA8, hdrType = gl.UNSIGNED_BYTE;
+  if (gl.getExtension('EXT_color_buffer_float') || gl.getExtension('EXT_color_buffer_half_float')) {
+    hdrFormat = gl.RGBA16F; hdrType = gl.HALF_FLOAT;
+  }
+  gl.getExtension('OES_texture_float_linear');
+
+  function makeTarget(w, h, internal, type, withDepth) {
+    var t = { w: w, h: h };
+    t.tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, t.tex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, internal, w, h, 0, gl.RGBA, type, null);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    t.fbo = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, t.fbo);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, t.tex, 0);
+    if (withDepth) {
+      t.depth = gl.createRenderbuffer();
+      gl.bindRenderbuffer(gl.RENDERBUFFER, t.depth);
+      gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT24, w, h);
+      gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, t.depth);
+    }
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    return t;
+  }
+  function destroyTarget(t) {
+    if (!t) return;
+    gl.deleteTexture(t.tex); gl.deleteFramebuffer(t.fbo);
+    if (t.depth) gl.deleteRenderbuffer(t.depth);
+  }
+
+  var SHADOW_SIZE = 1024;
+  var shadow = { w: SHADOW_SIZE, h: SHADOW_SIZE };
+  shadow.tex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, shadow.tex);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.DEPTH_COMPONENT24, SHADOW_SIZE, SHADOW_SIZE, 0,
+                gl.DEPTH_COMPONENT, gl.UNSIGNED_INT, null);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_COMPARE_MODE, gl.COMPARE_REF_TO_TEXTURE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_COMPARE_FUNC, gl.LEQUAL);
+  shadow.fbo = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, shadow.fbo);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, shadow.tex, 0);
+  gl.drawBuffers([gl.NONE]); gl.readBuffer(gl.NONE);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+  var scene = null, bloomA = null, bloomB = null;
+  var renderScale = 1.0, dpr = 1, cssW = 1, cssH = 1;
+
+  function allocTargets(w, h) {
+    destroyTarget(scene); destroyTarget(bloomA); destroyTarget(bloomB);
+    scene = makeTarget(w, h, hdrFormat, hdrType, true);
+    var bw = Math.max(1, w>>2), bh = Math.max(1, h>>2);
+    bloomA = makeTarget(bw, bh, hdrFormat, hdrType, false);
+    bloomB = makeTarget(bw, bh, hdrFormat, hdrType, false);
+  }
+  function applyScale() {
+    allocTargets(Math.max(1, Math.round(cv.width*renderScale)),
+                 Math.max(1, Math.round(cv.height*renderScale)));
+  }
+
+  /* ---------------- stage ---------------- */
+
+  var stageEl = document.getElementById('stage');
+
+  function fsCovering() {
+    return !framed || (typeof settings === 'object' && settings && settings.fullscreen);
+  }
+  function standaloneApp() {
+    var w = window.top || window;
+    try { if (w.navigator.standalone === true) return true; } catch (e) {}
+    if (window.navigator.standalone === true) return true;
+    return !!(window.matchMedia &&
+              (matchMedia('(display-mode: standalone)').matches ||
+               matchMedia('(display-mode: fullscreen)').matches));
+  }
+  function fitStage() {
+    var vv = window.visualViewport, doc = document.documentElement;
+    var w = Math.max(doc.clientWidth || 0, window.innerWidth || 0,
+                     vv ? Math.round(vv.width + (vv.offsetLeft || 0)) : 0);
+    var h = Math.max(doc.clientHeight || 0, window.innerHeight || 0,
+                     vv ? Math.round(vv.height + (vv.offsetTop || 0)) : 0);
+    if (fsCovering() && standaloneApp() && screen.width && screen.height) {
+      var lng = Math.max(screen.width, screen.height);
+      var sht = Math.min(screen.width, screen.height);
+      if (h >= w) { h = Math.max(h, lng); w = Math.max(w, sht); }
+      else        { h = Math.max(h, sht); w = Math.max(w, lng); }
+    }
+    stageEl.style.width = w + 'px';
+    stageEl.style.height = h + 'px';
+  }
+  function resize() {
+    fitStage();
+    cssW = Math.max(1, stageEl.clientWidth);
+    cssH = Math.max(1, stageEl.clientHeight);
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    cv.width = Math.round(cssW*dpr);
+    cv.height = Math.round(cssH*dpr);
+    applyScale();
+  }
+  window.addEventListener('resize', resize);
+  window.addEventListener('orientationchange', function () {
+    setTimeout(resize, 60); setTimeout(resize, 260); setTimeout(resize, 600);
+  });
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', resize);
+    window.visualViewport.addEventListener('scroll', resize);
+  }
+
+  var insProbe = document.createElement('div');
+  insProbe.style.cssText = 'position:fixed;top:0;left:0;width:0;height:0;visibility:hidden;' +
+    'pointer-events:none;padding:var(--safe-t) var(--safe-r) var(--safe-b) var(--safe-l)';
+  document.body.appendChild(insProbe);
+  window.addEventListener('message', function (e) {
+    if (!e.data || e.data.type !== 'arcade:spec?') return;
+    var vv = window.visualViewport, doc = document.documentElement;
+    var cs = getComputedStyle(insProbe);
+    function v(n) { return Math.round(parseFloat(cs[n]) || 0); }
+    try {
+      window.parent.postMessage({
+        type: 'arcade:spec', name: 'Barrow',
+        win: (window.innerWidth || 0) + '×' + (window.innerHeight || 0),
+        doc: (doc.clientWidth || 0) + '×' + (doc.clientHeight || 0),
+        vv: vv ? Math.round(vv.width) + '×' + Math.round(vv.height) : 'n/a',
+        stage: Math.round(cssW) + '×' + Math.round(cssH),
+        canvas: cv.width + '×' + cv.height,
+        ins: v('paddingTop') + ' / ' + v('paddingRight') + ' / ' +
+             v('paddingBottom') + ' / ' + v('paddingLeft'),
+        fps: lastFps, scale: Math.round(renderScale*100) + '%'
+      }, '*');
+    } catch (err) {}
+  });
+
+  /* ---------------- palette ---------------- */
+
+  function srgb(hex) {
+    var n = parseInt(hex.slice(1), 16);
+    return [Math.pow(((n>>16)&255)/255,2.2), Math.pow(((n>>8)&255)/255,2.2), Math.pow((n&255)/255,2.2)];
+  }
+  // Surface tiers are unusable as albedo — they render pure black once lit.
+  // These keep the oxblood hue at a value that survives the lighting.
+  var STONE   = srgb('#6d4b53');
+  var STONE_D = srgb('#4a333b');
+  var MORTAR  = srgb('#836169');
+  var BONE    = srgb('#c9b9a4');
+  var BONE_D  = srgb('#8d7d६c'.replace('६','6'));
+  var IRON    = srgb('#6b6a70');
+  var IRON_D  = srgb('#43424a');
+  var LEATHER = srgb('#4e3128');
+  var BLOOD   = srgb('#b81d3a');
+  var GOLD    = srgb('#d9a441');
+  // Arterial crimson makes a purple light; a warm ember is what actually reads
+  // as firelight on a wall (DESIGN.md).
+  var EMBER   = [0.62, 0.20, 0.055];      // emissive only: sockets, sparks
+  // As a *light*, ember is far too saturated — it lights the red channel and
+  // nothing else, and the dungeon goes black. Firelight is warm, not red.
+  var TORCHLIGHT = [1.0, 0.54, 0.24];
+  var FLAME   = [0.95, 0.42, 0.12];
+  var FOG     = [0.014, 0.009, 0.012];
+
+  /* ---------------- dungeon ---------------- */
+
+  var N = 11, CELL = 4.6, WALL_H = 3.3, WALL_T = 0.5;
+  var MAX_LIGHTS = 8;
+
+  function rand(a, b) { return a + Math.random()*(b-a); }
+  function randi(n) { return Math.floor(Math.random()*n); }
+  function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
+
+  var world = { walls: [], torches: [], props: [], cells: null, rooms: [] };
+
+  function cellX(i) { return (i - (N-1)/2)*CELL; }
+  function cellZ(j) { return (j - (N-1)/2)*CELL; }
+
+  function buildDungeon() {
+    world.walls.length = 0; world.torches.length = 0;
+    world.props.length = 0; world.rooms.length = 0;
+
+    // Depth-first carve, then braid: a perfect maze is a bad arena, and loops
+    // are what let a skeleton come round on you.
+    var cells = [];
+    for (var i = 0; i < N; i++) {
+      cells[i] = [];
+      for (var j = 0; j < N; j++) cells[i][j] = { n:1, w:1, seen:0 };
+    }
+    var stack = [[0,0]];
+    cells[0][0].seen = 1;
+    var visited = 1;
+    while (visited < N*N && stack.length) {
+      var cur = stack[stack.length-1], ci = cur[0], cj = cur[1];
+      var opts = [];
+      if (ci > 0   && !cells[ci-1][cj].seen) opts.push([-1,0]);
+      if (ci < N-1 && !cells[ci+1][cj].seen) opts.push([1,0]);
+      if (cj > 0   && !cells[ci][cj-1].seen) opts.push([0,-1]);
+      if (cj < N-1 && !cells[ci][cj+1].seen) opts.push([0,1]);
+      if (!opts.length) { stack.pop(); continue; }
+      var d = opts[randi(opts.length)];
+      var ni = ci + d[0], nj = cj + d[1];
+      if (d[0] === 1) cells[ni][nj].w = 0;
+      else if (d[0] === -1) cells[ci][cj].w = 0;
+      else if (d[1] === 1) cells[ni][nj].n = 0;
+      else cells[ci][cj].n = 0;
+      cells[ni][nj].seen = 1; visited++;
+      stack.push([ni,nj]);
+    }
+    for (i = 0; i < N; i++) for (j = 0; j < N; j++) {
+      if (i > 0 && Math.random() < 0.16) cells[i][j].w = 0;
+      if (j > 0 && Math.random() < 0.16) cells[i][j].n = 0;
+    }
+
+    // Three chambers: 2×2 blocks with the interior knocked out. They are where
+    // the torches and the fights are.
+    for (var r = 0; r < 3; r++) {
+      var ri = 1 + randi(N-3), rj = 1 + randi(N-3);
+      for (var a = ri; a <= ri+1; a++) for (var b = rj; b <= rj+1; b++) {
+        if (a > ri) cells[a][b].w = 0;
+        if (b > rj) cells[a][b].n = 0;
+      }
+      world.rooms.push({ i: ri + 0.5, j: rj + 0.5 });
+    }
+    world.cells = cells;
+
+    // Walls become axis-aligned boxes, which are both the geometry and the
+    // collision volumes — there is no second, invisible level.
+    function wall(cx, cz, w, d, seed) {
+      world.walls.push({ x: cx, z: cz, hw: w*0.5, hd: d*0.5, seed: seed });
+    }
+    for (i = 0; i < N; i++) for (j = 0; j < N; j++) {
+      var x = cellX(i), z = cellZ(j);
+      if (cells[i][j].n) wall(x, z - CELL/2, CELL + WALL_T, WALL_T, (i*7+j*13)%40);
+      if (cells[i][j].w) wall(x - CELL/2, z, WALL_T, CELL + WALL_T, (i*11+j*5)%40);
+    }
+    for (i = 0; i < N; i++) {
+      wall(cellX(i), cellZ(N-1) + CELL/2, CELL + WALL_T, WALL_T, (i*3)%40);
+      wall(cellX(N-1) + CELL/2, cellZ(i), WALL_T, CELL + WALL_T, (i*17)%40);
+    }
+
+    // Torches on wall faces, spread out enough that there is real dark between.
+    var placed = [];
+    for (var t = 0; t < 26; t++) {
+      var wi = randi(world.walls.length), wl = world.walls[wi];
+      var along = wl.hw > wl.hd;
+      var ox = along ? 0 : (Math.random() < 0.5 ? 1 : -1)*(wl.hd + 0.16);
+      var oz = along ? (Math.random() < 0.5 ? 1 : -1)*(wl.hd + 0.16) : 0;
+      if (along) { ox = 0; oz = (Math.random() < 0.5 ? 1 : -1)*(WALL_T*0.5 + 0.16); }
+      else { ox = (Math.random() < 0.5 ? 1 : -1)*(WALL_T*0.5 + 0.16); oz = 0; }
+      var tx = wl.x + ox, tz = wl.z + oz;
+      var far = true;
+      for (var q = 0; q < placed.length; q++)
+        if (Math.hypot(placed[q][0]-tx, placed[q][1]-tz) < CELL*2.1) { far = false; break; }
+      if (!far) continue;
+      placed.push([tx, tz]);
+      world.torches.push({ x: tx, y: 2.05, z: tz, ph: rand(0,6.28),
+                           nx: ox ? Math.sign(ox) : 0, nz: oz ? Math.sign(oz) : 0 });
+    }
+
+    // Sarcophagi in the chambers, for silhouette and for cover.
+    for (r = 0; r < world.rooms.length; r++) {
+      var rm = world.rooms[r];
+      world.props.push({ x: cellX(rm.i) + rand(-0.8,0.8), z: cellZ(rm.j) + rand(-0.8,0.8),
+                         rot: Math.random() < 0.5 ? 0 : Math.PI/2, seed: rand(0,40) });
+    }
+  }
+
+  // Circle against every nearby box. The walls are the boxes you can see.
+  function collide(nx, nz, radius) {
+    for (var i = 0; i < world.walls.length; i++) {
+      var w = world.walls[i];
+      var dx = nx - w.x, dz = nz - w.z;
+      if (Math.abs(dx) > w.hw + radius + 0.1 || Math.abs(dz) > w.hd + radius + 0.1) continue;
+      var qx = clamp(dx, -w.hw, w.hw), qz = clamp(dz, -w.hd, w.hd);
+      var ox = dx - qx, oz = dz - qz;
+      var d = Math.hypot(ox, oz);
+      if (d < radius) {
+        if (d > 1e-5) { nx = w.x + qx + ox/d*radius; nz = w.z + qz + oz/d*radius; }
+        else {
+          // Centre inside the box: push out along the shallowest axis.
+          var px = w.hw + radius - Math.abs(dx), pz = w.hd + radius - Math.abs(dz);
+          if (px < pz) nx = w.x + Math.sign(dx || 1)*(w.hw + radius);
+          else nz = w.z + Math.sign(dz || 1)*(w.hd + radius);
+        }
+      }
+    }
+    for (var p = 0; p < world.props.length; p++) {
+      var pr = world.props[p];
+      var hw = pr.rot ? 0.62 : 1.15, hd = pr.rot ? 1.15 : 0.62;
+      var ddx = nx - pr.x, ddz = nz - pr.z;
+      if (Math.abs(ddx) > hw + radius || Math.abs(ddz) > hd + radius) continue;
+      var cqx = clamp(ddx, -hw, hw), cqz = clamp(ddz, -hd, hd);
+      var cox = ddx - cqx, coz = ddz - cqz, cd = Math.hypot(cox, coz);
+      if (cd < radius && cd > 1e-5) {
+        nx = pr.x + cqx + cox/cd*radius; nz = pr.z + cqz + coz/cd*radius;
+      }
+    }
+    return [nx, nz];
+  }
+
+  // Line of sight, so a skeleton three corridors away does not charge a wall.
+  function clearPath(ax, az, bx, bz) {
+    var dx = bx-ax, dz = bz-az, len = Math.hypot(dx,dz);
+    if (len < 0.01) return true;
+    var steps = Math.min(30, Math.ceil(len/0.45));
+    for (var s = 1; s < steps; s++) {
+      var t = s/steps, px = ax + dx*t, pz = az + dz*t;
+      for (var i = 0; i < world.walls.length; i++) {
+        var w = world.walls[i];
+        if (Math.abs(px-w.x) <= w.hw && Math.abs(pz-w.z) <= w.hd) return false;
+      }
+    }
+    return true;
+  }
+
+  /* ---------------- geometry tests ---------------- */
+
+  // Closest distance between two segments. This is the whole hit system: a
+  // blade is a segment, a limb is a capsule, and a hit is when they touch.
+  function segSegDist(p1x,p1y,p1z, q1x,q1y,q1z, p2x,p2y,p2z, q2x,q2y,q2z) {
+    var d1x=q1x-p1x, d1y=q1y-p1y, d1z=q1z-p1z;
+    var d2x=q2x-p2x, d2y=q2y-p2y, d2z=q2z-p2z;
+    var rx=p1x-p2x, ry=p1y-p2y, rz=p1z-p2z;
+    var a=d1x*d1x+d1y*d1y+d1z*d1z;
+    var e=d2x*d2x+d2y*d2y+d2z*d2z;
+    var f=d2x*rx+d2y*ry+d2z*rz;
+    var s, t;
+    if (a <= 1e-8 && e <= 1e-8) return Math.hypot(rx,ry,rz);
+    if (a <= 1e-8) { s = 0; t = clamp(f/e, 0, 1); }
+    else {
+      var c = d1x*rx+d1y*ry+d1z*rz;
+      if (e <= 1e-8) { t = 0; s = clamp(-c/a, 0, 1); }
+      else {
+        var b = d1x*d2x+d1y*d2y+d1z*d2z;
+        var denom = a*e-b*b;
+        s = denom !== 0 ? clamp((b*f-c*e)/denom, 0, 1) : 0;
+        t = (b*s+f)/e;
+        if (t < 0) { t = 0; s = clamp(-c/a, 0, 1); }
+        else if (t > 1) { t = 1; s = clamp((b-c)/a, 0, 1); }
+      }
+    }
+    var cx = p1x+d1x*s - (p2x+d2x*t);
+    var cy = p1y+d1y*s - (p2y+d2y*t);
+    var cz = p1z+d1z*s - (p2z+d2z*t);
+    segHitS = s;
+    return Math.hypot(cx,cy,cz);
+  }
+  var segHitS = 0;
+
+  /* ---------------- rig ---------------- */
+
+  function makeRig(off, opt) {
+    var legs = [];
+    for (var i = 0; i < off.length; i++)
+      legs.push({ fx:0, fy:0, fz:0, ax:0, az:0, bx:0, bz:0, t:1, dur:0.24 });
+    return { legs: legs, off: off, stride: opt.stride, lift: opt.lift, lead: opt.lead,
+             l1: opt.l1, l2: opt.l2, hipY: opt.hipY, hipR: opt.hipR, ready: false };
+  }
+  var homeTmp = [0,0];
+  function rigHome(rig, i, x, z, yaw, out) {
+    var o = rig.off[i], a = yaw + o[0];
+    out[0] = x + Math.sin(a)*o[1];
+    out[1] = z + Math.cos(a)*o[1];
+  }
+  function stepRig(rig, x, z, yaw, vx, vz, dt, onPlant) {
+    var n = rig.legs.length, i, leg;
+    if (!rig.ready) {
+      for (i = 0; i < n; i++) {
+        rigHome(rig, i, x, z, yaw, homeTmp);
+        leg = rig.legs[i];
+        leg.fx = homeTmp[0]; leg.fz = homeTmp[1]; leg.fy = 0;
+      }
+      rig.ready = true;
+      return;
+    }
+    var sp = Math.hypot(vx, vz);
+    var worst = -1, worstD = rig.stride;
+    for (i = 0; i < n; i++) {
+      leg = rig.legs[i];
+      if (leg.t < 1) {
+        leg.t = Math.min(1, leg.t + dt/leg.dur);
+        var e = leg.t*leg.t*(3 - 2*leg.t);
+        leg.fx = leg.ax + (leg.bx - leg.ax)*e;
+        leg.fz = leg.az + (leg.bz - leg.az)*e;
+        leg.fy = Math.sin(Math.PI*leg.t) * rig.lift;
+        if (leg.t >= 1) { leg.fy = 0; if (onPlant) onPlant(i, sp); }
+        continue;
+      }
+      rigHome(rig, i, x, z, yaw, homeTmp);
+      var d = Math.hypot(leg.fx - homeTmp[0], leg.fz - homeTmp[1]);
+      if (d > worstD) { worstD = d; worst = i; }
+    }
+    if (worst < 0) return;
+    var a2 = rig.legs[(worst+1)%n], b2 = rig.legs[(worst+n-1)%n];
+    if (a2.t < 1 || b2.t < 1) return;
+    leg = rig.legs[worst];
+    rigHome(rig, worst, x, z, yaw, homeTmp);
+    leg.ax = leg.fx; leg.az = leg.fz;
+    leg.bx = homeTmp[0] + vx*rig.lead;
+    leg.bz = homeTmp[1] + vz*rig.lead;
+    leg.t = 0;
+    leg.dur = clamp(rig.stride/(sp + 0.6)*0.55, 0.13, 0.42);
+  }
+  var ikOut = [0,0,0, 0,0,0];
+  function solveIK(hx,hy,hz, fx,fy,fz, l1, l2, px,py,pz) {
+    var dx=fx-hx, dy=fy-hy, dz=fz-hz;
+    var d = Math.hypot(dx,dy,dz);
+    var maxd = (l1+l2)*0.998;
+    if (d > maxd) { var s = maxd/d; dx*=s; dy*=s; dz*=s; d = maxd; }
+    if (d < 1e-4) { dx=0; dy=-1e-4; dz=0; d=1e-4; }
+    var ux=dx/d, uy=dy/d, uz=dz/d;
+    var a = (l1*l1 - l2*l2 + d*d)/(2*d);
+    var h = Math.sqrt(Math.max(0, l1*l1 - a*a));
+    var pd = px*ux+py*uy+pz*uz;
+    var qx = px-ux*pd, qy = py-uy*pd, qz = pz-uz*pd;
+    var ql = Math.hypot(qx,qy,qz);
+    if (ql < 1e-5) { qx=-uy; qy=ux; qz=0; ql=Math.hypot(qx,qy,qz)||1; }
+    qx/=ql; qy/=ql; qz/=ql;
+    ikOut[0]=hx+ux*a+qx*h; ikOut[1]=hy+uy*a+qy*h; ikOut[2]=hz+uz*a+qz*h;
+    ikOut[3]=hx+dx; ikOut[4]=hy+dy; ikOut[5]=hz+dz;
+    return ikOut;
+  }
+  function spring(cur, vel, target, k, dt) {
+    var c = 2*Math.sqrt(k);
+    vel += (-k*(cur-target) - c*vel)*dt;
+    return [cur + vel*dt, vel];
+  }
+
+  /* ---------------- particles ---------------- */
+
+  var MAX_PARTS = 420, pool = [];
+  for (var pi = 0; pi < MAX_PARTS; pi++)
+    pool.push({ live:false, x:0,y:0,z:0, vx:0,vy:0,vz:0, life:0, max:1, size:0.05,
+                col:BONE, grav:6, emis:1 });
+  var partHead = 0;
+  function spawnPart(x,y,z, vx,vy,vz, life, size, col, grav, emis) {
+    var p = pool[partHead]; partHead = (partHead+1) % MAX_PARTS;
+    p.live = true; p.x=x; p.y=y; p.z=z; p.vx=vx; p.vy=vy; p.vz=vz;
+    p.life = life; p.max = life; p.size = size; p.col = col; p.grav = grav; p.emis = emis;
+  }
+  function burst(x,y,z, n, col, spd, life, size, grav, emis) {
+    for (var i = 0; i < n; i++) {
+      var th = rand(0,6.283), ph = Math.acos(rand(-1,1)), s = rand(spd*0.25, spd);
+      spawnPart(x,y,z, Math.sin(ph)*Math.cos(th)*s, Math.abs(Math.cos(ph))*s*0.9,
+                Math.sin(ph)*Math.sin(th)*s, rand(life*0.5, life), size, col, grav, emis);
+    }
+  }
+  function updateParts(dt) {
+    for (var i = 0; i < MAX_PARTS; i++) {
+      var p = pool[i];
+      if (!p.live) continue;
+      p.life -= dt;
+      if (p.life <= 0) { p.live = false; continue; }
+      p.vy -= p.grav*dt;
+      p.x += p.vx*dt; p.y += p.vy*dt; p.z += p.vz*dt;
+      if (p.y < 0.04) { p.y = 0.04; p.vy = -p.vy*0.3; p.vx *= 0.62; p.vz *= 0.62; }
+    }
+  }
+
+  /* ---------------- settings ---------------- */
+
+  var settings = { fullscreen: false, shadows: true, look: 10, invert: false,
+                   haptics: true, grain: true, diag: true };
+  try {
+    var sv = JSON.parse(localStorage.getItem(SKEY) || 'null');
+    if (sv) for (var sk in settings) if (sv[sk] !== undefined) settings[sk] = sv[sk];
+  } catch (e) {}
+  function saveSettings() { try { localStorage.setItem(SKEY, JSON.stringify(settings)); } catch (e) {} }
+  function buzz(p) { if (settings.haptics && navigator.vibrate) navigator.vibrate(p); }
+
+  function applyFullscreen() {
+    var on = settings.fullscreen && framed;
+    if (framed) {
+      try { window.parent.postMessage({ type: 'arcade:fullscreen', on: on }, '*'); } catch (e) {}
+    }
+    // With the launcher bar gone nothing is absorbing the notch any more.
+    document.documentElement.style.setProperty(
+      '--safe-t', (framed && !on) ? '0px' : 'env(safe-area-inset-top, 0px)');
+  }
+
+  /* ---------------- input ---------------- */
+
+  function makePad(el) {
+    var pad = { x: 0, y: 0, id: null };
+    var knob = el.querySelector('.knob');
+    function R() { return el.clientWidth * 0.34; }
+    function setKnob(dx, dy) { knob.style.transform = 'translate(' + dx.toFixed(1) + 'px,' + dy.toFixed(1) + 'px)'; }
+    function from(touch) {
+      var r = el.getBoundingClientRect();
+      var dx = touch.clientX - (r.left + r.width/2);
+      var dy = touch.clientY - (r.top + r.height/2);
+      var d = Math.hypot(dx, dy), m = R();
+      if (d > m) { dx = dx/d*m; dy = dy/d*m; }
+      setKnob(dx, dy);
+      pad.x = dx/m; pad.y = dy/m;
+    }
+    function release() { pad.id = null; pad.x = 0; pad.y = 0; setKnob(0,0); el.classList.remove('active'); }
+    el.addEventListener('touchstart', function (e) {
+      e.preventDefault();
+      var t = e.changedTouches[0];
+      pad.id = t.identifier; el.classList.add('active'); from(t);
+    }, { passive: false });
+    window.addEventListener('touchmove', function (e) {
+      if (pad.id === null) return;
+      for (var i = 0; i < e.changedTouches.length; i++)
+        if (e.changedTouches[i].identifier === pad.id) { e.preventDefault(); from(e.changedTouches[i]); }
+    }, { passive: false });
+    function endH(e) {
+      if (pad.id === null) return;
+      for (var i = 0; i < e.changedTouches.length; i++)
+        if (e.changedTouches[i].identifier === pad.id) release();
+    }
+    el.addEventListener('touchend', endH);
+    el.addEventListener('touchcancel', endH);
+    window.addEventListener('touchend', endH);
+    el.addEventListener('mousedown', function (e) {
+      e.preventDefault(); pad.id = 'mouse'; el.classList.add('active'); from(e);
+    });
+    window.addEventListener('mousemove', function (e) { if (pad.id === 'mouse') from(e); });
+    window.addEventListener('mouseup', function () { if (pad.id === 'mouse') release(); });
+    return pad;
+  }
+  var padMove = makePad(padMoveEl), padLook = makePad(padLookEl);
+
+  var keys = {};
+  window.addEventListener('keydown', function (e) {
+    keys[e.key.toLowerCase()] = true;
+    if (e.key === ' ') { e.preventDefault(); tryStrike(); }
+  });
+  window.addEventListener('keyup', function (e) { keys[e.key.toLowerCase()] = false; });
+
+  /* ---------------- state ---------------- */
+
+  var state = {
+    running: false, dead: false, won: false, paused: false,
+    x: 0, z: 0, yaw: 0, pitch: 0, vx: 0, vz: 0, bob: 0, t: 0,
+    hp: 100, sta: 100, guard: false, guardHeld: 0,
+    swing: null, swingT: 0, hurt: 0, shock: 0, shake: 0,
+    kills: 0, depth: 1, haveSigil: false,
+    prevBlade: null, hitThisSwing: null,
+    torchPh: 0
+  };
+  var best = parseInt(localStorage.getItem(BKEY) || '0', 10) || 0;
+
+  var sigil = { x: 0, z: 0, taken: false, ph: 0 };
+  var stair = { x: 0, z: 0 };
+
+  /* ---------------- skeletons ---------------- */
+
+  var FOE_NAMES = ['Thrall', 'Barrow-wight', 'Gravekeeper', 'Bonepicker'];
+  var foes = [];
+
+  function spawnFoe(x, z, tough) {
+    var sz = rand(0.94, 1.08);
+    var f = {
+      x: x, z: z, px: x, pz: z, vx: 0, vz: 0, yaw: rand(0,6.28), size: sz,
+      hp: tough ? 90 : 58, maxHp: tough ? 90 : 58, tough: !!tough,
+      alive: true, state: 'idle', timer: rand(0.4, 2.2),
+      bob: 0, bobV: 0, lean: 0, leanV: 0, hit: 0, stagger: 0,
+      dead: 0, fallX: 0, fallZ: 0,
+      windup: 0, swingT: -1, didHit: false,
+      prevBlade: null, jaw: 0, glow: 0,
+      name: FOE_NAMES[randi(FOE_NAMES.length)],
+      rig: makeRig([[Math.PI/2, 0.19*sz], [-Math.PI/2, 0.19*sz]],
+                   { stride: 0.60*sz, lift: 0.15*sz, lead: 0.12,
+                     l1: 0.50*sz, l2: 0.50*sz, hipY: 0.90*sz, hipR: 0.19*sz })
+    };
+    foes.push(f);
+    return f;
+  }
+
+  // Where a skeleton's blade is right now, in world space. Returned as a
+  // segment because that is what gets tested — the weapon is not a cone.
+  var foeBlade = [0,0,0,0,0,0];
+  function foeWeapon(f) {
+    var s = f.size;
+    var fx = Math.sin(f.yaw), fz = Math.cos(f.yaw);
+    var rx = fz, rz = -fx;
+    var sh = shoulderOf(f, 1);
+    var t = f.swingT;
+    var reach, drop, side;
+    if (t < 0) {
+      // Carried at rest, or drawn back during the windup.
+      var w = f.windup;
+      reach = 0.30 + w*0.10; drop = -0.30 + w*0.55; side = 0.26 + w*0.30;
+    } else {
+      // A committed overhead cut: the arc is the hitbox.
+      var k = clamp(t/0.30, 0, 1);
+      var e = k*k;
+      reach = 0.40 + e*0.62; drop = 0.62 - e*1.25; side = 0.56 - e*0.72;
+    }
+    var hx = sh[0] + fx*reach + rx*side, hy = sh[1] + drop, hz = sh[2] + fz*reach + rz*side;
+    // The blade points away from the shoulder, through the hand.
+    var dx = hx - sh[0], dy = hy - sh[1] - 0.15, dz = hz - sh[2];
+    var dl = Math.hypot(dx,dy,dz) || 1;
+    var len = 0.92*s;
+    foeBlade[0] = hx; foeBlade[1] = hy; foeBlade[2] = hz;
+    foeBlade[3] = hx + dx/dl*len; foeBlade[4] = hy + dy/dl*len; foeBlade[5] = hz + dz/dl*len;
+    return foeBlade;
+  }
+  function shoulderOf(f, side) {
+    var s = f.size;
+    var fx = Math.sin(f.yaw), fz = Math.cos(f.yaw);
+    var rx = fz, rz = -fx;
+    var chestY = (1.32 + f.bob)*s - f.dead*0.9;
+    return [f.x + rx*side*0.21*s, chestY, f.z + rz*side*0.21*s];
+  }
+
+  /* ---------------- the player's weapon ---------------- */
+
+  // Poses live in camera space, so the swing follows where you are looking.
+  // The hand's sideways and vertical offsets are fractions of the frustum at
+  // the hand's own depth, not metres: portrait leaves a narrow horizontal FOV,
+  // and a fixed lateral offset puts the whole weapon off the side of the
+  // screen on this phone while looking fine on a wide one.
+  // Each is [handRightFrac, handUpFrac, handDepth, bladeRight, bladeUp, bladeFwd].
+  var POSE_REST  = [ 0.62, -0.56, 0.52,  0.16,  0.80, 0.58];
+  var POSE_WIND  = [ 0.84, -0.12, 0.40,  0.44,  0.86, 0.26];
+  var POSE_CUT   = [-0.58, -0.64, 0.60, -0.72, -0.16, 0.68];
+  var POSE_GUARD = [ 0.14, -0.30, 0.52, -0.86,  0.42, 0.30];
+  var BLADE_LEN = 0.95;
+  var FOV = 1.20;
+
+  var camR = [0,0,0], camU = [0,0,0], camF = [0,0,0], camPos = [0,0,0];
+  var blade = [0,0,0, 0,0,0];
+  var handPos = [0,0,0];
+
+  function lerpPose(a, b, t, out) {
+    for (var i = 0; i < 6; i++) out[i] = a[i] + (b[i]-a[i])*t;
+  }
+  var poseTmp = [0,0,0,0,0,0];
+
+  function currentPose(out) {
+    var t = state.swingT;
+    if (state.swing === 'strike') {
+      if (t < 0.13) lerpPose(POSE_REST, POSE_WIND, ease(t/0.13), out);
+      else if (t < 0.30) lerpPose(POSE_WIND, POSE_CUT, ease((t-0.13)/0.17), out);
+      else lerpPose(POSE_CUT, state.guard ? POSE_GUARD : POSE_REST, ease((t-0.30)/0.26), out);
+    } else if (state.guard) {
+      lerpPose(POSE_REST, POSE_GUARD, ease(clamp(state.guardHeld/0.16, 0, 1)), out);
+    } else {
+      for (var i = 0; i < 6; i++) out[i] = POSE_REST[i];
+    }
+  }
+  function ease(t) { t = clamp(t, 0, 1); return t*t*(3-2*t); }
+
+  function updateBlade() {
+    currentPose(poseTmp);
+    // Idle sway, so the weapon is alive even standing still.
+    var sway = Math.sin(state.t*1.5)*0.022, sway2 = Math.sin(state.t*1.1+1.3)*0.020;
+    var bobK = Math.sin(state.bob)*0.040, bobK2 = Math.abs(Math.cos(state.bob))*0.018;
+    var hf = poseTmp[2] - bobK2;
+    var tanV = Math.tan(FOV*0.5), tanH = tanV*(cv.width/Math.max(1, cv.height));
+    var hr = (poseTmp[0] + sway) * hf * tanH;
+    var hu = (poseTmp[1] + sway2 + bobK) * hf * tanV;
+    handPos[0] = camPos[0] + camR[0]*hr + camU[0]*hu + camF[0]*hf;
+    handPos[1] = camPos[1] + camR[1]*hr + camU[1]*hu + camF[1]*hf;
+    handPos[2] = camPos[2] + camR[2]*hr + camU[2]*hu + camF[2]*hf;
+    var bx = camR[0]*poseTmp[3] + camU[0]*poseTmp[4] + camF[0]*poseTmp[5];
+    var by = camR[1]*poseTmp[3] + camU[1]*poseTmp[4] + camF[1]*poseTmp[5];
+    var bz = camR[2]*poseTmp[3] + camU[2]*poseTmp[4] + camF[2]*poseTmp[5];
+    var bl = Math.hypot(bx,by,bz) || 1;
+    blade[0] = handPos[0]; blade[1] = handPos[1]; blade[2] = handPos[2];
+    blade[3] = handPos[0] + bx/bl*BLADE_LEN;
+    blade[4] = handPos[1] + by/bl*BLADE_LEN;
+    blade[5] = handPos[2] + bz/bl*BLADE_LEN;
+  }
+
+  function tryStrike() {
+    if (!state.running || state.paused || state.dead) return;
+    if (state.swing) return;
+    if (state.sta < 18) { flashStamina(); return; }
+    state.swing = 'strike'; state.swingT = 0;
+    state.sta -= 18;
+    state.hitThisSwing = {};
+    state.prevBlade = null;
+    reticle.classList.add('hot');
+  }
+  var staFlash = 0;
+  function flashStamina() { staFlash = 0.5; buzz(8); }
+
+  // A hit is the blade's swept volume touching a capsule. The sweep matters:
+  // at 60fps a fast cut moves the tip most of a metre between frames, and
+  // testing only the current pose lets it pass straight through a skull.
+  function bladeHits(pb, cb, cap0, cap1, radius) {
+    var best = 1e9;
+    for (var s = 0; s <= 3; s++) {
+      var t = s/3;
+      var ax = pb[0] + (cb[0]-pb[0])*t, ay = pb[1] + (cb[1]-pb[1])*t, az = pb[2] + (cb[2]-pb[2])*t;
+      var bx = pb[3] + (cb[3]-pb[3])*t, by = pb[4] + (cb[4]-pb[4])*t, bz = pb[5] + (cb[5]-pb[5])*t;
+      var d = segSegDist(ax,ay,az, bx,by,bz, cap0[0],cap0[1],cap0[2], cap1[0],cap1[1],cap1[2]);
+      if (d < best) best = d;
+      if (best < radius) return best;
+    }
+    return best;
+  }
+
+  var capA = [0,0,0], capB = [0,0,0];
+  function foeCapsules(f, which) {
+    var s = f.size, sink = f.dead*0.9;
+    var fx = Math.sin(f.yaw), fz = Math.cos(f.yaw);
+    if (which === 0) {           // skull
+      capA[0] = f.x + fx*0.02; capA[1] = (1.56 + f.bob)*s - sink; capA[2] = f.z + fz*0.02;
+      capB[0] = capA[0]; capB[1] = capA[1] + 0.12*s; capB[2] = capA[2];
+      return 0.17*s;
+    }
+    if (which === 1) {           // ribcage and spine
+      capA[0] = f.x; capA[1] = (0.92 + f.bob*0.7)*s - sink; capA[2] = f.z;
+      capB[0] = f.x + f.lean*0.4; capB[1] = (1.42 + f.bob)*s - sink; capB[2] = f.z;
+      return 0.26*s;
+    }
+    capA[0] = f.x; capA[1] = 0.10 - sink; capA[2] = f.z;   // legs
+    capB[0] = f.x; capB[1] = (0.90 + f.bob*0.5)*s - sink; capB[2] = f.z;
+    return 0.22*s;
+  }
+
+  function resolveSwing() {
+    if (!state.prevBlade) return;
+    for (var i = 0; i < foes.length; i++) {
+      var f = foes[i];
+      if (!f.alive || state.hitThisSwing[i]) continue;
+      if (Math.hypot(f.x-state.x, f.z-state.z) > 3.4) continue;
+      for (var part = 0; part < 3; part++) {
+        var r = foeCapsules(f, part);
+        var d = bladeHits(state.prevBlade, blade, capA, capB, r + 0.045);
+        if (d < r + 0.045) {
+          state.hitThisSwing[i] = 1;
+          landHit(f, part, i);
+          break;
+        }
+      }
+    }
+  }
+
+  function landHit(f, part, idx) {
+    var dmg = part === 0 ? 42 : (part === 1 ? 26 : 17);
+    f.hp -= dmg;
+    f.hit = 1;
+    f.stagger = part === 0 ? 0.55 : 0.30;
+    var kx = f.x - state.x, kz = f.z - state.z, kd = Math.hypot(kx,kz) || 1;
+    f.vx += kx/kd*(part === 0 ? 3.4 : 2.2);
+    f.vz += kz/kd*(part === 0 ? 3.4 : 2.2);
+    // Contact point: the blade tip is close enough and much cheaper than
+    // recovering the exact closest point.
+    var hx = blade[3], hy = blade[4], hz = blade[5];
+    burst(hx, hy, hz, part === 0 ? 26 : 16, BONE, 4.2, 0.55, 0.036, 9, 0.9);
+    burst(hx, hy, hz, 8, FLAME, 3.0, 0.30, 0.028, 5, 2.2);
+    state.shock = 0.02;
+    state.shake = Math.min(0.6, state.shake + (part === 0 ? 0.34 : 0.20));
+    buzz(part === 0 ? [14,26,14] : 12);
+    if (f.hp <= 0) killFoe(f);
+  }
+
+  function killFoe(f) {
+    f.alive = false; f.dead = 0.001;
+    state.kills++;
+    var fx = f.x - state.x, fz = f.z - state.z, fd = Math.hypot(fx,fz) || 1;
+    f.fallX = fx/fd; f.fallZ = fz/fd;
+    burst(f.x, 1.0*f.size, f.z, 46, BONE, 4.6, 1.1, 0.05, 9.5, 0.7);
+    burst(f.x, 1.4*f.size, f.z, 12, EMBER, 2.4, 0.9, 0.05, 3.0, 2.0);
+    buzz([18,50,18]);
+  }
+
+  /* ---------------- skeleton AI ---------------- */
+
+  function updateFoes(dt) {
+    for (var i = 0; i < foes.length; i++) {
+      var f = foes[i];
+
+      if (!f.alive) {
+        // Collapse: the body sinks and topples away from the blow.
+        if (f.dead < 1) f.dead = Math.min(1, f.dead + dt*1.6);
+        f.hit = Math.max(0, f.hit - dt*2.2);
+        continue;
+      }
+
+      var toP = Math.hypot(state.x - f.x, state.z - f.z);
+      var sees = toP < 15 && clearPath(f.x, f.z, state.x, state.z);
+      f.hit = Math.max(0, f.hit - dt*2.4);
+      f.stagger = Math.max(0, f.stagger - dt);
+      f.jaw = Math.max(0, f.jaw - dt*1.4);
+
+      var wantX = 0, wantZ = 0, speed = 0;
+
+      if (f.stagger > 0) {
+        f.state = 'stagger';
+        f.swingT = -1; f.windup = Math.max(0, f.windup - dt*4);
+      } else if (f.state === 'swing') {
+        f.swingT += dt;
+        var b = foeWeapon(f);
+        if (f.prevBlade && !f.didHit && f.swingT > 0.02 && f.swingT < 0.34) {
+          var pcap0 = [state.x, 0.34, state.z], pcap1 = [state.x, 1.66, state.z];
+          var d = bladeHits(f.prevBlade, b, pcap0, pcap1, 0.40);
+          if (d < 0.40) { f.didHit = true; takeHit(f); }
+        }
+        f.prevBlade = f.prevBlade || [0,0,0,0,0,0];
+        for (var q = 0; q < 6; q++) f.prevBlade[q] = b[q];
+        if (f.swingT > 0.66) { f.state = 'recover'; f.timer = 0.42; f.swingT = -1; f.didHit = false; }
+      } else if (f.state === 'windup') {
+        f.windup = Math.min(1, f.windup + dt*3.4);
+        f.timer -= dt;
+        f.jaw = 1;
+        if (f.timer <= 0) { f.state = 'swing'; f.swingT = 0; f.prevBlade = null; f.windup = 1; }
+      } else if (f.state === 'recover') {
+        f.windup = Math.max(0, f.windup - dt*3.0);
+        f.timer -= dt;
+        // Back off a step so a fight has rhythm instead of being a shove.
+        if (toP < 2.2) { wantX = f.x - state.x; wantZ = f.z - state.z; speed = 1.5; }
+        if (f.timer <= 0) f.state = sees ? 'chase' : 'idle';
+      } else if (sees) {
+        f.windup = Math.max(0, f.windup - dt*3.0);
+        f.state = 'chase';
+        if (toP < 1.85) {
+          f.state = 'windup'; f.timer = f.tough ? 0.40 : 0.52; f.windup = 0;
+        } else {
+          wantX = state.x - f.x; wantZ = state.z - f.z;
+          speed = f.tough ? 2.0 : 2.5;
+        }
+      } else {
+        f.state = 'idle';
+        f.windup = Math.max(0, f.windup - dt*3.0);
+        f.timer -= dt;
+        if (f.timer <= 0) {
+          f.timer = rand(1.6, 4.0);
+          f.wanderX = Math.sin(rand(0,6.28)); f.wanderZ = Math.cos(rand(0,6.28));
+        }
+        wantX = f.wanderX || 0; wantZ = f.wanderZ || 0; speed = 0.75;
+      }
+
+      var wl = Math.hypot(wantX, wantZ);
+      if (wl > 1e-4 && speed > 0) {
+        f.vx += (wantX/wl*speed - f.vx)*Math.min(1, dt*7);
+        f.vz += (wantZ/wl*speed - f.vz)*Math.min(1, dt*7);
+      } else {
+        f.vx *= Math.max(0, 1 - dt*5); f.vz *= Math.max(0, 1 - dt*5);
+      }
+      var mv = collide(f.x + f.vx*dt, f.z + f.vz*dt, 0.34);
+      if (Math.abs(mv[0] - (f.x + f.vx*dt)) > 1e-6) f.vx *= -0.2;
+      if (Math.abs(mv[1] - (f.z + f.vz*dt)) > 1e-6) f.vz *= -0.2;
+      f.x = mv[0]; f.z = mv[1];
+
+      // Face the player when engaged, the direction of travel otherwise.
+      var faceX = sees ? state.x - f.x : f.vx, faceZ = sees ? state.z - f.z : f.vz;
+      if (Math.hypot(faceX, faceZ) > 0.05) {
+        var want = Math.atan2(faceX, faceZ);
+        var dyaw = ((want - f.yaw + Math.PI*3) % (Math.PI*2)) - Math.PI;
+        f.yaw += dyaw*Math.min(1, dt*(f.state === 'chase' ? 5 : 2.5));
+      }
+
+      var avx = (f.x - f.px)/Math.max(dt,1e-4), avz = (f.z - f.pz)/Math.max(dt,1e-4);
+      f.px = f.x; f.pz = f.z;
+      stepRig(f.rig, f.x, f.z, f.yaw, avx, avz, dt, function (leg, sp) {
+        f.bobV -= 0.24*Math.min(1, sp*0.4 + 0.3);
+      });
+      var s1 = spring(f.bob, f.bobV, f.windup*0.06 - f.stagger*0.10, 165, dt);
+      f.bob = clamp(s1[0], -0.18, 0.18); f.bobV = s1[1];
+      var s2 = spring(f.lean, f.leanV, f.stagger*0.30 - f.windup*0.14, 70, dt);
+      f.lean = s2[0]; f.leanV = s2[1];
+    }
+  }
+
+  function takeHit(f) {
+    // Guarding only helps against what is actually in front of you.
+    var fx = -Math.sin(state.yaw), fz = -Math.cos(state.yaw);
+    var tx = f.x - state.x, tz = f.z - state.z, tl = Math.hypot(tx,tz) || 1;
+    var facing = (tx/tl)*fx + (tz/tl)*fz;
+    var dmg = f.tough ? 22 : 15;
+    if (state.guard && facing > 0.32 && state.sta >= 12) {
+      state.sta -= 14;
+      state.shake = Math.min(0.7, state.shake + 0.30);
+      burst(state.x + tx/tl*0.7, 1.25, state.z + tz/tl*0.7, 14, FLAME, 3.4, 0.30, 0.026, 4, 2.4);
+      buzz(20);
+      f.stagger = 0.30;                    // a solid block rocks them back
+      f.vx -= tx/tl*1.6; f.vz -= tz/tl*1.6;
+      return;
+    }
+    state.hp -= dmg;
+    state.hurt = 1;
+    state.shake = Math.min(0.9, state.shake + 0.46);
+    state.shock = 0.02;
+    buzz([26,40,26]);
+    if (state.hp <= 0) { state.hp = 0; die(); }
+  }
+
+  /* ---------------- run ---------------- */
+
+  function farCellFrom(x, z, minDist) {
+    for (var t = 0; t < 200; t++) {
+      var i = randi(N), j = randi(N);
+      var cx = cellX(i), cz = cellZ(j);
+      if (Math.hypot(cx-x, cz-z) >= minDist) return [cx, cz];
+    }
+    return [cellX(N-1), cellZ(N-1)];
+  }
+
+  function resetRun() {
+    buildDungeon();
+    foes.length = 0;
+    state.x = cellX(0); state.z = cellZ(0);
+    state.yaw = Math.PI; state.pitch = 0;
+    state.vx = 0; state.vz = 0; state.bob = 0;
+    state.hp = 100; state.sta = 100;
+    state.dead = false; state.won = false; state.paused = false;
+    state.swing = null; state.swingT = 0; state.prevBlade = null;
+    state.hurt = 0; state.shock = 0; state.shake = 0;
+    state.kills = 0; state.haveSigil = false;
+    for (var i = 0; i < MAX_PARTS; i++) pool[i].live = false;
+
+    var sp = farCellFrom(state.x, state.z, CELL*5);
+    sigil.x = sp[0]; sigil.z = sp[1]; sigil.taken = false;
+    var st = farCellFrom(state.x, state.z, CELL*4);
+    stair.x = st[0]; stair.z = st[1];
+
+    // Skeletons stand where the chambers are, plus a few in the runs.
+    for (var r = 0; r < world.rooms.length; r++) {
+      var rm = world.rooms[r];
+      spawnFoe(cellX(rm.i) + rand(-1.4,1.4), cellZ(rm.j) + rand(-1.4,1.4), r === 0);
+    }
+    for (var k = 0; k < 4; k++) {
+      var p = farCellFrom(state.x, state.z, CELL*3.2);
+      spawnFoe(p[0] + rand(-0.9,0.9), p[1] + rand(-0.9,0.9), false);
+    }
+    state.running = true;
+    setObjective('Find the sigil');
+    updateVitals();
+  }
+
+  function setObjective(text) { elObjV.textContent = text; }
+
+  function updateVitals() {
+    elHp.style.width = clamp(state.hp, 0, 100) + '%';
+    elHpNum.textContent = Math.max(0, Math.round(state.hp));
+    elHpTrack.classList.toggle('low', state.hp <= 30);
+    elSt.style.width = clamp(state.sta, 0, 100) + '%';
+    elStNum.textContent = Math.round(state.sta);
+  }
+
+  var overEl = document.getElementById('over'), overHead = document.getElementById('overHead');
+
+  function die() {
+    state.dead = true; state.running = false;
+    overHead.innerHTML =
+      '<h2>Put down</h2>' +
+      '<div class="big">' + state.kills + '<small>bones broken</small></div>' +
+      '<p class="lede" style="margin-top:18px">The barrow keeps what it takes.</p>';
+    overEl.classList.remove('hide');
+    buzz([40,80,40]);
+  }
+  function win() {
+    state.won = true; state.running = false;
+    var score = state.depth;
+    if (score > best) { best = score; try { localStorage.setItem(BKEY, String(best)); } catch (e) {} }
+    overHead.innerHTML =
+      '<h2>Deeper</h2>' +
+      '<div class="big">' + state.depth + '<small>levels down</small></div>' +
+      '<p class="lede" style="margin-top:18px">' + state.kills +
+      ' put back down. The stair keeps going.</p>';
+    overEl.classList.remove('hide');
+    buzz([16,40,16,40,16]);
+  }
+
+  /* ---------------- simulation ---------------- */
+
+  function update(dt) {
+    state.t += dt;
+    state.hurt = Math.max(0, state.hurt - dt*1.6);
+    state.shake = Math.max(0, state.shake - dt*2.4);
+    staFlash = Math.max(0, staFlash - dt*2);
+    if (state.shock > 0) { state.shock += dt*2.6; if (state.shock >= 1) state.shock = 0; }
+    state.torchPh += dt;
+
+    updateParts(dt);
+    if (!state.running || state.paused) return;
+
+    // Look
+    var lookK = settings.look/10;
+    var lx = padLook.x, ly = padLook.y * (settings.invert ? -1 : 1);
+    if (keys.arrowleft) lx -= 1; if (keys.arrowright) lx += 1;
+    if (keys.arrowup) ly -= 1; if (keys.arrowdown) ly += 1;
+    state.yaw -= lx*2.4*lookK*dt;
+    state.pitch = clamp(state.pitch - ly*1.6*lookK*dt, -1.15, 1.15);
+
+    // Move — guarding slows you, which is the cost of holding it up.
+    var mx = padMove.x, my = padMove.y;
+    if (keys.a) mx -= 1; if (keys.d) mx += 1;
+    if (keys.w) my -= 1; if (keys.s) my += 1;
+    var mag = Math.min(1, Math.hypot(mx, my));
+    var maxSpeed = state.guard ? 2.1 : 3.9;
+    if (state.swing) maxSpeed *= 0.55;
+    if (mag > 0.02) {
+      var sin = Math.sin(state.yaw), cos = Math.cos(state.yaw);
+      var dirX = (-sin)*(-my) + cos*mx;
+      var dirZ = (-cos)*(-my) + (-sin)*mx;
+      var dl = Math.hypot(dirX, dirZ) || 1;
+      var sp = maxSpeed*mag;
+      state.vx = dirX/dl*sp; state.vz = dirZ/dl*sp;
+      state.bob += dt*sp*1.7;
+    } else {
+      state.vx *= Math.max(0, 1-dt*10); state.vz *= Math.max(0, 1-dt*10);
+    }
+    var moved = collide(state.x + state.vx*dt, state.z + state.vz*dt, 0.34);
+    state.x = moved[0]; state.z = moved[1];
+
+    // Stamina: guarding drains, everything else recovers.
+    if (state.guard) {
+      state.guardHeld += dt;
+      state.sta = Math.max(0, state.sta - dt*7);
+      if (state.sta <= 0) setGuard(false);
+    } else {
+      state.guardHeld = 0;
+      state.sta = Math.min(100, state.sta + dt*(state.swing ? 6 : 19));
+    }
+
+    // Swing timeline
+    if (state.swing) {
+      state.swingT += dt;
+      if (state.swingT > 0.56) {
+        state.swing = null; state.swingT = 0; state.prevBlade = null;
+        reticle.classList.remove('hot');
+      }
+    }
+
+    updateFoes(dt);
+    updateVitals();
+
+    // Sigil and stair
+    if (!sigil.taken && Math.hypot(sigil.x-state.x, sigil.z-state.z) < 1.1) {
+      sigil.taken = true; state.haveSigil = true;
+      burst(sigil.x, 1.1, sigil.z, 60, GOLD, 4.4, 1.0, 0.045, 2.6, 2.0);
+      setObjective('Reach the stair');
+      buzz([10,30,10]);
+    }
+    if (state.haveSigil && Math.hypot(stair.x-state.x, stair.z-state.z) < 1.2) win();
+  }
+
+  function setGuard(on) {
+    if (on && (!state.running || state.dead || state.sta < 6)) return;
+    state.guard = !!on;
+    guardBtn.classList.toggle('on', state.guard);
+  }
+
+  /* ---------------- drawing ---------------- */
+
+  function drawLeg(rig, i, hx, hy, hz, poleX, poleY, poleZ, thick, col, seed, mode) {
+    var leg = rig.legs[i];
+    var ik = solveIK(hx, hy, hz, leg.fx, leg.fy, leg.fz, rig.l1, rig.l2, poleX, poleY, poleZ);
+    bones.pushSeg(hx, hy, hz, ik[0], ik[1], ik[2], thick, col, 0.02, 0.62, 0.0, seed, mode);
+    bones.pushSeg(ik[0], ik[1], ik[2], ik[3], ik[4], ik[5], thick*0.84, col, 0.02, 0.62, 0.0, seed+3, mode);
+    bones.pushSeg(ik[0], ik[1], ik[2], ik[0], ik[1]+0.004, ik[2], thick*1.12, col, 0.02, 0.5, 0.0, seed+6, mode);
+    return ik;
+  }
+
+  function drawFoe(f, k) {
+    var s = f.size;
+    var sink = f.dead*0.9, tilt = f.dead;
+    var fx = Math.sin(f.yaw), fz = Math.cos(f.yaw);
+    var rx = fz, rz = -fx;
+    // Falling: the whole frame rotates about the feet, away from the blow.
+    var fallX = f.fallX*tilt*1.15, fallZ = f.fallZ*tilt*1.15;
+    var lean = f.lean;
+    var hipY = (0.90 + f.bob)*s - sink;
+    var chestY = (1.34 + f.bob)*s - sink;
+    var skullY = (1.60 + f.bob)*s - sink;
+    var px = f.x + fallX*0.25, pz = f.z + fallZ*0.25;
+    var cxp = px + fx*lean*0.5 + fallX*0.7, czp = pz + fz*lean*0.5 + fallZ*0.7;
+    var col = f.hit > 0.02 ? [BONE[0] + f.hit*1.2, BONE[1] + f.hit*0.5, BONE[2] + f.hit*0.4] : BONE;
+    var em = f.hit*0.5;
+
+    // Spine, ribs, pelvis: a cage reads as a skeleton far better than a torso.
+    bones.pushSeg(px, hipY, pz, cxp, chestY, czp, 0.17*s, col, em, 0.6, 0.0, k*7, 3);
+    for (var rib = 0; rib < 4; rib++) {
+      var ry = hipY + (chestY - hipY)*(0.30 + rib*0.21);
+      var w = (0.30 - rib*0.028)*s;
+      var t = (0.30 + rib*0.21);
+      var bx = px + (cxp-px)*t, bz = pz + (czp-pz)*t;
+      bones.pushSeg(bx - rx*w, ry, bz - rz*w, bx + rx*w, ry, bz + rz*w,
+                    0.055*s, col, em, 0.65, 0.0, k*5+rib, 3, 0.9);
+    }
+    bones.pushSeg(px - rx*0.20*s, hipY, pz - rz*0.20*s, px + rx*0.20*s, hipY, pz + rz*0.20*s,
+                  0.15*s, col, em, 0.6, 0.0, k*9, 3, 0.8);
+
+    // Skull: a browridge, two sunk sockets, a jaw that drops on the windup.
+    var sx = cxp + fx*0.04, sz2 = czp + fz*0.04;
+    bones.pushSeg(sx, skullY, sz2, sx + fx*0.10*s, skullY - 0.01*s, sz2 + fz*0.10*s,
+                  0.30*s, col, em, 0.5, 0.0, k*3, 3, 0.92, 0);
+    for (var e2 = 0; e2 < 2; e2++) {
+      var side = e2 ? 1 : -1;
+      var ex = sx + fx*0.12*s + rx*side*0.085*s;
+      var ez = sz2 + fz*0.12*s + rz*side*0.085*s;
+      var ey = skullY + 0.03*s;
+      // The sockets are lit from inside — the only saturated pixels on it.
+      glow.push(ex, ey, ez, 0.075*s, 0.062*s, 0.075*s, 0, EMBER,
+                0.85 + f.windup*0.9 + f.hit*0.6, 1, 0, 0, 1);
+    }
+    var jawDrop = (0.055 + f.jaw*0.075)*s;
+    bones.pushSeg(sx + fx*0.02*s, skullY - jawDrop, sz2 + fz*0.02*s,
+                  sx + fx*0.13*s, skullY - jawDrop - 0.02*s, sz2 + fz*0.13*s,
+                  0.17*s, col, em, 0.55, 0.0, k*3+2, 3, 0.75, 0);
+
+    // Legs on the planted rig, knees breaking forward.
+    for (var i = 0; i < 2; i++) {
+      var la = f.yaw + f.rig.off[i][0];
+      drawLeg(f.rig, i, px + Math.sin(la)*f.rig.hipR, hipY - 0.02*s, pz + Math.cos(la)*f.rig.hipR,
+              fx, 0.30, fz, 0.115*s, col, k*11 + i*4, 3);
+      var leg = f.rig.legs[i];
+      bones.pushSeg(leg.fx - fx*0.03, leg.fy + 0.03*s, leg.fz - fz*0.03,
+                    leg.fx + fx*0.09, leg.fy + 0.025*s, leg.fz + fz*0.09,
+                    0.10*s, col, em, 0.7, 0.0, k*11+i+20, 3, 1.2);
+    }
+
+    // Arms. The weapon arm is solved to wherever the blade currently is, so
+    // the pose and the hitbox can never disagree.
+    var b = foeWeapon(f);
+    for (var arm = 0; arm < 2; arm++) {
+      var aside = arm ? 1 : -1;
+      var sh = shoulderOf(f, aside);
+      var hx, hy, hz;
+      if (aside === 1) { hx = b[0]; hy = b[1]; hz = b[2]; }
+      else {
+        var sw = Math.sin(state.t*2.2 + k)*0.06;
+        hx = sh[0] - fx*0.10 + rx*aside*0.10; hy = sh[1] - 0.46*s + sw; hz = sh[2] - fz*0.10 + rz*aside*0.10;
+      }
+      var ik = solveIK(sh[0], sh[1], sh[2], hx, hy, hz, 0.30*s, 0.30*s,
+                       -fx*0.7 + rx*aside*0.6, -0.2, -fz*0.7 + rz*aside*0.6);
+      bones.pushSeg(sh[0], sh[1], sh[2], ik[0], ik[1], ik[2], 0.095*s, col, em, 0.65, 0.0, k*13+arm, 3);
+      bones.pushSeg(ik[0], ik[1], ik[2], ik[3], ik[4], ik[5], 0.082*s, col, em, 0.65, 0.0, k*13+arm+2, 3);
+    }
+
+    // The blade itself: a flat box between the two points the hit test uses.
+    var bl = Math.hypot(b[3]-b[0], b[4]-b[1], b[5]-b[2]) || 1;
+    boxes.pushSeg(b[0], b[1], b[2], b[3], b[4], b[5], 0.028*s, IRON,
+                  0.02 + f.windup*0.05, 0.34, 0.75, 0, 0, 3.4, 0);
+    boxes.pushSeg(b[0] - (b[3]-b[0])/bl*0.10, b[1] - (b[4]-b[1])/bl*0.10, b[2] - (b[5]-b[2])/bl*0.10,
+                  b[0] + (b[3]-b[0])/bl*0.02, b[1] + (b[4]-b[1])/bl*0.02, b[2] + (b[5]-b[2])/bl*0.02,
+                  0.055*s, IRON_D, 0.0, 0.5, 0.4, 0, 0, 2.4, 0);
+  }
+
+  function drawPlayerGear() {
+    // Sword: guard, grip, pommel, and a blade that is exactly the test segment.
+    var dx = blade[3]-blade[0], dy = blade[4]-blade[1], dz = blade[5]-blade[2];
+    var dl = Math.hypot(dx,dy,dz) || 1;
+    var ux = dx/dl, uy = dy/dl, uz = dz/dl;
+    // The flat of the blade lies along the hand's right, which is what makes a
+    // sword read as a sword rather than a rod.
+    var roll = [camR[0], camR[1], camR[2]];
+    boxes.pushSeg(blade[0], blade[1], blade[2], blade[3], blade[4], blade[5],
+                  0.026, IRON, 0.03, 0.26, 0.82, 0, 2, 3.6, 0, roll);
+    // Fuller: a thin darker inlay down the middle, catching the torch.
+    boxes.pushSeg(blade[0] + ux*0.10, blade[1] + uy*0.10, blade[2] + uz*0.10,
+                  blade[3] - ux*0.08, blade[4] - uy*0.08, blade[5] - uz*0.08,
+                  0.030, IRON_D, 0.0, 0.42, 0.6, 0, 2, 1.1, 0, roll);
+    boxes.pushSeg(blade[0] - ux*0.03, blade[1] - uy*0.03, blade[2] - uz*0.03,
+                  blade[0] + ux*0.03, blade[1] + uy*0.03, blade[2] + uz*0.03,
+                  0.055, IRON_D, 0.0, 0.4, 0.7, 0, 2, 4.6, 0, roll);
+    bones.pushSeg(blade[0] - ux*0.19, blade[1] - uy*0.19, blade[2] - uz*0.19,
+                  blade[0] - ux*0.04, blade[1] - uy*0.04, blade[2] - uz*0.04,
+                  0.052, LEATHER, 0.0, 0.85, 0.0, 0, 2);
+    bones.push(blade[0] - ux*0.23, blade[1] - uy*0.23, blade[2] - uz*0.23,
+               0.075, 0.075, 0.075, 0, IRON_D, 0.0, 0.45, 0.6, 0, 2);
+    // The fist on the grip.
+    bones.pushSeg(blade[0] - ux*0.16 + camR[0]*0.01, blade[1] - uy*0.16, blade[2] - uz*0.16 + camR[2]*0.01,
+                  blade[0] - ux*0.06, blade[1] - uy*0.06, blade[2] - uz*0.06,
+                  0.10, BONE_D, 0.0, 0.7, 0.0, 3, 2, 1.15);
+
+    // Torch in the off hand: shaft, wrapped head, and a flame that is the
+    // scene's key light made visible.
+    var tanV2 = Math.tan(FOV*0.5), tanH2 = tanV2*(cv.width/Math.max(1, cv.height));
+    var tf = 0.56, tr = -0.80*tf*tanH2, tu = -0.66*tf*tanV2;
+    var tx = camPos[0] + camR[0]*tr + camU[0]*tu + camF[0]*tf;
+    var ty = camPos[1] + camR[1]*tr + camU[1]*tu + camF[1]*tf;
+    var tz = camPos[2] + camR[2]*tr + camU[2]*tu + camF[2]*tf;
+    var hx = camU[0]*0.16 + camF[0]*0.08, hy = camU[1]*0.16 + camF[1]*0.08, hz = camU[2]*0.16 + camF[2]*0.08;
+    torchTip[0] = tx + hx; torchTip[1] = ty + hy; torchTip[2] = tz + hz;
+    bones.pushSeg(tx, ty, tz, tx + hx*0.74, ty + hy*0.74, tz + hz*0.74,
+                  0.048, LEATHER, 0.0, 0.9, 0.0, 5, 2);
+    bones.pushSeg(tx + hx*0.70, ty + hy*0.70, tz + hz*0.70, torchTip[0], torchTip[1], torchTip[2],
+                  0.085, [0.08,0.05,0.04], 0.0, 0.95, 0.0, 6, 2);
+    bones.pushSeg(tx - hx*0.16, ty - hy*0.16, tz - hz*0.16, tx + hx*0.10, ty + hy*0.10, tz + hz*0.10,
+                  0.105, BONE_D, 0.0, 0.7, 0.0, 7, 2, 1.1);
+    drawFlame(torchTip[0], torchTip[1], torchTip[2], state.torchPh*7.3, 0.34, 0.46);
+  }
+  var torchTip = [0, 1.5, 0];
+
+  function drawFlame(x, y, z, ph, scale, bright) {
+    var b = bright === undefined ? 1 : bright;
+    for (var i = 0; i < 5; i++) {
+      var t = i/4;
+      var wob = Math.sin(ph + i*1.7)*0.035*scale*(0.4 + t);
+      var wob2 = Math.cos(ph*1.31 + i*2.1)*0.035*scale*(0.4 + t);
+      var r = (0.115 - t*0.072)*scale*(0.88 + 0.24*Math.sin(ph*2.3 + i));
+      var col = t < 0.45 ? [1.0, 0.72, 0.34] : FLAME;
+      glow.push(x + wob, y + t*0.30*scale, z + wob2, r, r*1.5, r, 0,
+                col, (2.1 - t*0.85)*b, 1, 0, 0, 1);
+    }
+  }
+
+  function buildInstances() {
+    boxes.reset(); bones.reset(); glow.reset();
+
+    // Floor and vault: two boxes, because with this fog you never see an edge.
+    var span = N*CELL + 2;
+    boxes.push(0, -0.35, 0, span, 0.7, span, 0, STONE, 0, 0.86, 0.0, 3);
+    boxes.push(0, WALL_H + 0.35, 0, span, 0.7, span, 0, STONE_D, 0, 0.95, 0.0, 9);
+
+    // Masonry near enough to matter. Anything past the fog is not drawn, which
+    // is most of the level.
+    var seen = 0;
+    for (var i = 0; i < world.walls.length; i++) {
+      var w = world.walls[i];
+      if (Math.abs(w.x - state.x) > 26 || Math.abs(w.z - state.z) > 26) continue;
+      boxes.push(w.x, WALL_H*0.5, w.z, w.hw*2, WALL_H, w.hd*2, 0, STONE, 0, 0.82, 0.0, w.seed);
+      // A course line, so the walls read as blocks rather than slabs.
+      boxes.push(w.x, WALL_H*0.62, w.z, w.hw*2 + 0.05, 0.08, w.hd*2 + 0.05, 0,
+                 MORTAR, 0, 0.9, 0.0, w.seed + 3);
+      seen++;
+    }
+
+    for (var p = 0; p < world.props.length; p++) {
+      var pr = world.props[p];
+      if (Math.abs(pr.x - state.x) > 24 || Math.abs(pr.z - state.z) > 24) continue;
+      boxes.push(pr.x, 0.36, pr.z, pr.rot ? 1.24 : 2.30, 0.72, pr.rot ? 2.30 : 1.24,
+                 0, STONE, 0, 0.8, 0.0, pr.seed);
+      boxes.push(pr.x, 0.78, pr.z, pr.rot ? 1.34 : 2.40, 0.14, pr.rot ? 2.40 : 1.34,
+                 0, MORTAR, 0, 0.75, 0.0, pr.seed + 5);
+    }
+
+    // Wall torches: bracket, and a flame that is also a light.
+    for (var t = 0; t < world.torches.length; t++) {
+      var tc = world.torches[t];
+      if (Math.abs(tc.x - state.x) > 22 || Math.abs(tc.z - state.z) > 22) continue;
+      boxes.push(tc.x, tc.y - 0.28, tc.z, 0.10, 0.46, 0.10, 0, IRON_D, 0, 0.7, 0.5, t);
+      drawFlame(tc.x, tc.y, tc.z, state.t*6.1 + tc.ph, 1.0);
+    }
+
+    if (!sigil.taken) {
+      var sy = 1.05 + Math.sin(state.t*1.7)*0.10;
+      boxes.push(sigil.x, sy, sigil.z, 0.34, 0.34, 0.06, state.t*0.9, GOLD, 1.15, 0.3, 0.8, 0, 1);
+      glow.push(sigil.x, sy, sigil.z, 0.62, 0.62, 0.62, 0, GOLD, 0.16, 1, 0, 0, 1);
+    }
+    // The stair only lights once it can be used, so it never misleads.
+    var stairLit = state.haveSigil;
+    for (var s = 0; s < 4; s++) {
+      boxes.push(stair.x, 0.12 + s*0.22, stair.z + s*0.34 - 0.5, 1.9, 0.22, 0.34, 0,
+                 stairLit ? MORTAR : STONE_D, stairLit ? 0.10 : 0, 0.8, 0.0, 20+s);
+    }
+    if (stairLit) glow.push(stair.x, 0.9, stair.z, 1.5, 1.5, 1.5, 0, GOLD, 0.10, 1, 0, 0, 1);
+
+    for (var k = 0; k < foes.length; k++) {
+      var f = foes[k];
+      if (!f.alive && f.dead >= 1 && Math.hypot(f.x-state.x, f.z-state.z) > 18) continue;
+      if (Math.hypot(f.x-state.x, f.z-state.z) > 30) continue;
+      drawFoe(f, k);
+    }
+
+    // Everything after this mark is carried, and is skipped when the shadow
+    // map is drawn from the torch it is carried in.
+    boxes.holdMark = boxes.n; bones.holdMark = bones.n;
+    drawPlayerGear();
+
+    for (var q = 0; q < MAX_PARTS; q++) {
+      var pt = pool[q];
+      if (!pt.live) continue;
+      var lk = pt.life/pt.max;
+      glow.push(pt.x, pt.y, pt.z, pt.size*lk, pt.size*lk, pt.size*lk, 0,
+                pt.col, pt.emis*lk, 1, 0, 0, 1);
+    }
+
+    boxes.upload(); bones.upload(); glow.upload();
+  }
+
+  /* ---------------- lights ---------------- */
+
+  var lightPosArr = new Float32Array(MAX_LIGHTS*3), lightColArr = new Float32Array(MAX_LIGHTS*3);
+
+  function flicker(ph, speed) {
+    return 0.76 + 0.24*Math.sin(state.t*speed + ph)*Math.sin(state.t*speed*0.41 + ph*2.1);
+  }
+
+  function pickLights() {
+    // Light 0 is always the carried torch: it is the shadow caster, and the
+    // shader special-cases index 0.
+    var fl = flicker(0, 9.4);
+    var pow = 10.0*fl;
+    lightPosArr[0] = torchTip[0]; lightPosArr[1] = torchTip[1]; lightPosArr[2] = torchTip[2];
+    lightColArr[0] = TORCHLIGHT[0]*pow; lightColArr[1] = TORCHLIGHT[1]*pow;
+    lightColArr[2] = TORCHLIGHT[2]*pow;
+
+    var near = [];
+    for (var i = 0; i < world.torches.length; i++) {
+      var tc = world.torches[i];
+      var d = Math.hypot(tc.x-state.x, tc.z-state.z);
+      if (d < 24) near.push({ t: tc, d: d });
+    }
+    near.sort(function (a, b) { return a.d - b.d; });
+    var n = Math.min(MAX_LIGHTS-1, near.length);
+    for (var k = 0; k < n; k++) {
+      var tc2 = near[k].t, p = 17*flicker(tc2.ph, 6.1), o = (k+1)*3;
+      lightPosArr[o] = tc2.x; lightPosArr[o+1] = tc2.y + 0.08; lightPosArr[o+2] = tc2.z;
+      lightColArr[o] = TORCHLIGHT[0]*p; lightColArr[o+1] = TORCHLIGHT[1]*p;
+      lightColArr[o+2] = TORCHLIGHT[2]*p;
+    }
+    return n+1;
+  }
+
+  /* ---------------- frame ---------------- */
+
+  var lightVP = new Float32Array(16);
+  var drawCalls = 0, triCount = 0, lastFps = 0;
+
+  function render() {
+    var aspect = cv.width/cv.height;
+    var sh = state.shake;
+    var shx = sh*Math.sin(state.t*47)*0.055, shy = sh*Math.sin(state.t*41)*0.045;
+    var shroll = sh*Math.sin(state.t*33)*0.05;
+
+    var eyeY = 1.62 + Math.sin(state.bob)*0.045 + shy - (state.guard ? 0.05 : 0);
+    var cp = Math.cos(state.pitch), sp2 = Math.sin(state.pitch);
+    var fwdX = -Math.sin(state.yaw)*cp, fwdY = sp2, fwdZ = -Math.cos(state.yaw)*cp;
+
+    camPos[0] = state.x + shx*0.3; camPos[1] = eyeY; camPos[2] = state.z;
+    camF[0] = fwdX; camF[1] = fwdY; camF[2] = fwdZ;
+    // Right and up from the view direction, with a roll shake on top.
+    camR[0] = Math.cos(state.yaw); camR[1] = 0; camR[2] = -Math.sin(state.yaw);
+    camU[0] = camR[1]*camF[2] - camR[2]*camF[1];
+    camU[1] = camR[2]*camF[0] - camR[0]*camF[2];
+    camU[2] = camR[0]*camF[1] - camR[1]*camF[0];
+    var ul = Math.hypot(camU[0], camU[1], camU[2]) || 1;
+    camU[0]/=ul; camU[1]/=ul; camU[2]/=ul;
+
+    updateBlade();
+    if (state.swing && state.swingT > 0.11 && state.swingT < 0.34) resolveSwing();
+    if (state.swing) {
+      state.prevBlade = state.prevBlade || [0,0,0,0,0,0];
+      for (var q = 0; q < 6; q++) state.prevBlade[q] = blade[q];
+    }
+
+    buildInstances();
+
+    var proj = m4perspective(FOV, aspect, 0.06, 90);
+    var upX = camU[0] + camR[0]*shroll, upY = camU[1] + camR[1]*shroll, upZ = camU[2] + camR[2]*shroll;
+    var view = m4lookAt(camPos[0], camPos[1], camPos[2],
+                        camPos[0]+fwdX, camPos[1]+fwdY, camPos[2]+fwdZ, upX, upY, upZ);
+    var vp = m4mul(proj, view);
+
+    // The shadow map is a spot from the torch down the view axis. Shadows only
+    // matter where you are looking, so one perspective map buys the whole
+    // dungeon rather than six faces of a cube.
+    var shadowOn = settings.shadows ? 1 : 0;
+    if (shadowOn) {
+      var lp = m4perspective(1.85, 1, 0.12, 30);
+      var lv = m4lookAt(torchTip[0], torchTip[1], torchTip[2],
+                        torchTip[0]+fwdX, torchTip[1]+fwdY, torchTip[2]+fwdZ, 0, 1, 0);
+      m4mul(lp, lv, lightVP);
+    }
+
+    var nLights = pickLights();
+    drawCalls = 0; triCount = 0;
+
+    if (shadowOn) {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, shadow.fbo);
+      gl.viewport(0, 0, SHADOW_SIZE, SHADOW_SIZE);
+      gl.enable(gl.DEPTH_TEST); gl.depthMask(true);
+      gl.clear(gl.DEPTH_BUFFER_BIT);
+      gl.enable(gl.CULL_FACE); gl.cullFace(gl.FRONT);
+      gl.useProgram(progShadow);
+      gl.uniformMatrix4fv(progShadow.u.uLightVP, false, lightVP);
+      drawCalls += boxes.draw(boxes.holdMark); triCount += boxes.tris*boxes.holdMark;
+      drawCalls += bones.draw(bones.holdMark); triCount += bones.tris*bones.holdMark;
+    }
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, scene.fbo);
+    gl.viewport(0, 0, scene.w, scene.h);
+    gl.enable(gl.DEPTH_TEST); gl.depthMask(true);
+    gl.enable(gl.CULL_FACE); gl.cullFace(gl.BACK);
+    gl.clearColor(FOG[0], FOG[1], FOG[2], 1);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    gl.useProgram(progScene);
+    gl.uniformMatrix4fv(progScene.u.uVP, false, vp);
+    gl.uniformMatrix4fv(progScene.u.uLightVP, false, lightVP);
+    gl.uniform3f(progScene.u.uEye, camPos[0], camPos[1], camPos[2]);
+    gl.uniform3f(progScene.u.uAmbient, 0.030, 0.022, 0.028);
+    gl.uniform3f(progScene.u.uFogColor, FOG[0], FOG[1], FOG[2]);
+    gl.uniform1f(progScene.u.uFogDensity, 0.0022);
+    gl.uniform1f(progScene.u.uShadowTexel, 1/SHADOW_SIZE);
+    gl.uniform1f(progScene.u.uShadowOn, shadowOn);
+    gl.uniform1i(progScene.u.uNumLights, nLights);
+    gl.uniform3fv(progScene.u.uLightPos, lightPosArr);
+    gl.uniform3fv(progScene.u.uLightColor, lightColArr);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, shadow.tex);
+    gl.uniform1i(progScene.u.uShadow, 0);
+    drawCalls += boxes.draw(); triCount += boxes.tris*boxes.n;
+    drawCalls += bones.draw(); triCount += bones.tris*bones.n;
+    drawCalls += glow.draw();  triCount += glow.tris*glow.n;
+
+    gl.disable(gl.DEPTH_TEST); gl.disable(gl.CULL_FACE);
+    gl.bindVertexArray(emptyVAO);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, bloomA.fbo);
+    gl.viewport(0, 0, bloomA.w, bloomA.h);
+    gl.useProgram(progBright);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, scene.tex);
+    gl.uniform1i(progBright.u.uTex, 0);
+    gl.uniform1f(progBright.u.uThreshold, 0.55);
+    gl.drawArrays(gl.TRIANGLES, 0, 3); drawCalls++;
+
+    gl.useProgram(progBlur);
+    gl.uniform1i(progBlur.u.uTex, 0);
+    for (var pass = 0; pass < 3; pass++) {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, bloomB.fbo);
+      gl.viewport(0, 0, bloomB.w, bloomB.h);
+      gl.bindTexture(gl.TEXTURE_2D, bloomA.tex);
+      gl.uniform2f(progBlur.u.uDir, 1.4/bloomA.w, 0);
+      gl.drawArrays(gl.TRIANGLES, 0, 3); drawCalls++;
+      gl.bindFramebuffer(gl.FRAMEBUFFER, bloomA.fbo);
+      gl.viewport(0, 0, bloomA.w, bloomA.h);
+      gl.bindTexture(gl.TEXTURE_2D, bloomB.tex);
+      gl.uniform2f(progBlur.u.uDir, 0, 1.4/bloomA.h);
+      gl.drawArrays(gl.TRIANGLES, 0, 3); drawCalls++;
+    }
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, cv.width, cv.height);
+    gl.useProgram(progComposite);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, scene.tex);
+    gl.uniform1i(progComposite.u.uScene, 0);
+    gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, bloomA.tex);
+    gl.uniform1i(progComposite.u.uBloom, 1);
+    gl.uniform1f(progComposite.u.uBloomAmount, 0.50);
+    gl.uniform1f(progComposite.u.uTime, state.t);
+    gl.uniform1f(progComposite.u.uGrain, settings.grain ? 0.026 : 0);
+    gl.uniform1f(progComposite.u.uExposure, 1.15);
+    gl.uniform1f(progComposite.u.uHurt, state.hurt);
+    gl.uniform1f(progComposite.u.uShock, state.shock);
+    gl.drawArrays(gl.TRIANGLES, 0, 3); drawCalls++;
+    gl.bindVertexArray(null);
+  }
+
+  /* ---------------- loop ---------------- */
+
+  var lastT = 0, acc = 0, frames = 0, scaleCooldown = 0;
+
+  function tick(now) {
+    requestAnimationFrame(tick);
+    var t = now*0.001;
+    var dt = lastT ? Math.min(0.05, t - lastT) : 0.016;
+    lastT = t;
+
+    update(dt);
+    render();
+
+    // vsync pins frame time near 16.7ms, which sits between any sensible pair
+    // of thresholds — so the scaler is driven by fps (PLATFORM.md).
+    if (scaleCooldown > 0) scaleCooldown -= dt;
+    if (scaleCooldown <= 0 && lastFps > 0) {
+      if (lastFps <= 48 && renderScale > 0.6) {
+        renderScale = Math.max(0.6, renderScale - 0.1); applyScale(); scaleCooldown = 1.4;
+      } else if (lastFps >= 57 && renderScale < 1.0) {
+        renderScale = Math.min(1.0, renderScale + 0.1); applyScale(); scaleCooldown = 1.4;
+      }
+    }
+
+    acc += dt; frames++;
+    if (acc >= 0.4) {
+      lastFps = Math.round(frames/acc);
+      elFps.textContent = lastFps;
+      elFps.className = lastFps >= 50 ? 'good' : (lastFps >= 30 ? 'fair' : 'poor');
+      elScale.textContent = Math.round(renderScale*100) + '%';
+      elDraws.textContent = drawCalls;
+      elTris.textContent = triCount >= 1000 ? (triCount/1000).toFixed(1) + 'k' : triCount;
+      elView.textContent = Math.round(cssW) + '×' + Math.round(cssH);
+      // Compare against the axis that matches the orientation, or landscape
+      // reports a phantom gap the size of the screen's long side.
+      var lng = Math.max(screen.width || 0, screen.height || 0);
+      var sht = Math.min(screen.width || 0, screen.height || 0);
+      elGap.textContent = lng ? Math.max(0, Math.round((cssH >= cssW ? lng : sht) - cssH)) + 'px' : '—';
+      acc = 0; frames = 0;
+    }
+  }
+
+  /* ---------------- ui ---------------- */
+
+  var sheet = document.getElementById('settings');
+  var introEl = document.getElementById('intro');
+  var diagEl = document.querySelector('.diag');
+  var swFs = document.getElementById('swFs');
+  var swShadow = document.getElementById('swShadow');
+  var swInvert = document.getElementById('swInvert');
+  var swHaptic = document.getElementById('swHaptic');
+  var swGrain = document.getElementById('swGrain');
+  var swDiag = document.getElementById('swDiag');
+  var lookEl = document.getElementById('look'), lookVal = document.getElementById('lookVal');
+
+  function setSwitch(el, on) { el.setAttribute('aria-checked', on ? 'true' : 'false'); }
+  function applySettings() {
+    setSwitch(swFs, settings.fullscreen);
+    setSwitch(swShadow, settings.shadows);
+    setSwitch(swInvert, settings.invert);
+    setSwitch(swHaptic, settings.haptics);
+    setSwitch(swGrain, settings.grain);
+    setSwitch(swDiag, settings.diag);
+    lookEl.value = settings.look;
+    lookVal.textContent = (settings.look/10).toFixed(1);
+    diagEl.classList.toggle('off', !settings.diag);
+    document.getElementById('rowFs').classList.toggle('off', !framed);
+    applyFullscreen();
+    saveSettings();
+  }
+  function openSettings() { state.paused = true; sheet.classList.remove('hide'); applySettings(); }
+  function closeSettings() {
+    sheet.classList.add('hide');
+    state.paused = introEl.classList.contains('hide') ? false : true;
+  }
+  // Tapping the scrim dismisses it; the card itself must not.
+  sheet.addEventListener('click', function (e) { if (e.target === sheet) closeSettings(); });
+
+  document.getElementById('btnGear').addEventListener('click', openSettings);
+  document.getElementById('btnSettingsFromIntro').addEventListener('click', openSettings);
+  document.getElementById('btnResume').addEventListener('click', closeSettings);
+  document.getElementById('btnLeave').addEventListener('click', function () {
+    closeSettings();
+    if (framed) { try { window.parent.postMessage({ type: 'arcade:exit' }, '*'); } catch (e) {} }
+    else if (history.length > 1) history.back();
+  });
+  swFs.addEventListener('click', function () {
+    settings.fullscreen = !settings.fullscreen;
+    applySettings();
+    setTimeout(resize, 60); setTimeout(resize, 240); setTimeout(resize, 600);
+  });
+  swShadow.addEventListener('click', function () { settings.shadows = !settings.shadows; applySettings(); });
+  swInvert.addEventListener('click', function () { settings.invert = !settings.invert; applySettings(); });
+  swHaptic.addEventListener('click', function () { settings.haptics = !settings.haptics; applySettings(); buzz(10); });
+  swGrain.addEventListener('click', function () { settings.grain = !settings.grain; applySettings(); });
+  swDiag.addEventListener('click', function () { settings.diag = !settings.diag; applySettings(); });
+  lookEl.addEventListener('input', function () {
+    settings.look = parseInt(lookEl.value, 10);
+    lookVal.textContent = (settings.look/10).toFixed(1);
+    saveSettings();
+  });
+
+  strikeBtn.addEventListener('touchstart', function (e) { e.preventDefault(); tryStrike(); }, { passive: false });
+  strikeBtn.addEventListener('mousedown', function (e) { e.preventDefault(); tryStrike(); });
+  function guardOn(e) { e.preventDefault(); setGuard(true); }
+  function guardOff(e) { e.preventDefault(); setGuard(false); }
+  guardBtn.addEventListener('touchstart', guardOn, { passive: false });
+  guardBtn.addEventListener('touchend', guardOff);
+  guardBtn.addEventListener('touchcancel', guardOff);
+  guardBtn.addEventListener('mousedown', guardOn);
+  window.addEventListener('mouseup', function () { if (state.guard) setGuard(false); });
+
+  document.getElementById('btnGo').addEventListener('click', function () {
+    introEl.classList.add('hide');
+    resetRun();
+  });
+  document.getElementById('btnAgain').addEventListener('click', function () {
+    overEl.classList.add('hide');
+    state.depth = state.won ? state.depth + 1 : 1;
+    resetRun();
+  });
+
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden && state.running) state.paused = true;
+  });
+  window.addEventListener('blur', function () { if (state.running) state.paused = true; });
+
+  /* ---------------- go ---------------- */
+
+  applySettings();
+  buildDungeon();
+  // A still frame behind the intro card, so the tomb is there before you enter.
+  state.x = cellX(0); state.z = cellZ(0); state.yaw = Math.PI;
+  resize();
+  requestAnimationFrame(tick);
+}());
+</script>
+</body>
+</html>

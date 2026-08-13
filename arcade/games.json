@@ -1,6 +1,19 @@
 {
   "games": [
     {
+      "slug": "barrow",
+      "name": "Barrow",
+      "glyph": "blade",
+      "description": "First person, down in the tombs. The blade is real geometry.",
+      "ink": "#c96a8e",
+      "entry": "index.html",
+      "stat": {
+        "key": "barrow.best",
+        "label": "Deepest",
+        "format": "int"
+      }
+    },
+    {
       "slug": "ossuary",
       "name": "Ossuary",
       "glyph": "crypt",
