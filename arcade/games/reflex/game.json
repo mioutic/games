@@ -1,6 +1,7 @@
 {
   "name": "Reflex",
-  "emoji": "⚡️",
-  "description": "Tap the lit tile. Fifteen rounds, one average.",
-  "color": "#ffb020"
+  "glyph": "bolt",
+  "description": "Tap the lit cell. Fifteen rounds, one average.",
+  "ink": "#c96a8e",
+  "stat": { "key": "reflex.best", "label": "Best avg", "format": "ms" }
 }

@@ -27,18 +27,28 @@ through the GitHub contents API, which only works while the repo is public.
 
 ### game.json
 
-Every field is optional. Without the file, the title is derived from the folder
-name and the tile gets a colour picked from the folder name's hash.
+Every field is optional. Without the file, the title comes from the folder name
+and the channel-strip ink is picked from the folder name's hash.
 
 ```json
 {
   "name": "My Game",
-  "emoji": "🎯",
+  "glyph": "bolt",
   "description": "One line, shown under the title.",
-  "color": "#4aa8ff",
+  "ink": "#6fb3ab",
+  "stat": { "key": "mygame.best", "label": "Best", "format": "int" },
   "entry": "index.html"
 }
 ```
+
+- `glyph` names a line icon drawn by the launcher — `bolt`, `serpent`, `grid`,
+  or `default` (a diamond). **No emoji**: the house style forbids it, and
+  `build-index.py` warns if a `game.json` still carries an `emoji` field. To add
+  a glyph, put its SVG path in the `GLYPHS` table in `arcade/index.html`.
+- `ink` is the 2px channel strip along the card's top edge. Keep it to the
+  categorical ramp in `DESIGN.md` — it is the only per-game colour on screen.
+- `stat` points at the `localStorage` key holding the personal best, so the card
+  can show it as a readout. `format` is `int` or `ms`.
 
 ## Notes for game authors
 

@@ -15,18 +15,20 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 GAMES = os.path.join(ROOT, "games")
 OUT = os.path.join(ROOT, "games.json")
 
-PALETTE = ["#7c5cff", "#ff5c9d", "#3ecf8e", "#ffb020", "#4aa8ff", "#ff6b5c", "#c05cff", "#2fd8c6"]
+# Sanguine's categorical ramp — muted, gaslit (DESIGN.md). Used only for the
+# 2px channel strip along the top of a card, never for large fills.
+INKS = ["#6fb3ab", "#8a8fc9", "#a884c9", "#c96a8e"]
 
 
 def titleize(slug):
     return re.sub(r"\b\w", lambda m: m.group().upper(), slug.replace("-", " ").replace("_", " "))
 
 
-def color_for(slug):
+def ink_for(slug):
     h = 0
     for ch in slug:
         h = (h * 31 + ord(ch)) & 0xFFFFFFFF
-    return PALETTE[h % len(PALETTE)]
+    return INKS[h % len(INKS)]
 
 
 def main():
@@ -50,14 +52,20 @@ def main():
             print("warning: skipping %s, no %s" % (slug, entry), file=sys.stderr)
             continue
 
-        entries.append({
+        entry_meta = {
             "slug": slug,
             "name": meta.get("name") or titleize(slug),
-            "emoji": meta.get("emoji", "🎮"),
+            "glyph": meta.get("glyph", "default"),
             "description": meta.get("description", ""),
-            "color": meta.get("color") or color_for(slug),
+            "ink": meta.get("ink") or ink_for(slug),
             "entry": entry,
-        })
+        }
+        if meta.get("stat"):
+            entry_meta["stat"] = meta["stat"]
+        if meta.get("emoji"):
+            print("warning: %s sets 'emoji' — Sanguine forbids emoji, use 'glyph' (see DESIGN.md)"
+                  % slug, file=sys.stderr)
+        entries.append(entry_meta)
 
     with open(OUT, "w") as f:
         json.dump({"games": entries}, f, indent=2, ensure_ascii=False)

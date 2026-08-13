@@ -1,6 +1,7 @@
 {
   "name": "Snake",
-  "emoji": "🐍",
+  "glyph": "serpent",
   "description": "Swipe to steer. Don't bite yourself.",
-  "color": "#3ecf8e"
+  "ink": "#6fb3ab",
+  "stat": { "key": "snake.best", "label": "Best", "format": "int" }
 }

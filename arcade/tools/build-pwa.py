@@ -170,8 +170,10 @@ def main():
         "scope": "./",
         "display": "standalone",
         "orientation": "portrait",
-        "background_color": "#0b0b12",
-        "theme_color": "#0b0b12",
+        # Sanguine surface-0; the splash and status bar must not flash a
+        # different ground than the app itself (DESIGN.md).
+        "background_color": "#0b0609",
+        "theme_color": "#0b0609",
         "icons": [{
             "src": "./icon-180.png",
             "sizes": "180x180",

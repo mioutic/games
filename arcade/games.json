@@ -3,18 +3,28 @@
     {
       "slug": "reflex",
       "name": "Reflex",
-      "emoji": "⚡️",
-      "description": "Tap the lit tile. Fifteen rounds, one average.",
-      "color": "#ffb020",
-      "entry": "index.html"
+      "glyph": "bolt",
+      "description": "Tap the lit cell. Fifteen rounds, one average.",
+      "ink": "#c96a8e",
+      "entry": "index.html",
+      "stat": {
+        "key": "reflex.best",
+        "label": "Best avg",
+        "format": "ms"
+      }
     },
     {
       "slug": "snake",
       "name": "Snake",
-      "emoji": "🐍",
+      "glyph": "serpent",
       "description": "Swipe to steer. Don't bite yourself.",
-      "color": "#3ecf8e",
-      "entry": "index.html"
+      "ink": "#6fb3ab",
+      "entry": "index.html",
+      "stat": {
+        "key": "snake.best",
+        "label": "Best",
+        "format": "int"
+      }
     }
   ]
 }

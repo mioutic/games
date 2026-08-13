@@ -5,51 +5,94 @@
 <title>Snake</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <style>
-  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none; }
-  html, body { margin: 0; height: 100%; background: #0b0b12; color: #f2f2f7; overflow: hidden; touch-action: none;
-    font: 400 17px/1.4 -apple-system, BlinkMacSystemFont, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
-  #app { height: 100%; display: flex; flex-direction: column; align-items: center;
-         padding: 14px calc(env(safe-area-inset-right,0px) + 14px)
-                  calc(env(safe-area-inset-bottom,0px) + 14px) calc(env(safe-area-inset-left,0px) + 14px); }
-  .hud { flex: none; width: 100%; max-width: 520px; display: flex; justify-content: space-between; margin-bottom: 12px; }
-  .stat { text-align: center; flex: 1; }
-  .k { font-size: 10.5px; letter-spacing: .09em; text-transform: uppercase; color: #8e8e99; }
-  .v { font-size: 21px; font-weight: 650; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
-  .v.green { color: #3ecf8e; }
-  .stage { flex: 1; width: 100%; display: grid; place-items: center; min-height: 0; }
-  canvas { background: #12121a; border: 1px solid #272733; border-radius: 20px; display: block;
-           max-width: 100%; max-height: 100%; touch-action: none; }
-  .hint { flex: none; color: #55555f; font-size: 12px; margin-top: 12px; }
+  /* Sanguine — see DESIGN.md */
+  :root {
+    --s-0: #0b0609;  --s-1: #12080c;  --s-2: #1a0d12;
+    --t-0: #f2e6e6;  --t-1: #c3a9ad;  --t-2: #8f6f76;  --t-3: #5c434a;
+    --accent: #e9d8c5;  --accent-2: #b81d3a;  --brand: #d9557a;
+    --line-0: #150a0e;  --line-1: #2a141c;  --line-2: #3d1f28;
+    --bloom: 0 0 12px rgba(216,58,88,.45), 0 0 26px rgba(216,58,88,.16);
+    --lit-within: inset 0 0 60px rgba(184,29,58,.05);
+    --font-display: Georgia, "Times New Roman", serif;
+    --font-ui: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+    --radius: 2px;  --dur: 160ms;  --ease: cubic-bezier(.2,.6,.2,1);
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent;
+      user-select: none; -webkit-user-select: none; }
+  html, body {
+    margin: 0; height: 100%; overflow: hidden; touch-action: none;
+    background: var(--s-0); color: var(--t-0);
+    font: 400 16px/1.45 var(--font-ui); -webkit-font-smoothing: antialiased;
+    overscroll-behavior: none;
+  }
+  #app {
+    height: 100%; display: flex; flex-direction: column; align-items: center;
+    padding: 14px calc(env(safe-area-inset-right,0px) + 14px)
+             calc(env(safe-area-inset-bottom,0px) + 14px) calc(env(safe-area-inset-left,0px) + 14px);
+  }
+  .hud { flex: none; width: 100%; max-width: 520px; display: flex;
+         border: 1px solid var(--line-1); border-radius: var(--radius); background: var(--s-1); }
+  .stat { flex: 1; padding: 9px 6px 8px; text-align: center; border-right: 1px solid var(--line-0); }
+  .stat:last-child { border-right: 0; }
+  .k { font: 500 9px/1 var(--font-ui); letter-spacing: .16em; text-transform: uppercase; color: var(--t-2); }
+  .v { margin-top: 6px; font: 500 19px/1 var(--font-mono); font-variant-numeric: tabular-nums; color: var(--t-0); }
+  .v.brandish { color: var(--brand); }
 
-  .overlay { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px;
-             background: rgba(11,11,18,.9); backdrop-filter: blur(14px); text-align: center; }
+  .stage { flex: 1; width: 100%; display: grid; place-items: center; min-height: 0; padding: 14px 0; }
+  canvas {
+    background: var(--s-1); border: 1px solid var(--line-2); border-radius: var(--radius);
+    display: block; max-width: 100%; max-height: 100%; touch-action: none;
+    box-shadow: var(--lit-within);
+  }
+  .hint { flex: none; font: 500 9px/1 var(--font-ui); letter-spacing: .16em;
+          text-transform: uppercase; color: var(--t-3); }
+
+  .overlay {
+    position: absolute; inset: 0; display: grid; place-items: center; padding: 24px;
+    background: rgba(5,2,3,.9); text-align: center;
+  }
   .overlay.hide { display: none; }
-  .overlay h2 { font-size: 30px; font-weight: 700; letter-spacing: -.02em; margin: 0 0 8px; }
-  .overlay p { color: #8e8e99; font-size: 14.5px; margin: 0 0 22px; max-width: 280px; line-height: 1.55; }
-  .big { font-size: 56px; font-weight: 700; letter-spacing: -.03em; font-variant-numeric: tabular-nums;
-         background: linear-gradient(100deg,#3ecf8e,#4aa8ff); -webkit-background-clip: text; background-clip: text; color: transparent; }
-  button.go { appearance: none; border: 0; border-radius: 999px; padding: 15px 40px; font-size: 17px; font-weight: 600;
-              color: #08160f; background: linear-gradient(100deg,#5fe0a5,#3ecf8e); }
-  button.go:active { transform: scale(.95); }
+  .overlay h2 { font: 400 30px/1.1 var(--font-display); letter-spacing: .04em; margin: 0 0 10px; }
+  .overlay p { color: var(--t-2); font-size: 13.5px; margin: 0 0 24px; max-width: 290px;
+               line-height: 1.65; margin-inline: auto; }
+  .big { font: 500 54px/1 var(--font-mono); font-variant-numeric: tabular-nums;
+         color: var(--accent); letter-spacing: -.02em; }
+  .big small { font: 500 11px/1 var(--font-ui); letter-spacing: .16em; text-transform: uppercase;
+               color: var(--t-2); display: block; margin-top: 10px; }
+  .ornament { color: var(--accent-2); font-size: 15px; margin-bottom: 14px; }
+  button.go {
+    appearance: none; border: 1px solid var(--accent); border-radius: var(--radius);
+    padding: 13px 34px; background: var(--accent); color: var(--s-0);
+    font: 500 11px/1 var(--font-ui); letter-spacing: .18em; text-transform: uppercase;
+    transition: box-shadow var(--dur) var(--ease), transform 90ms var(--ease);
+  }
+  button.go:active { transform: scale(.97); box-shadow: var(--bloom); }
+  button.go:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition-duration: 1ms !important; }
+  }
 </style>
 </head>
 <body>
 <div id="app">
   <div class="hud">
     <div class="stat"><div class="k">Score</div><div class="v" id="score">0</div></div>
-    <div class="stat"><div class="k">Best</div><div class="v green" id="best">0</div></div>
+    <div class="stat"><div class="k">Best</div><div class="v brandish" id="best">0</div></div>
   </div>
   <div class="stage"><canvas id="cv"></canvas></div>
-  <div class="hint">Swipe anywhere to steer</div>
+  <div class="hint">Swipe to steer</div>
 </div>
 
 <div class="overlay" id="overlay">
   <div>
     <div id="head">
+      <div class="ornament">❦</div>
       <h2>Snake</h2>
-      <p>Swipe to steer. Eat the dots, grow, and stay off yourself. Walls wrap.</p>
+      <p>Swipe to steer. Take the drops, grow, and stay clear of yourself. The walls wrap.</p>
     </div>
-    <button class="go" id="go">Start</button>
+    <button class="go" id="go">Begin</button>
   </div>
 </div>
 
@@ -58,6 +101,10 @@
   'use strict';
 
   var N = 17, BKEY = 'snake.best';
+
+  // Sanguine palette, read straight from the tokens above.
+  var C_GRID = '#150a0e', C_HEAD = '#f2e6e6', C_BODY = '233,216,197', C_FOOD = '#b81d3a';
+
   var cv = document.getElementById('cv'), ctx = cv.getContext('2d');
   var overlay = document.getElementById('overlay'), head = document.getElementById('head');
   var elScore = document.getElementById('score'), elBest = document.getElementById('best');
@@ -130,39 +177,51 @@
     clearInterval(timer);
     if (navigator.vibrate) navigator.vibrate([18, 40, 18]);
     if (score > best) { best = score; localStorage.setItem(BKEY, String(best)); elBest.textContent = best; }
-    head.innerHTML = '<div class="big">' + score + '</div>' +
-      '<p>' + (score >= best && score > 0 ? 'New best.' : 'Best so far: ' + best + '.') + '</p>';
+    head.innerHTML = '<div class="big">' + score + '<small>collected</small></div>' +
+      '<p>' + (score >= best && score > 0 ? 'A new personal best.' : 'Your best stands at ' + best + '.') + '</p>';
     document.getElementById('go').textContent = 'Again';
     overlay.classList.remove('hide');
   }
 
-  function rr(x, y, w, h, r) {
-    ctx.beginPath();
-    ctx.moveTo(x + r, y);
-    ctx.arcTo(x + w, y, x + w, y + h, r);
-    ctx.arcTo(x + w, y + h, x, y + h, r);
-    ctx.arcTo(x, y + h, x, y, r);
-    ctx.arcTo(x, y, x + w, y, r);
-    ctx.closePath();
-    ctx.fill();
-  }
+  function rect(x, y, w, h) { ctx.fillRect(x, y, w, h); }
 
   function draw() {
     if (!cell) return;
     var side = N * cell;
     ctx.clearRect(0, 0, side, side);
 
-    if (food) {
-      ctx.fillStyle = '#ff5c9d';
-      var p = cell * 0.26;
-      rr(food.x * cell + p, food.y * cell + p, cell - p * 2, cell - p * 2, (cell - p * 2) / 2);
+    // Faint machined grid — the instrument bed the game sits on.
+    ctx.strokeStyle = C_GRID;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (var g = 1; g < N; g++) {
+      var p = Math.round(g * cell) + 0.5;
+      ctx.moveTo(p, 0); ctx.lineTo(p, side);
+      ctx.moveTo(0, p); ctx.lineTo(side, p);
     }
+    ctx.stroke();
+
+    if (food) {
+      // Arterial drop, with its bloom.
+      ctx.save();
+      ctx.shadowColor = 'rgba(216,58,88,.75)';
+      ctx.shadowBlur = cell * 0.9;
+      ctx.fillStyle = C_FOOD;
+      var fp = cell * 0.24;
+      rect(food.x * cell + fp, food.y * cell + fp, cell - fp * 2, cell - fp * 2);
+      ctx.restore();
+    }
+
     if (snake) {
+      var m = cell * 0.12;
       for (var i = snake.length - 1; i >= 0; i--) {
-        var t = 1 - (i / Math.max(snake.length, 1)) * 0.55;
-        ctx.fillStyle = i === 0 ? '#7fe9b6' : 'rgba(62,207,142,' + t.toFixed(3) + ')';
-        var m = cell * 0.09;
-        rr(snake[i].x * cell + m, snake[i].y * cell + m, cell - m * 2, cell - m * 2, cell * 0.28);
+        if (i === 0) {
+          ctx.fillStyle = C_HEAD;
+        } else {
+          var t = 1 - (i / Math.max(snake.length, 1)) * 0.6;
+          ctx.fillStyle = 'rgba(' + C_BODY + ',' + t.toFixed(3) + ')';
+        }
+        rect(snake[i].x * cell + m, snake[i].y * cell + m, cell - m * 2, cell - m * 2);
       }
     }
   }

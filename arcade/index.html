@@ -8,156 +8,267 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Arcade">
-<meta name="theme-color" content="#0b0b12">
+<meta name="theme-color" content="#0b0609">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <style>
+  /* Sanguine — see DESIGN.md. Pallor and blood: bone is the accent, crimson
+     is decorative, and the ground stays near-black oxblood throughout. */
   :root {
-    --bg: #0b0b12;
-    --card: #16161f;
-    --card-hi: #1e1e2b;
-    --line: #272733;
-    --text: #f2f2f7;
-    --dim: #8e8e99;
-    --accent: #7c5cff;
-    --accent-2: #ff5c9d;
+    --s-0: #0b0609;  --s-1: #12080c;  --s-2: #1a0d12;  --s-3: #241119;
+    --t-0: #f2e6e6;  --t-1: #c3a9ad;  --t-2: #8f6f76;  --t-3: #5c434a;
+    --accent: #e9d8c5;
+    --accent-2: #b81d3a;
+    --brand: #d9557a;
+    --line-0: #150a0e;  --line-1: #2a141c;  --line-2: #3d1f28;
+    --error: #ff5470;  --success: #5fa777;  --pending: #a884c9;
+    --cat-1: #6fb3ab; --cat-2: #8a8fc9; --cat-3: #a884c9; --cat-4: #c96a8e;
+
+    --bloom:    0 0 12px rgba(216,58,88,.45), 0 0 26px rgba(216,58,88,.16);
+    --bloom-lg: 0 0 22px rgba(216,58,88,.45), 0 0 52px rgba(216,58,88,.16);
+    --lit-within: inset 0 0 60px rgba(184,29,58,.05);
+    --scrim: #050203;
+
+    --ov-hover: rgba(233,216,197,.06);
+    --ov-active: rgba(233,216,197,.12);
+
+    --font-display: Georgia, "Times New Roman", serif;
+    --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+
+    --radius: 2px;
+    --dur: 160ms;
+    --ease: cubic-bezier(.2,.6,.2,1);
+
     --safe-t: env(safe-area-inset-top, 0px);
     --safe-b: env(safe-area-inset-bottom, 0px);
     --safe-l: env(safe-area-inset-left, 0px);
     --safe-r: env(safe-area-inset-right, 0px);
   }
+
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body {
     margin: 0; padding: 0; height: 100%;
-    background: var(--bg); color: var(--text);
-    font: 400 17px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+    background: var(--s-0); color: var(--t-0);
+    font: 400 16px/1.45 var(--font-ui);
     -webkit-font-smoothing: antialiased;
-    overscroll-behavior: none;        /* no rubber-band pull-to-refresh */
-    touch-action: manipulation;       /* no double-tap zoom */
+    overscroll-behavior: none;
+    touch-action: manipulation;
   }
   body { overflow-x: hidden; }
 
-  .version {
-    position: fixed; z-index: 60;
-    right: calc(var(--safe-r) + 10px); bottom: calc(var(--safe-b) + 8px);
-    font: 500 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
-    letter-spacing: .06em; color: #45454f; pointer-events: none;
-    font-variant-numeric: tabular-nums;
+  /* micro-label: the console voice — uppercase, wide, small */
+  .micro {
+    font: 500 10px/1 var(--font-ui);
+    letter-spacing: .16em; text-transform: uppercase; color: var(--t-2);
   }
-  .version[hidden] { display: none; }
 
-  /* ---------- shell ---------- */
   .wrap {
-    padding: calc(var(--safe-t) + 14px) calc(var(--safe-r) + 16px)
-             calc(var(--safe-b) + 40px) calc(var(--safe-l) + 16px);
+    padding: calc(var(--safe-t) + 18px) calc(var(--safe-r) + 16px)
+             calc(var(--safe-b) + 48px) calc(var(--safe-l) + 16px);
     max-width: 760px; margin: 0 auto;
   }
-  header { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
+
+  /* ---------- masthead ---------- */
+  header { display: flex; align-items: flex-start; gap: 14px; }
+  .mark { flex: none; width: 34px; height: 34px; margin-top: 2px; color: var(--accent); }
+  .mark .rotor { transform-origin: 50% 50%; animation: rotor 60s linear infinite; }
+  @keyframes rotor { to { transform: rotate(360deg); } }
+
   h1 {
-    font: 700 34px/1.1 -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
-    letter-spacing: -0.02em; margin: 0;
-    background: linear-gradient(100deg, var(--accent), var(--accent-2));
-    -webkit-background-clip: text; background-clip: text; color: transparent;
+    font: 400 30px/1 var(--font-display);
+    letter-spacing: .04em; margin: 0; color: var(--t-0);
   }
-  .sub { color: var(--dim); font-size: 13px; margin-top: 4px; letter-spacing: .01em; }
-  .refresh {
-    appearance: none; border: 1px solid var(--line); background: var(--card);
-    color: var(--text); width: 40px; height: 40px; border-radius: 20px;
-    font-size: 17px; display: grid; place-items: center; flex: none;
-    transition: transform .15s ease, background .15s ease;
+  .status { display: flex; align-items: center; gap: 7px; margin-top: 9px; }
+  .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--t-3); flex: none;
+    transition: background var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
   }
-  .refresh:active { transform: scale(.92); background: var(--card-hi); }
-  .refresh.spin svg { animation: spin .8s linear infinite; }
-  @keyframes spin { to { transform: rotate(360deg); } }
+  .dot.ok      { background: var(--success); box-shadow: 0 0 8px rgba(95,167,119,.7); }
+  .dot.cached  { background: var(--pending); box-shadow: 0 0 8px rgba(168,132,201,.7); }
+  .dot.fail    { background: var(--error);   box-shadow: 0 0 8px rgba(255,84,112,.7); }
+
+  .spacer { flex: 1; }
+
+  button.instr {
+    appearance: none; flex: none;
+    width: 38px; height: 38px; border-radius: var(--radius);
+    border: 1px solid var(--line-2); background: var(--s-1);
+    color: var(--accent); display: grid; place-items: center;
+    transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease);
+  }
+  button.instr:active { background: var(--ov-active); border-color: var(--accent-2); }
+  button.instr:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button.instr.busy svg { animation: sweep 900ms linear infinite; }
+  @keyframes sweep { to { transform: rotate(360deg); } }
+
+  .rule {
+    height: 1px; background: var(--line-1); margin: 16px 0 14px;
+    position: relative;
+  }
+  .rule::after {
+    content: ""; position: absolute; left: 0; top: 0; width: 46px; height: 1px;
+    background: var(--accent-2);
+  }
 
   /* ---------- grid ---------- */
-  .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
   @media (min-width: 560px) { .grid { grid-template-columns: repeat(3, 1fr); } }
 
   .card {
-    position: relative; display: block; text-align: left;
-    appearance: none; border: 1px solid var(--line); border-radius: 20px;
-    background: linear-gradient(160deg, var(--card-hi), var(--card));
-    color: inherit; padding: 16px 14px 14px; overflow: hidden;
-    transition: transform .18s cubic-bezier(.2,.9,.3,1.2), border-color .18s ease;
-    min-height: 138px;
+    position: relative; display: flex; flex-direction: column; text-align: left;
+    appearance: none; border: 1px solid var(--line-1); border-radius: var(--radius);
+    background: var(--s-1); color: inherit; padding: 15px 13px 11px;
+    min-height: 152px; overflow: hidden;
+    transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease),
+                box-shadow var(--dur) var(--ease);
   }
-  .card:active { transform: scale(.955); border-color: var(--accent); }
-  .card .glow {
-    position: absolute; inset: -40% -30% auto auto; width: 130px; height: 130px;
-    border-radius: 50%; filter: blur(28px); opacity: .5; pointer-events: none;
+  .card::before {                      /* channel strip: the game's categorical ink */
+    content: ""; position: absolute; inset: 0 0 auto 0; height: 2px;
+    background: var(--ink, var(--cat-1)); opacity: .85;
   }
-  .card .emoji { font-size: 34px; line-height: 1; display: block; margin-bottom: 10px; }
-  .card .name { font-weight: 600; font-size: 16px; letter-spacing: -.01em; }
-  .card .desc { color: var(--dim); font-size: 12.5px; margin-top: 3px; line-height: 1.35;
-                display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .card .bracket {                     /* machined corner bracket */
+    position: absolute; right: 9px; bottom: 9px; width: 9px; height: 9px;
+    border-right: 1px solid var(--line-2); border-bottom: 1px solid var(--line-2);
+  }
+  .card:active {
+    background: var(--ov-hover); border-color: var(--accent-2);
+    box-shadow: var(--bloom), var(--lit-within);
+  }
+  .card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .card .glyph { color: var(--accent); margin-bottom: 12px; }
+  .card .name {
+    font: 400 18px/1.15 var(--font-display); letter-spacing: .02em; color: var(--t-0);
+  }
+  .card .desc {
+    color: var(--t-2); font-size: 12px; line-height: 1.4; margin-top: 5px;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .card .readout {
+    margin-top: auto; padding-top: 10px; display: flex; align-items: baseline;
+    justify-content: space-between; gap: 8px; border-top: 1px solid var(--line-0);
+  }
+  .card .readout .val {
+    font: 500 13px/1 var(--font-mono); font-variant-numeric: tabular-nums; color: var(--t-1);
+  }
+  .card .readout .val.empty { color: var(--t-3); }
 
   /* ---------- states ---------- */
-  .state { text-align: center; color: var(--dim); padding: 56px 20px; font-size: 14.5px; line-height: 1.6; }
-  .state code { background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 2px 6px; font-size: 12.5px; }
-  .skel { min-height: 138px; border-radius: 20px; border: 1px solid var(--line);
-          background: linear-gradient(100deg, var(--card) 30%, var(--card-hi) 50%, var(--card) 70%);
-          background-size: 300% 100%; animation: shimmer 1.3s ease-in-out infinite; }
-  @keyframes shimmer { to { background-position: -150% 0; } }
+  .state { grid-column: 1 / -1; text-align: center; color: var(--t-2);
+           padding: 54px 18px; font-size: 13.5px; line-height: 1.7; }
+  .state code {
+    font: 400 12px/1 var(--font-mono); color: var(--t-1);
+    background: var(--s-2); border: 1px solid var(--line-1); border-radius: var(--radius);
+    padding: 3px 5px;
+  }
+  .skel {
+    min-height: 152px; border: 1px solid var(--line-1); border-radius: var(--radius);
+    background: var(--s-1); position: relative; overflow: hidden;
+  }
+  .skel::after {
+    content: ""; position: absolute; inset: 0;
+    background: linear-gradient(90deg, transparent, var(--ov-hover), transparent);
+    transform: translateX(-100%); animation: scan 1.4s var(--ease) infinite;
+  }
+  @keyframes scan { to { transform: translateX(100%); } }
 
-  .foot { margin-top: 26px; color: #55555f; font-size: 11.5px; text-align: center; line-height: 1.7; }
-  .foot b { color: var(--dim); font-weight: 500; }
+  .foot { margin-top: 22px; text-align: center; color: var(--t-3); font-size: 11px; line-height: 1.8; }
+  .foot code { font-family: var(--font-mono); color: var(--t-2); }
+
+  .version {
+    position: fixed; z-index: 60;
+    right: calc(var(--safe-r) + 10px); bottom: calc(var(--safe-b) + 9px);
+    font: 500 9.5px/1 var(--font-mono); letter-spacing: .1em;
+    color: var(--brand); border: 1px solid var(--line-2); border-radius: var(--radius);
+    padding: 3px 5px; background: var(--s-1); pointer-events: none;
+    font-variant-numeric: tabular-nums;
+  }
+  .version[hidden] { display: none; }
+  /* The build stamp belongs to the launcher — keep it off a running game. */
+  .player.open ~ .version { display: none; }
 
   /* ---------- player ---------- */
   .player {
-    position: fixed; inset: 0; background: #000; z-index: 50;
+    position: fixed; inset: 0; background: var(--s-0); z-index: 50;
     display: flex; flex-direction: column;
-    transform: translateY(100%); transition: transform .32s cubic-bezier(.32,.72,0,1);
-    visibility: hidden;
+    transform: translateY(100%); visibility: hidden;
+    transition: transform 200ms var(--ease), visibility 200ms var(--ease);
   }
   .player.open { transform: translateY(0); visibility: visible; }
   .player .bar {
-    flex: none; display: flex; align-items: center; gap: 10px;
-    padding: calc(var(--safe-t) + 8px) calc(var(--safe-r) + 12px) 8px calc(var(--safe-l) + 8px);
-    background: rgba(11,11,18,.82); backdrop-filter: blur(20px) saturate(180%);
-    border-bottom: 1px solid var(--line);
+    flex: none; display: flex; align-items: center; gap: 8px;
+    padding: calc(var(--safe-t) + 9px) calc(var(--safe-r) + 12px) 9px calc(var(--safe-l) + 6px);
+    background: var(--s-1); border-bottom: 1px solid var(--line-2);
   }
   .back {
     appearance: none; border: 0; background: transparent; color: var(--accent);
-    font-size: 16px; font-weight: 500; display: flex; align-items: center; gap: 3px;
-    padding: 8px 10px 8px 6px; border-radius: 10px;
+    display: flex; align-items: center; gap: 5px; padding: 7px 9px;
+    border-radius: var(--radius); font: 500 10px/1 var(--font-ui);
+    letter-spacing: .16em; text-transform: uppercase;
   }
-  .back:active { opacity: .5; }
-  .player .title { font-size: 15px; font-weight: 600; flex: 1; text-align: center;
-                   margin-right: 66px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .player iframe { flex: 1; width: 100%; border: 0; background: #000; display: block; }
+  .back:active { background: var(--ov-active); }
+  .back:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .player .title {
+    font: 400 15px/1 var(--font-display); letter-spacing: .03em;
+    flex: 1; text-align: center; margin-right: 74px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .player iframe { flex: 1; width: 100%; border: 0; background: var(--s-0); display: block; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition-duration: 1ms !important; }
+  }
 </style>
 </head>
 <body>
 
 <div class="wrap">
   <header>
+    <svg class="mark" viewBox="0 0 34 34" fill="none" aria-hidden="true">
+      <g class="rotor" stroke="currentColor" stroke-width="1.1">
+        <circle cx="17" cy="17" r="12.4"/>
+        <path d="M17 1.6v3.2M17 29.2v3.2M1.6 17h3.2M29.2 17h3.2" stroke-linecap="butt"/>
+      </g>
+      <path d="M17 9.4c1.5 2.5 4 4.9 4 6.6a4 4 0 0 1-8 0c0-1.7 2.5-4.1 4-6.6z" fill="#b81d3a"/>
+    </svg>
+
     <div>
       <h1>Arcade</h1>
-      <div class="sub" id="sub">Loading…</div>
+      <div class="status">
+        <span class="dot" id="dot"></span>
+        <span class="micro" id="sub">Loading</span>
+      </div>
     </div>
-    <button class="refresh" id="refresh" aria-label="Refresh game list">
-      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+
+    <div class="spacer"></div>
+
+    <button class="instr" id="refresh" aria-label="Refresh">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="1.8" stroke-linecap="square" aria-hidden="true">
         <path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/>
       </svg>
     </button>
   </header>
+
+  <div class="rule"></div>
 
   <div class="grid" id="grid">
     <div class="skel"></div><div class="skel"></div><div class="skel"></div><div class="skel"></div>
   </div>
 
   <div class="foot">
-    <b>Add a game:</b> drop a folder into <code>arcade/games/</code> with an
-    <code>index.html</code>, push, then pull-to-refresh here.
+    Drop a folder into <code>arcade/games/</code> with an <code>index.html</code>, push, then refresh.
   </div>
 </div>
 
 <div class="player" id="player">
   <div class="bar">
     <button class="back" id="back">
-      <svg width="11" height="18" viewBox="0 0 12 20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2 2 10l8 8"/></svg>
+      <svg width="9" height="15" viewBox="0 0 12 20" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><path d="M10 2 2 10l8 8"/></svg>
       Arcade
     </button>
     <div class="title" id="ptitle"></div>
@@ -179,21 +290,38 @@
   var DIR    = 'arcade/games';
   var REFS   = ['main', 'claude/iphone-game-browser-5qg6ng'];   // tried in order
   var TTL    = 5 * 60 * 1000;
-  var CKEY   = 'arcade.cache.v1';
+  var CKEY   = 'arcade.cache.v2';
 
-  var PALETTE = ['#7c5cff', '#ff5c9d', '#3ecf8e', '#ffb020', '#4aa8ff', '#ff6b5c', '#c05cff', '#2fd8c6'];
+  var INKS = ['#6fb3ab', '#8a8fc9', '#a884c9', '#c96a8e'];   // categorical, muted
+
+  // Line glyphs, 24x24, drawn rather than borrowed — no emoji anywhere (DESIGN.md).
+  var GLYPHS = {
+    bolt:    '<path d="M13.5 2.5 5 13h5.2l-.7 8.5L19 11h-5.2l.7-8.5Z"/>',
+    serpent: '<path d="M6 20.5c0-4 12-4 12-8s-12-4-12-8h4"/>'
+           + '<circle cx="11.5" cy="4.5" r="1.5" fill="currentColor" stroke="none"/>',
+    grid:    '<path d="M3.5 3.5h17v17h-17zM9.2 3.5v17M14.8 3.5v17M3.5 9.2h17M3.5 14.8h17"/>',
+    'default': '<path d="M12 2.6 21.4 12 12 21.4 2.6 12 12 2.6Z"/>'
+  };
+
+  function glyphSvg(name, size) {
+    var body = GLYPHS[name] || GLYPHS['default'];
+    return '<svg width="' + size + '" height="' + size + '" viewBox="0 0 24 24" fill="none" '
+         + 'stroke="currentColor" stroke-width="1.4" stroke-linecap="square" '
+         + 'stroke-linejoin="miter" aria-hidden="true">' + body + '</svg>';
+  }
 
   var grid   = document.getElementById('grid');
   var sub    = document.getElementById('sub');
+  var dot    = document.getElementById('dot');
   var player = document.getElementById('player');
   var frame  = document.getElementById('frame');
   var ptitle = document.getElementById('ptitle');
 
-  /* ---------------- discovery ---------------- */
-
-  // A bundled build (see tools/build-bundle.py) inlines every game into one
+  // A bundled build (see tools/build-pwa.py) inlines every game into one
   // file so the launcher works with no server and no network at all.
   var BUNDLE = window.__ARCADE_BUNDLE__ || null;
+
+  /* ---------------- discovery ---------------- */
 
   function discover() {
     if (BUNDLE) return Promise.resolve(BUNDLE.games.map(normalize));
@@ -209,14 +337,17 @@
       });
   }
 
+  // Must be idempotent: the cache stores already-normalized records, so this
+  // runs a second time over its own output and has to accept either key.
   function normalize(g) {
     var slug = g.slug;
     return {
       slug:  slug,
       name:  g.name || titleize(slug),
-      desc:  g.description || '',
-      emoji: g.emoji || '🎮',
-      color: g.color || PALETTE[hash(slug) % PALETTE.length],
+      desc:  g.description || g.desc || '',
+      glyph: g.glyph || 'default',
+      ink:   g.ink || INKS[hash(slug) % INKS.length],
+      stat:  g.stat || null,
       entry: g.entry || 'index.html'
     };
   }
@@ -245,16 +376,7 @@
     return fetch('games/' + slug + '/game.json', { cache: 'no-cache' })
       .then(function (r) { return r.ok ? r.json() : {}; })
       .catch(function () { return {}; })
-      .then(function (meta) {
-        return {
-          slug:  slug,
-          name:  meta.name || titleize(slug),
-          desc:  meta.description || '',
-          emoji: meta.emoji || '🎮',
-          color: meta.color || PALETTE[hash(slug) % PALETTE.length],
-          entry: meta.entry || 'index.html'
-        };
-      });
+      .then(function (meta) { meta.slug = slug; return normalize(meta); });
   }
 
   function titleize(s) {
@@ -266,39 +388,50 @@
     return h;
   }
 
+  // Each game names the localStorage key holding its personal best, so the
+  // launcher can show it as a readout without knowing anything else about it.
+  function readStat(stat) {
+    if (!stat || !stat.key) return null;
+    var raw;
+    try { raw = localStorage.getItem(stat.key); } catch (e) { return null; }
+    if (raw === null || raw === '') return null;
+    var n = parseFloat(raw);
+    if (!isFinite(n) || n <= 0) return null;
+    return stat.format === 'ms' ? Math.round(n) + 'ms' : String(Math.round(n));
+  }
+
   /* ---------------- render ---------------- */
+
+  function setStatus(cls, text) {
+    dot.className = 'dot' + (cls ? ' ' + cls : '');
+    sub.textContent = text;
+  }
 
   function render(games) {
     grid.innerHTML = '';
     if (!games.length) {
-      sub.textContent = 'No games yet';
+      setStatus('fail', 'Empty');
       var s = document.createElement('div');
       s.className = 'state';
-      s.style.gridColumn = '1 / -1';
-      s.innerHTML = 'Nothing here yet.<br>Drop a folder with an <code>index.html</code> into <code>arcade/games/</code>.';
+      s.innerHTML = 'No titles installed.<br>Drop a folder with an <code>index.html</code> into <code>arcade/games/</code>.';
       grid.appendChild(s);
       return;
     }
-    sub.textContent = games.length + (games.length === 1 ? ' game' : ' games') + ' · tap to play';
 
     games.forEach(function (g) {
       var b = document.createElement('button');
       b.className = 'card';
+      b.style.setProperty('--ink', g.ink);
 
-      var glow = document.createElement('div');
-      glow.className = 'glow';
-      glow.style.background = g.color;
-
-      var em = document.createElement('span');
-      em.className = 'emoji';
-      em.textContent = g.emoji;
+      var gl = document.createElement('div');
+      gl.className = 'glyph';
+      gl.innerHTML = glyphSvg(g.glyph, 26);
 
       var nm = document.createElement('div');
       nm.className = 'name';
       nm.textContent = g.name;
 
-      b.appendChild(glow);
-      b.appendChild(em);
+      b.appendChild(gl);
       b.appendChild(nm);
 
       if (g.desc) {
@@ -308,28 +441,47 @@
         b.appendChild(d);
       }
 
+      var ro = document.createElement('div');
+      ro.className = 'readout';
+      var lab = document.createElement('span');
+      lab.className = 'micro';
+      lab.textContent = (g.stat && g.stat.label) || 'Best';
+      var val = document.createElement('span');
+      var v = readStat(g.stat);
+      val.className = 'val' + (v ? '' : ' empty');
+      val.textContent = v || '—';
+      ro.appendChild(lab);
+      ro.appendChild(val);
+      b.appendChild(ro);
+
+      var br = document.createElement('div');
+      br.className = 'bracket';
+      b.appendChild(br);
+
       b.addEventListener('click', function () { open(g); });
       grid.appendChild(b);
     });
   }
 
   function showError(msg) {
-    sub.textContent = 'Offline';
+    setStatus('fail', 'Offline');
     grid.innerHTML = '';
     var s = document.createElement('div');
     s.className = 'state';
-    s.style.gridColumn = '1 / -1';
     s.textContent = msg;
     grid.appendChild(s);
   }
 
   /* ---------------- player ---------------- */
 
+  var current = null;
+
   function open(g) {
+    current = g;
     ptitle.textContent = g.name;
     if (BUNDLE) {
       frame.removeAttribute('src');
-      frame.srcdoc = BUNDLE.html[g.slug] || '<p style="color:#fff;font:16px sans-serif">Missing.</p>';
+      frame.srcdoc = BUNDLE.html[g.slug] || '<p>Missing.</p>';
     } else {
       frame.src = 'games/' + g.slug + '/' + g.entry;
     }
@@ -345,7 +497,10 @@
       if (player.classList.contains('open')) return;
       frame.removeAttribute('srcdoc');
       frame.src = 'about:blank';
-    }, 340);
+      // A game may have just set a new personal best; refresh the readouts.
+      if (current && lastGames) render(lastGames);
+      current = null;
+    }, 220);
   }
 
   document.getElementById('back').addEventListener('click', function () {
@@ -355,26 +510,36 @@
 
   /* ---------------- load ---------------- */
 
+  var lastGames = null;
+
+  function paint(games, cls, note) {
+    lastGames = games;
+    render(games);
+    if (games.length) {
+      setStatus(cls, games.length + (games.length === 1 ? ' title' : ' titles') + (note ? ' · ' + note : ''));
+    }
+  }
+
   function load(force) {
     var cached = null;
     try { cached = JSON.parse(localStorage.getItem(CKEY) || 'null'); } catch (e) {}
 
     if (cached && cached.games && !force && Date.now() - cached.at < TTL) {
-      render(cached.games);
+      paint(cached.games.map(normalize), 'ok', null);
       return Promise.resolve();
     }
-    if (cached && cached.games && cached.games.length) render(cached.games);  // instant paint, refresh behind
+    if (cached && cached.games && cached.games.length) paint(cached.games.map(normalize), 'cached', 'cached');
 
     return discover()
       .then(function (games) {
         try { localStorage.setItem(CKEY, JSON.stringify({ at: Date.now(), games: games })); } catch (e) {}
-        render(games);
+        paint(games, 'ok', null);
       })
-      .catch(function (err) {
+      .catch(function () {
         if (cached && cached.games && cached.games.length) {
-          sub.textContent = cached.games.length + ' games · cached';
+          paint(cached.games.map(normalize), 'cached', 'cached');
         } else {
-          showError('Could not load the game list. Check your connection and pull down to refresh.');
+          showError('Could not load the game list. Check your connection and refresh.');
         }
       });
   }
@@ -398,11 +563,11 @@
   }
 
   btn.addEventListener('click', function () {
-    btn.classList.add('spin');
+    btn.classList.add('busy');
     var job = BUNDLE
       ? checkForUpdate().then(function () { location.reload(); })
       : load(true);
-    job.then(function () { btn.classList.remove('spin'); });
+    job.then(function () { btn.classList.remove('busy'); });
   });
 
   if (!BUNDLE) {
@@ -422,9 +587,9 @@
   /* ---------------- build stamp + service worker ---------------- */
 
   if (window.__ARCADE_VERSION__) {
-    var v = document.getElementById('version');
-    v.textContent = 'v' + window.__ARCADE_VERSION__;
-    v.hidden = false;
+    var vEl = document.getElementById('version');
+    vEl.textContent = 'v' + window.__ARCADE_VERSION__;
+    vEl.hidden = false;
   }
 
   // Relative on purpose: this has to work from a GitHub Pages project subpath.
