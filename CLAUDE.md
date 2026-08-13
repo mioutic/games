@@ -30,6 +30,8 @@ The four rules that get broken most often, restated so they are hard to miss:
 ## Repo map
 
 ```
+index.html    root forwarder — Pages advertises /games/, the app is at /games/play/
+404.html      same, for any unmatched path (absolute links: depth is unknown)
 play/         the deployed build — 4 static files, this is what Pages serves
 arcade/       source: launcher, games, tools
   index.html    launcher shell, shared by both builds
