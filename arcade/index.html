@@ -160,11 +160,12 @@
 (function () {
   'use strict';
 
-  // Where the games live. Discovery hits the GitHub API so that dropping a new
-  // folder into arcade/games/ is all it takes — no index file to hand-edit.
+  // Discovery order: games.json served from this same origin (CI regenerates it
+  // on every push, so it needs no token and works on a private repo), then the
+  // GitHub API as a fallback for a public repo whose index hasn't been built.
   var REPO   = 'mioutic/games';
   var DIR    = 'arcade/games';
-  var REFS   = ['claude/iphone-game-browser-5qg6ng', 'main'];   // tried in order
+  var REFS   = ['main', 'claude/iphone-game-browser-5qg6ng'];   // tried in order
   var TTL    = 5 * 60 * 1000;
   var CKEY   = 'arcade.cache.v1';
 
@@ -177,6 +178,36 @@
   var ptitle = document.getElementById('ptitle');
 
   /* ---------------- discovery ---------------- */
+
+  // A bundled build (see tools/build-bundle.py) inlines every game into one
+  // file so the launcher works with no server and no network at all.
+  var BUNDLE = window.__ARCADE_BUNDLE__ || null;
+
+  function discover() {
+    if (BUNDLE) return Promise.resolve(BUNDLE.games.map(normalize));
+    return fetch('games.json', { cache: 'no-cache' })
+      .then(function (r) { return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)); })
+      .then(function (data) {
+        var list = (data && data.games) || [];
+        if (!list.length) throw new Error('empty index');
+        return list.map(normalize);
+      })
+      .catch(function () {
+        return listFolders().then(function (slugs) { return Promise.all(slugs.sort().map(describe)); });
+      });
+  }
+
+  function normalize(g) {
+    var slug = g.slug;
+    return {
+      slug:  slug,
+      name:  g.name || titleize(slug),
+      desc:  g.description || '',
+      emoji: g.emoji || '🎮',
+      color: g.color || PALETTE[hash(slug) % PALETTE.length],
+      entry: g.entry || 'index.html'
+    };
+  }
 
   function listFolders() {
     var i = 0;
@@ -284,7 +315,12 @@
 
   function open(g) {
     ptitle.textContent = g.name;
-    frame.src = 'games/' + g.slug + '/' + g.entry;
+    if (BUNDLE) {
+      frame.removeAttribute('src');
+      frame.srcdoc = BUNDLE.html[g.slug] || '<p style="color:#fff;font:16px sans-serif">Missing.</p>';
+    } else {
+      frame.src = 'games/' + g.slug + '/' + g.entry;
+    }
     player.classList.add('open');
     document.body.style.overflow = 'hidden';
     if (history.pushState) history.pushState({ game: g.slug }, '', '#' + g.slug);
@@ -293,7 +329,11 @@
   function close() {
     player.classList.remove('open');
     document.body.style.overflow = '';
-    setTimeout(function () { if (!player.classList.contains('open')) frame.src = 'about:blank'; }, 340);
+    setTimeout(function () {
+      if (player.classList.contains('open')) return;
+      frame.removeAttribute('srcdoc');
+      frame.src = 'about:blank';
+    }, 340);
   }
 
   document.getElementById('back').addEventListener('click', function () {
@@ -313,8 +353,7 @@
     }
     if (cached && cached.games && cached.games.length) render(cached.games);  // instant paint, refresh behind
 
-    return listFolders()
-      .then(function (slugs) { return Promise.all(slugs.sort().map(describe)); })
+    return discover()
       .then(function (games) {
         try { localStorage.setItem(CKEY, JSON.stringify({ at: Date.now(), games: games })); } catch (e) {}
         render(games);
@@ -323,7 +362,7 @@
         if (cached && cached.games && cached.games.length) {
           sub.textContent = cached.games.length + ' games · cached';
         } else {
-          showError('Could not reach GitHub to list games. Check your connection and pull down to refresh.');
+          showError('Could not load the game list. Check your connection and pull down to refresh.');
         }
       });
   }

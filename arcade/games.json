@@ -1,0 +1,20 @@
+{
+  "games": [
+    {
+      "slug": "reflex",
+      "name": "Reflex",
+      "emoji": "⚡️",
+      "description": "Tap the lit tile. Fifteen rounds, one average.",
+      "color": "#ffb020",
+      "entry": "index.html"
+    },
+    {
+      "slug": "snake",
+      "name": "Snake",
+      "emoji": "🐍",
+      "description": "Swipe to steer. Don't bite yourself.",
+      "color": "#3ecf8e",
+      "entry": "index.html"
+    }
+  ]
+}

@@ -4,7 +4,8 @@ A phone-first launcher for the games in this repo. Built to be bookmarked or
 added to the iPhone home screen, where it runs full screen with no Safari chrome.
 
 Live at **https://mioutic.github.io/games/arcade/** once GitHub Pages is enabled
-(Settings → Pages → Deploy from a branch).
+(Settings → Pages → Deploy from a branch). Note that Pages only serves a private
+repo on a paid plan — on the free plan the repo has to be public.
 
 ## Adding a game
 
@@ -16,9 +17,13 @@ arcade/games/my-game/
   game.json      # optional
 ```
 
-That's the whole process — there is no index to hand-edit. The launcher lists
-folders through the GitHub contents API, so a new game shows up on the next
-refresh (pull down on the grid, or tap the refresh button).
+That's the whole process — there is no index to hand-edit. Pushing triggers the
+`Rebuild arcade index` workflow, which regenerates `games.json`; the launcher
+reads that from its own origin, so listing games needs no token and no API call.
+Pull down on the grid to refresh.
+
+If `games.json` is ever missing, the launcher falls back to listing folders
+through the GitHub contents API, which only works while the repo is public.
 
 ### game.json
 
@@ -46,3 +51,11 @@ external CDNs if you want them working offline. For a phone, these help:
 - `localStorage` for high scores — it persists per game
 
 `games/reflex/` and `games/snake/` are working examples of all of the above.
+
+## Tools
+
+```
+python3 arcade/tools/build-index.py                 # regenerate games.json (CI does this for you)
+python3 arcade/tools/build-bundle.py out.html       # inline everything into one offline file
+python3 arcade/tools/build-artifact.py in.html out.html   # strip the wrapper for an Artifact publish
+```
