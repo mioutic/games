@@ -14,6 +14,19 @@
       }
     },
     {
+      "slug": "covenant",
+      "name": "Covenant",
+      "glyph": "pact",
+      "description": "Press-turn dungeon crawl. Everything you meet can be talked into joining you.",
+      "ink": "#8a8fc9",
+      "entry": "index.html",
+      "stat": {
+        "key": "covenant.best",
+        "label": "Deepest",
+        "format": "int"
+      }
+    },
+    {
       "slug": "ossuary",
       "name": "Ossuary",
       "glyph": "crypt",
