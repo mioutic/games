@@ -1,0 +1,7 @@
+# The build tools emit LF and CI commits LF, so pin the checkout to LF too.
+# Without this the result depends on each machine's core.autocrlf: on a Windows
+# clone with autocrlf=false, a local rebuild of play/ would land as a
+# whole-file CRLF diff against what CI produced.
+* text=auto eol=lf
+
+*.png binary

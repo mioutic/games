@@ -23,15 +23,15 @@ def main():
     index_path = os.path.join(ROOT, "games.json")
     if not os.path.exists(index_path):
         sys.exit("run build-index.py first — %s is missing" % index_path)
-    with open(index_path) as f:
+    with open(index_path, encoding="utf-8") as f:
         games = json.load(f)["games"]
 
     html = {}
     for g in games:
-        with open(os.path.join(GAMES, g["slug"], g["entry"])) as f:
+        with open(os.path.join(GAMES, g["slug"], g["entry"]), encoding="utf-8") as f:
             html[g["slug"]] = f.read()
 
-    with open(os.path.join(ROOT, "index.html")) as f:
+    with open(os.path.join(ROOT, "index.html"), encoding="utf-8") as f:
         page = f.read()
 
     # Inline the icon so the bundle pulls in no sibling files.
@@ -50,7 +50,7 @@ def main():
         sys.exit("could not find the launcher script in index.html")
     page = page.replace(marker, bundle + marker, 1)
 
-    with open(out, "w") as f:
+    with open(out, "w", encoding="utf-8", newline="\n") as f:
         f.write(page)
 
     print("wrote %s (%.0f KB, %d game(s))" % (out, os.path.getsize(out) / 1024, len(games)))

@@ -35,7 +35,7 @@ OUT = os.path.join(REPO, "play")
 
 
 def read(*parts):
-    with open(os.path.join(*parts)) as f:
+    with open(os.path.join(*parts), encoding="utf-8") as f:
         return f.read()
 
 
@@ -126,27 +126,57 @@ self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SKIP_WAITING') self.skipWaiting();
 });
 
-// Network first: always try for a fresh copy, fall back to cache when offline.
+// Network first, but only for as long as a phone will actually wait.
+//
+// Being offline was never the problem: fetch rejects immediately and the cache
+// answers. The bad case is a weak signal — a bar of service, a captive portal,
+// a tunnel — where a plain network-first hangs the launch until iOS gives up
+// tens of seconds later, with a complete copy of the app sitting in the cache
+// the whole time. So the network races a short timer: whichever answers first
+// is served, and the network keeps running either way to refresh the cache.
+//
+// Freshness still comes from CACHE_VERSION, not from this: a new worker is
+// fetched outside the fetch handler, installs its own SHELL, and reloads the
+// page. Serving a cached build for one launch cannot strand a phone on it.
+const NET_TIMEOUT_MS = 2500;
+
 self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET') return;
   if (new URL(req.url).origin !== self.location.origin) return;
 
+  const network = fetch(req).then((res) => {
+    if (res && res.ok && res.type === 'basic') {
+      const copy = res.clone();
+      caches.open(CACHE_VERSION).then((c) => c.put(req, copy));
+    }
+    return res;
+  });
+
   event.respondWith(
-    fetch(req)
-      .then((res) => {
-        if (res && res.ok && res.type === 'basic') {
-          const copy = res.clone();
-          caches.open(CACHE_VERSION).then((c) => c.put(req, copy));
+    // Matched inside this build's cache, not across all of them, so a version
+    // still awaiting cleanup can never answer for the current one.
+    caches.open(CACHE_VERSION)
+      .then((cache) => cache.match(req))
+      .then((hit) => {
+        // Nothing cached: the network is the only answer there is, so wait.
+        if (!hit) {
+          return network.catch(() => {
+            // A navigation that missed the cache still gets the app shell.
+            if (req.mode === 'navigate') return caches.match('./index.html');
+            return Response.error();
+          });
         }
-        return res;
+        // Cached: let the refresh finish regardless of which one we serve.
+        event.waitUntil(network.catch(() => {}));
+        return new Promise((resolve) => {
+          const timer = setTimeout(() => resolve(hit), NET_TIMEOUT_MS);
+          network.then(
+            (res) => { clearTimeout(timer); resolve(res); },
+            () => { clearTimeout(timer); resolve(hit); }
+          );
+        });
       })
-      .catch(() => caches.match(req).then((hit) => {
-        if (hit) return hit;
-        // A navigation that missed the cache still gets the app shell.
-        if (req.mode === 'navigate') return caches.match('./index.html');
-        return Response.error();
-      }))
   );
 });
 '''
@@ -159,7 +189,7 @@ def main():
 
     os.makedirs(OUT, exist_ok=True)
 
-    with open(os.path.join(OUT, "index.html"), "w") as f:
+    with open(os.path.join(OUT, "index.html"), "w", encoding="utf-8", newline="\n") as f:
         f.write(page)
 
     manifest = {
@@ -181,11 +211,11 @@ def main():
             "purpose": "any",
         }],
     }
-    with open(os.path.join(OUT, "manifest.json"), "w") as f:
+    with open(os.path.join(OUT, "manifest.json"), "w", encoding="utf-8", newline="\n") as f:
         json.dump(manifest, f, indent=2)
         f.write("\n")
 
-    with open(os.path.join(OUT, "sw.js"), "w") as f:
+    with open(os.path.join(OUT, "sw.js"), "w", encoding="utf-8", newline="\n") as f:
         f.write(SW % {"version": version})
 
     shutil.copyfile(os.path.join(ROOT, "icon-180.png"), os.path.join(OUT, "icon-180.png"))

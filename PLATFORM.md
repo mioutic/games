@@ -182,6 +182,14 @@ dust motes cost 24k triangles on its own. Keep a separate cheap mesh (a
 - `arcade/VERSION` is the single source for the on-screen build stamp *and* the
   service worker's `CACHE_VERSION`. Bump it on every change that should reach
   the phone, or the old build stays cached.
+- **The worker is network-first with a 2.5s timeout, not plain network-first.**
+  Offline was always fine — `fetch` rejects at once and the cache answers. The
+  case that hurt was a *weak* signal, where a bare network-first blocks the
+  launch until iOS times out tens of seconds later while a complete copy sits
+  in the cache. The network now races a timer and whichever loses refreshes the
+  cache in the background. This does not weaken the freshness guarantee: a new
+  worker is fetched outside the fetch handler, so bumping `VERSION` still forces
+  every phone onto the new build.
 - `play/` and `arcade/games.json` are generated. CI rebuilds both on push;
   locally run `arcade/tools/build-index.py` then `arcade/tools/build-pwa.py`.
 - Every path in `play/` must be relative. `build-pwa.py` fails the build if a

@@ -16,7 +16,7 @@ if len(sys.argv) != 3:
 
 src, dst = sys.argv[1], sys.argv[2]
 
-with open(src) as f:
+with open(src, encoding="utf-8") as f:
     page = f.read()
 
 head = re.search(r"<head>(.*?)</head>", page, re.S).group(1)
@@ -27,7 +27,7 @@ style = re.search(r"<style>.*?</style>", head, re.S).group(0)
 # The bundle payload lives in the first body-adjacent script tag in <head>? No —
 # it sits just above the launcher script in <body>, so it comes along with body.
 
-with open(dst, "w") as f:
+with open(dst, "w", encoding="utf-8", newline="\n") as f:
     f.write(title + "\n" + style + "\n" + body.strip() + "\n")
 
 print("wrote %s" % dst)

@@ -42,7 +42,7 @@ def main():
         mp = os.path.join(d, "game.json")
         if os.path.exists(mp):
             try:
-                with open(mp) as f:
+                with open(mp, encoding="utf-8") as f:
                     meta = json.load(f)
             except (ValueError, OSError) as e:
                 print("warning: bad game.json in %s: %s" % (slug, e), file=sys.stderr)
@@ -67,7 +67,7 @@ def main():
                   % slug, file=sys.stderr)
         entries.append(entry_meta)
 
-    with open(OUT, "w") as f:
+    with open(OUT, "w", encoding="utf-8", newline="\n") as f:
         json.dump({"games": entries}, f, indent=2, ensure_ascii=False)
         f.write("\n")
 
