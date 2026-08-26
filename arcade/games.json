@@ -79,6 +79,19 @@
       }
     },
     {
+      "slug": "set-piece",
+      "name": "Set Piece",
+      "glyph": "goal",
+      "description": "Third person free kicks. Draw the line and the ball takes it.",
+      "ink": "#a884c9",
+      "entry": "index.html",
+      "stat": {
+        "key": "setpiece.best",
+        "label": "Scored",
+        "format": "int"
+      }
+    },
+    {
       "slug": "snake",
       "name": "Snake",
       "glyph": "serpent",

@@ -1,0 +1,980 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Set Piece</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<style>
+  /* Sanguine — see DESIGN.md */
+  :root {
+    --s-0: #0b0609;  --s-1: #12080c;  --s-2: #1a0d12;  --s-3: #241119;
+    --t-0: #f2e6e6;  --t-1: #c3a9ad;  --t-2: #8f6f76;  --t-3: #5c434a;
+    --accent: #e9d8c5;  --accent-2: #b81d3a;  --brand: #d9557a;
+    --line-0: #150a0e;  --line-1: #2a141c;  --line-2: #3d1f28;
+    --error: #ff5470;  --success: #5fa777;  --warning: #d9a441;
+    --bloom: 0 0 12px rgba(216,58,88,.45), 0 0 26px rgba(216,58,88,.16);
+    --lit-within: inset 0 0 60px rgba(184,29,58,.05);
+    --font-display: Georgia, "Times New Roman", serif;
+    --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+    --radius: 2px;  --dur: 160ms;  --ease: cubic-bezier(.2,.6,.2,1);
+    --safe-t: 0px; --safe-r: 0px; --safe-b: 0px; --safe-l: 0px;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent;
+      user-select: none; -webkit-user-select: none; }
+  html, body {
+    margin: 0; height: 100%; overflow: hidden; touch-action: none;
+    background: var(--s-0); color: var(--t-0);
+    font: 400 16px/1.45 var(--font-ui); -webkit-font-smoothing: antialiased;
+    overscroll-behavior: none;
+  }
+  #stage { position: fixed; top: 0; left: 0; overflow: hidden; background: #000; }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .micro { font: 500 9px/1 var(--font-ui); letter-spacing: .18em;
+           text-transform: uppercase; color: var(--t-2); }
+  .hud { position: absolute; inset: 0; pointer-events: none; z-index: 4; }
+  .panel { background: rgba(11,6,9,.62); border: 1px solid var(--line-1);
+           border-radius: var(--radius); box-shadow: var(--lit-within); }
+
+  .readout { position: absolute; top: calc(var(--safe-t) + 10px); left: calc(var(--safe-l) + 10px);
+             display: flex; }
+  .readout .cell { padding: 7px 12px 8px; border-right: 1px solid var(--line-0); }
+  .readout .cell:last-child { border-right: 0; }
+  .readout .v { margin-top: 5px; font: 500 17px/1 var(--font-mono);
+                font-variant-numeric: tabular-nums; color: var(--t-0); }
+  .readout .v.accent { color: var(--accent); }
+  .readout .v.brandish { color: var(--brand); }
+  @media (max-height: 460px) { .readout .cell.opt { display: none; } }
+
+  .lives { display: flex; gap: 4px; margin-top: 6px; }
+  .pip { width: 7px; height: 7px; border: 1px solid var(--accent);
+         background: var(--accent); box-shadow: var(--bloom); }
+  .pip.gone { background: none; border-color: var(--line-2); box-shadow: none; }
+
+  .gear { position: absolute; top: calc(var(--safe-t) + 10px); right: calc(var(--safe-r) + 10px);
+          width: 38px; height: 38px; display: grid; place-items: center; pointer-events: auto;
+          appearance: none; color: var(--t-1); cursor: pointer;
+          background: rgba(11,6,9,.62); border: 1px solid var(--line-1); border-radius: var(--radius); }
+  .gear:active { color: var(--accent); border-color: var(--accent-2); }
+
+  .call { position: absolute; left: 50%; transform: translateX(-50%);
+          top: calc(var(--safe-t) + 10px); padding: 7px 14px;
+          background: rgba(11,6,9,.6); border: 1px solid var(--line-1); border-radius: var(--radius);
+          font: 500 10px/1 var(--font-mono); letter-spacing: .14em; text-transform: uppercase;
+          color: var(--t-1); opacity: 0; transition: opacity var(--dur) var(--ease); }
+  .call.on { opacity: 1; }
+  .call.good { color: var(--success); border-color: rgba(95,167,119,.5); }
+  .call.bad { color: var(--error); border-color: rgba(255,84,112,.4); }
+
+  .hint { position: absolute; left: 0; right: 0; bottom: calc(var(--safe-b) + 12px);
+          text-align: center; pointer-events: none;
+          font: 500 9px/1.6 var(--font-ui); letter-spacing: .18em;
+          text-transform: uppercase; color: var(--t-3); }
+
+  .overlay { position: absolute; inset: 0; z-index: 8; display: flex;
+             align-items: center; justify-content: center;
+             padding: calc(var(--safe-t) + 16px) calc(var(--safe-r) + 16px)
+                      calc(var(--safe-b) + 16px) calc(var(--safe-l) + 16px);
+             background: rgba(5,2,3,.92); }
+  .overlay.hide { display: none; }
+  .card { width: 100%; max-width: 380px; max-height: 100%; overflow-y: auto;
+          -webkit-overflow-scrolling: touch; padding: 22px 20px;
+          background: var(--s-1); border: 1px solid var(--line-2); border-radius: var(--radius);
+          box-shadow: var(--lit-within); text-align: center; }
+  .card h2 { font: 400 32px/1.05 var(--font-display); letter-spacing: .04em; margin: 0 0 10px; }
+  .lede { color: var(--t-2); font-size: 13.5px; line-height: 1.65; margin: 0 0 18px; }
+  .big { font: 500 52px/1 var(--font-mono); font-variant-numeric: tabular-nums;
+         color: var(--accent); letter-spacing: -.02em; }
+  .big small { display: block; margin-top: 8px; font: 500 9px/1 var(--font-ui);
+               letter-spacing: .18em; text-transform: uppercase; color: var(--t-2); }
+  .keys { display: flex; gap: 8px; margin: 0 0 18px; }
+  .keys div { flex: 1; padding: 10px 6px; border: 1px solid var(--line-1);
+              border-radius: var(--radius); background: rgba(233,216,197,.03); }
+  .keys b { display: block; font: 400 15px/1 var(--font-display); color: var(--accent); margin-bottom: 6px; }
+  .keys span { font: 500 8.5px/1.4 var(--font-ui); letter-spacing: .12em;
+               text-transform: uppercase; color: var(--t-2); }
+  .go { appearance: none; width: 100%; margin-top: 10px; padding: 14px 18px; cursor: pointer;
+        background: var(--accent); color: var(--s-0); border: 1px solid var(--accent);
+        border-radius: var(--radius); font: 500 11px/1 var(--font-ui);
+        letter-spacing: .18em; text-transform: uppercase; }
+  .go.ghost { background: none; color: var(--t-1); border-color: var(--line-2); }
+  .go:active { box-shadow: var(--bloom); }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+         padding: 11px 0; border-bottom: 1px solid var(--line-0); text-align: left; }
+  .row:last-of-type { border-bottom: 0; }
+  .row .lab { font-size: 13px; color: var(--t-1); }
+  .row .sub { display: block; margin-top: 3px; font-size: 11px; color: var(--t-3); line-height: 1.4; }
+  .sw { appearance: none; flex: none; width: 44px; height: 24px; cursor: pointer; position: relative;
+        background: var(--s-3); border: 1px solid var(--line-2); border-radius: var(--radius); }
+  .sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px;
+               background: var(--t-3); transition: transform var(--dur) var(--ease), background var(--dur); }
+  .sw[aria-checked="true"] { border-color: var(--accent-2); }
+  .sw[aria-checked="true"]::after { transform: translateX(20px); background: var(--accent); }
+  #probe { position: absolute; left: -9999px; top: 0; width: 1px; height: 1px;
+           padding: env(safe-area-inset-top) env(safe-area-inset-right)
+                    env(safe-area-inset-bottom) env(safe-area-inset-left); }
+</style>
+</head>
+<body>
+
+<div id="stage">
+<canvas id="cv"></canvas>
+<div id="probe"></div>
+
+<div class="hud" id="hud">
+  <div class="panel readout">
+    <div class="cell"><div class="micro">Scored</div><div class="v accent" id="vScore">0</div></div>
+    <div class="cell opt"><div class="micro">Best</div><div class="v brandish" id="vBest">0</div></div>
+    <div class="cell opt"><div class="micro">Range</div><div class="v" id="vRange">18m</div></div>
+    <div class="cell"><div class="micro">Left</div><div class="lives" id="vLives"></div></div>
+  </div>
+  <div class="call" id="call"></div>
+  <button class="gear" id="btnGear" aria-label="Settings">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="1.5" stroke-linecap="square" aria-hidden="true">
+      <circle cx="12" cy="12" r="3.2"/>
+      <path d="M12 2.6v3M12 18.4v3M2.6 12h3M18.4 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M18.7 5.3l-2.1 2.1M7.4 16.6l-2.1 2.1"/>
+    </svg>
+  </button>
+  <div class="hint" id="hint">Drag a line from the ball &middot; bend it to bend the shot</div>
+</div>
+
+<div class="overlay" id="intro">
+  <div class="card">
+    <h2>Set Piece</h2>
+    <p class="lede">The ball is rolled to your feet and the whistle has gone.
+      Draw the line you want it to take — draw it straight and it flies straight,
+      draw it bent and it bends, around the wall and past the keeper's hand.</p>
+    <div class="keys">
+      <div><b>&#10070;</b><span>Drag<br>to aim</span></div>
+      <div><b>&#10022;</b><span>Bow it<br>to curl</span></div>
+      <div><b>&#8225;</b><span>Longer<br>is harder</span></div>
+    </div>
+    <button class="go" id="btnPlay">Take it</button>
+    <button class="go ghost" id="btnSettingsIntro">Settings</button>
+  </div>
+</div>
+
+<div class="overlay hide" id="over">
+  <div class="card">
+    <div id="overHead"></div>
+    <button class="go" id="btnAgain">Again</button>
+    <button class="go ghost" id="btnMenu">Main screen</button>
+  </div>
+</div>
+
+<div class="overlay hide" id="settings">
+  <div class="card">
+    <h2 style="font-size:26px">Settings</h2>
+    <div class="row">
+      <div><span class="lab">Fullscreen</span>
+        <span class="sub">Hide the arcade bar and take the whole screen.</span></div>
+      <button class="sw" id="swFs" role="switch" aria-checked="false" aria-label="Fullscreen"></button>
+    </div>
+    <div class="row">
+      <div><span class="lab">Haptics</span>
+        <span class="sub">A knock on contact and on a goal.</span></div>
+      <button class="sw" id="swHaptic" role="switch" aria-checked="true" aria-label="Haptics"></button>
+    </div>
+    <div class="row">
+      <div><span class="lab">Flight path</span>
+        <span class="sub">Trace where the ball has been. Makes curl obvious.</span></div>
+      <button class="sw" id="swTrail" role="switch" aria-checked="true" aria-label="Flight path"></button>
+    </div>
+    <div class="row">
+      <div><span class="lab">Keeper</span>
+        <span class="sub">Off leaves an empty net, for learning the curl.</span></div>
+      <button class="sw" id="swKeeper" role="switch" aria-checked="true" aria-label="Keeper"></button>
+    </div>
+    <button class="go ghost" id="btnSetBack" style="margin-top:16px">Back</button>
+    <button class="go ghost" id="btnLeave">Leave to Arcade</button>
+  </div>
+</div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var stageEl = document.getElementById('stage');
+  var cv = document.getElementById('cv');
+  var ctx = cv.getContext('2d');
+  var probe = document.getElementById('probe');
+
+  var BKEY = 'setpiece.best', SKEY = 'setpiece.settings';
+
+  /* ---------------- settings ---------------- */
+
+  var settings = { fullscreen: false, haptics: true, trail: true, keeper: true };
+  try {
+    var raw = JSON.parse(localStorage.getItem(SKEY) || 'null');
+    if (raw && typeof raw === 'object') {
+      ['fullscreen','haptics','trail','keeper'].forEach(function (k) {
+        if (typeof raw[k] === 'boolean') settings[k] = raw[k];
+      });
+    }
+  } catch (e) {}
+  function saveSettings() { try { localStorage.setItem(SKEY, JSON.stringify(settings)); } catch (e) {} }
+  function buzz(p) { if (settings.haptics && navigator.vibrate) navigator.vibrate(p); }
+
+  /* ---------------- stage ---------------- */
+
+  var cssW = 0, cssH = 0, dpr = 1;
+
+  function insets() {
+    var cs = getComputedStyle(probe);
+    function v(n) { return parseFloat(cs[n]) || 0; }
+    return { t: v('paddingTop'), r: v('paddingRight'),
+             b: Math.min(v('paddingBottom'), 34), l: v('paddingLeft') };
+  }
+  function framed() { try { return window.parent !== window; } catch (e) { return true; } }
+  function standalone() {
+    if (window.navigator.standalone === true) return true;
+    return !!(window.matchMedia && (matchMedia('(display-mode: standalone)').matches ||
+                                    matchMedia('(display-mode: fullscreen)').matches));
+  }
+  function measure() {
+    var vv = window.visualViewport, doc = document.documentElement;
+    var w = Math.max(doc.clientWidth || 0, window.innerWidth || 0,
+                     vv ? Math.round(vv.width + (vv.offsetLeft || 0)) : 0);
+    var h = Math.max(doc.clientHeight || 0, window.innerHeight || 0,
+                     vv ? Math.round(vv.height + (vv.offsetTop || 0)) : 0);
+    var clear = !framed() || settings.fullscreen;
+    if (standalone() && clear && screen.width && screen.height) {
+      var lng = Math.max(screen.width, screen.height), sht = Math.min(screen.width, screen.height);
+      if (h >= w) { h = Math.max(h, lng); w = Math.max(w, sht); }
+      else        { h = Math.max(h, sht); w = Math.max(w, lng); }
+    }
+    return { w: w, h: h };
+  }
+
+  var CX = 0, CY = 0, F = 600;
+
+  function resize() {
+    var m = measure();
+    cssW = m.w; cssH = m.h;
+    stageEl.style.width = cssW + 'px'; stageEl.style.height = cssH + 'px';
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    cv.width = Math.round(cssW*dpr); cv.height = Math.round(cssH*dpr);
+
+    var ins = insets(), root = document.documentElement.style;
+    root.setProperty('--safe-t', ((framed() && !settings.fullscreen) ? 0 : ins.t) + 'px');
+    root.setProperty('--safe-r', ins.r + 'px');
+    root.setProperty('--safe-b', ins.b + 'px');
+    root.setProperty('--safe-l', ins.l + 'px');
+
+    CX = cssW/2;
+    CY = cssH*0.40;
+    frameShot();
+  }
+
+  // Pick the lens so the goalmouth always fills about the same slice of the
+  // screen, whatever the range. A fixed focal length turned a 30m free kick
+  // into a postage stamp adrift in an empty frame.
+  function frameShot() {
+    var want = Math.min(cssW*0.46, cssH*0.30);
+    var dist = Math.max(6, state.range - cam.z);
+    F = Math.max(220, Math.min(2600, want*dist/GOAL_W));
+  }
+  window.addEventListener('resize', resize);
+  window.addEventListener('orientationchange', function () {
+    setTimeout(resize, 60); setTimeout(resize, 260); setTimeout(resize, 600);
+  });
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', resize);
+    window.visualViewport.addEventListener('scroll', resize);
+  }
+
+  /* ---------------- the pitch ----------------
+
+     Real dimensions, in metres. A goal you have seen a thousand times is the
+     one thing here everybody already has a feel for, so it is not invented. */
+
+  var GOAL_W = 7.32, GOAL_H = 2.44;
+  var BALL_R = 0.11;
+
+  // Camera sits behind and above the ball and looks slightly down the pitch.
+  var cam = { x: 0, y: 2.5, z: -6.2, pitch: 0.15 };
+
+  function project(x, y, z) {
+    var rx = x - cam.x, ry = y - cam.y, rz = z - cam.z;
+    var c = Math.cos(cam.pitch), s = Math.sin(cam.pitch);
+    var zz = rz*c + ry*s;
+    var yy = ry*c - rz*s;
+    if (zz < 0.05) zz = 0.05;                 // never let it fold through the lens
+    return { x: CX + (rx/zz)*F, y: CY - (yy/zz)*F, s: F/zz, z: zz };
+  }
+
+  /* ---------------- state ---------------- */
+
+  var ball = { x: 0, y: BALL_R, z: 0, vx: 0, vy: 0, vz: 0, curl: 0, live: false, spin: 0 };
+  var keeper = { x: 0, y: 0, dive: 0, dir: 0, t: 0, reach: 1.55 };
+  var wall = [];
+  var flight = [];
+  var striker = { t: 0, running: false };
+
+  var state = {
+    running: false, over: false, paused: false, phase: 'aim',
+    score: 0, lives: 3, range: 18, t: 0, settle: 0, shake: 0, flash: 0
+  };
+  var best = parseInt(localStorage.getItem(BKEY) || '0', 10) || 0;
+
+  var elScore = document.getElementById('vScore'), elBest = document.getElementById('vBest'),
+      elRange = document.getElementById('vRange'), elLives = document.getElementById('vLives'),
+      callEl = document.getElementById('call'), hintEl = document.getElementById('hint');
+
+  function paintHud() {
+    elScore.textContent = state.score;
+    elBest.textContent = best;
+    elRange.textContent = Math.round(state.range) + 'm';
+    var h = '';
+    for (var i = 0; i < 3; i++) h += '<i class="pip' + (i < state.lives ? '' : ' gone') + '"></i>';
+    elLives.innerHTML = h;
+  }
+
+  var callT = 0;
+  function say(txt, kind) {
+    callEl.textContent = txt;
+    callEl.className = 'call on' + (kind ? ' ' + kind : '');
+    callT = 1.8;
+  }
+
+  /* ---------------- a set piece ---------------- */
+
+  function buildWall() {
+    wall.length = 0;
+    // The wall stands ~9.15m off the ball, as the laws say, and grows with the
+    // scoreline. It is what makes curl worth drawing rather than a straight blast.
+    var n = Math.min(5, 2 + Math.floor(state.score/2));
+    var wz = Math.min(state.range - 4.5, 9.15);
+    var spread = n*0.52;
+    var off = (Math.random()-0.5)*1.4;
+    for (var i = 0; i < n; i++) {
+      wall.push({ x: off - spread/2 + (i + 0.5)*(spread/n) * 2 - spread/2 + spread/n,
+                  z: wz, h: 1.86, jump: 0 });
+    }
+    // Line them up properly: evenly spaced, centred on `off`.
+    for (var j = 0; j < n; j++) wall[j].x = off + (j - (n-1)/2)*0.52;
+  }
+
+  function nextShot() {
+    state.range = 16 + Math.min(14, state.score*1.15) + (Math.random()-0.5)*2.5;
+    ball.x = (Math.random()-0.5)*5.5;
+    ball.y = BALL_R;
+    ball.z = 0;
+    ball.vx = ball.vy = ball.vz = 0;
+    ball.curl = 0; ball.spin = 0; ball.live = false;
+    flight.length = 0;
+    keeper.x = 0; keeper.y = 0; keeper.dive = 0; keeper.dir = 0; keeper.t = 0;
+    keeper.reach = 1.45 + Math.min(0.85, state.score*0.055);
+    buildWall();
+    // Stand behind the ball, looking at the goal. The camera very nearly
+    // centres the ball — it has to, because the striker is anchored to the
+    // camera, and a ball that drifts across the frame ends up behind him. The
+    // remaining tenth keeps a little of the angle you are shooting from.
+    cam.x = ball.x*0.9;
+    cam.z = -7.4;
+    striker.t = 0; striker.running = false;
+    frameShot();
+    state.phase = 'aim';
+    state.settle = 0;
+    paintHud();
+  }
+
+  function reset() {
+    state.score = 0; state.lives = 3; state.over = false; state.running = true;
+    state.flash = 0; state.shake = 0;
+    nextShot();
+    hintEl.style.display = '';
+  }
+
+  var overEl = document.getElementById('over'), overHead = document.getElementById('overHead');
+
+  function end() {
+    state.over = true; state.running = false;
+    overHead.innerHTML =
+      '<h2>Whistle</h2>' +
+      '<div class="big">' + state.score + '<small>put away</small></div>' +
+      '<p class="lede" style="margin-top:18px">Best is ' + best +
+      '. The line you draw is the line it takes — the trick is drawing the one that misses the wall.</p>';
+    overEl.classList.remove('hide');
+    buzz([40, 80, 40]);
+  }
+
+  function scored() {
+    state.score++;
+    if (state.score > best) { best = state.score; try { localStorage.setItem(BKEY, String(best)); } catch (e) {} }
+    say('Goal', 'good');
+    buzz([12, 40, 12, 40]);
+    state.phase = 'done';
+    state.settle = 1.5;
+  }
+  function missed(why) {
+    state.lives--;
+    state.flash = 1; state.shake = 0.7;
+    say(why, 'bad');
+    buzz([40, 70, 40]);
+    state.phase = 'done';
+    state.settle = 1.5;
+    paintHud();
+  }
+
+  /* ---------------- drawing the line ---------------- */
+
+  // The path you draw is the shot. Its overall reach is power, how high it ends
+  // is loft, and how far it bows off its own chord is curl. Nothing is hidden
+  // behind a meter — what you drew is what it does.
+  var draw = { on: false, id: null, pts: [] };
+
+  function localPt(clientX, clientY) {
+    var r = stageEl.getBoundingClientRect();
+    return { x: clientX - r.left, y: clientY - r.top };
+  }
+
+  function beginDraw(p) {
+    draw.on = true; draw.pts = [p];
+  }
+  function extendDraw(p) {
+    if (!draw.on) return;
+    var last = draw.pts[draw.pts.length - 1];
+    if (Math.hypot(p.x - last.x, p.y - last.y) < 3) return;
+    draw.pts.push(p);
+    if (draw.pts.length > 220) draw.pts.shift();
+  }
+
+  function shotFromPath() {
+    var pts = draw.pts;
+    if (pts.length < 2) return null;
+    var a = pts[0], b = pts[pts.length - 1];
+    var dx = b.x - a.x, dy = b.y - a.y;
+    var chord = Math.hypot(dx, dy);
+    if (chord < 26) return null;                 // a tap is not a shot
+
+    // Curl: the signed area the path encloses against its own chord. Bow the
+    // line right and the ball bends right; a straight line has none.
+    var nx = -dy/chord, ny = dx/chord, bow = 0;
+    for (var i = 1; i < pts.length - 1; i++) {
+      bow += ((pts[i].x - a.x)*nx + (pts[i].y - a.y)*ny);
+    }
+    bow /= Math.max(1, pts.length - 2);
+    var curl = Math.max(-1, Math.min(1, bow/(chord*0.30)));
+
+    // Power from reach, capped so a wild swipe is not a cheat code.
+    var reach = Math.min(1, chord/(Math.min(cssW, cssH)*0.55));
+    // Loft from how much of the drag went up the screen.
+    var rise = Math.max(0, -dy)/Math.max(1, chord);
+    // Aim comes from where the line ended, mapped across the goalmouth.
+    var aim = (b.x - CX)/(cssW*0.5);
+
+    return { power: 0.45 + reach*0.85, loft: rise, aim: aim, curl: curl, chord: chord };
+  }
+
+  function strike(shot) {
+    var d = state.range;
+    // Speed to roughly cover the range; loft trades forward speed for height.
+    var sp = (17 + shot.power*13);
+    var lift = 0.16 + shot.loft*0.62;
+    ball.z = 0; ball.y = BALL_R;
+    ball.vz = sp*Math.cos(lift*1.15);
+    ball.vy = sp*Math.sin(lift*1.15);
+    ball.vx = shot.aim*11.5;
+    ball.curl = shot.curl*10.5;
+    ball.spin = shot.curl;
+    ball.live = true;
+    flight.length = 0;
+    state.phase = 'flight';
+    striker.running = true; striker.t = 0;
+    buzz(14);
+
+    // The keeper commits late and imperfectly, guessing from the ball's line as
+    // it leaves the boot — which is exactly what curl is for.
+    if (settings.keeper) {
+      var eta = d/Math.max(6, ball.vz);
+      var guess = ball.x + ball.vx*eta + 0.5*ball.curl*eta*eta*0.45;
+      keeper.dir = guess < 0 ? -1 : 1;
+      keeper.t = 0.10 + Math.random()*0.13;
+      keeper.x = Math.max(-GOAL_W/2, Math.min(GOAL_W/2, guess*0.72 + (Math.random()-0.5)*0.9));
+    }
+  }
+
+  stageEl.addEventListener('touchstart', function (e) {
+    if (!state.running || state.paused || state.phase !== 'aim') return;
+    if (e.target.closest && e.target.closest('.gear')) return;
+    if (draw.id !== null) return;
+    e.preventDefault();
+    var t = e.changedTouches[0];
+    draw.id = t.identifier;
+    beginDraw(localPt(t.clientX, t.clientY));
+  }, { passive: false });
+
+  window.addEventListener('touchmove', function (e) {
+    if (draw.id === null) return;
+    for (var i = 0; i < e.changedTouches.length; i++)
+      if (e.changedTouches[i].identifier === draw.id) {
+        e.preventDefault();
+        extendDraw(localPt(e.changedTouches[i].clientX, e.changedTouches[i].clientY));
+      }
+  }, { passive: false });
+
+  function releaseDraw(e) {
+    if (draw.id === null) return;
+    var hit = false;
+    for (var i = 0; i < e.changedTouches.length; i++)
+      if (e.changedTouches[i].identifier === draw.id) hit = true;
+    if (!hit) return;
+    draw.id = null; draw.on = false;
+    var shot = shotFromPath();
+    draw.pts = [];
+    if (shot && state.phase === 'aim') strike(shot);
+  }
+  window.addEventListener('touchend', releaseDraw);
+  window.addEventListener('touchcancel', releaseDraw);
+
+  var mDown = false;
+  stageEl.addEventListener('mousedown', function (e) {
+    if (!state.running || state.paused || state.phase !== 'aim') return;
+    if (e.target.closest && e.target.closest('.gear')) return;
+    e.preventDefault(); mDown = true; beginDraw(localPt(e.clientX, e.clientY));
+  });
+  window.addEventListener('mousemove', function (e) {
+    if (mDown) extendDraw(localPt(e.clientX, e.clientY));
+  });
+  window.addEventListener('mouseup', function () {
+    if (!mDown) return;
+    mDown = false; draw.on = false;
+    var shot = shotFromPath();
+    draw.pts = [];
+    if (shot && state.phase === 'aim') strike(shot);
+  });
+
+  /* ---------------- simulation ---------------- */
+
+  var G = 9.81;
+
+  function update(dt) {
+    state.t += dt;
+    state.flash = Math.max(0, state.flash - dt*2.2);
+    state.shake = Math.max(0, state.shake - dt*2.4);
+    if (callT > 0) { callT -= dt; if (callT <= 0) callEl.classList.remove('on'); }
+    if (!state.running || state.paused) return;
+
+    if (striker.running) striker.t += dt;
+
+    if (state.phase === 'done') {
+      state.settle -= dt;
+      if (state.settle <= 0) {
+        if (state.lives <= 0) return end();
+        nextShot();
+      }
+      return;
+    }
+    if (state.phase !== 'flight' || !ball.live) return;
+
+    // Flight: gravity, a little drag, and the Magnus term that is the whole game.
+    ball.vy -= G*dt;
+    var sp = Math.hypot(ball.vx, ball.vy, ball.vz);
+    var drag = 1 - Math.min(0.9, 0.055*dt*sp*0.1);
+    ball.vx *= drag; ball.vy *= drag; ball.vz *= drag;
+    ball.vx += ball.curl*dt;
+    ball.curl *= Math.max(0, 1 - dt*0.22);
+
+    var pz = ball.z;
+    ball.x += ball.vx*dt; ball.y += ball.vy*dt; ball.z += ball.vz*dt;
+
+    if (settings.trail) {
+      flight.push(ball.x, ball.y, ball.z);
+      if (flight.length > 3*140) flight.splice(0, flight.length - 3*140);
+    }
+
+    // Ground: it can bounce in, which is a legal and satisfying way to score.
+    if (ball.y < BALL_R) {
+      ball.y = BALL_R;
+      ball.vy = Math.abs(ball.vy)*0.52;
+      ball.vx *= 0.82; ball.vz *= 0.86;
+      if (Math.abs(ball.vy) < 0.55) ball.vy = 0;
+    }
+
+    // The wall. Heads and shoulders, and they jump.
+    for (var i = 0; i < wall.length; i++) {
+      var m = wall[i];
+      if (pz < m.z && ball.z >= m.z) {
+        var f = (m.z - pz)/Math.max(0.0001, ball.z - pz);
+        var cxp = ball.x - ball.vx*dt*(1-f);
+        var cyp = ball.y - ball.vy*dt*(1-f);
+        m.jump = 1;
+        if (Math.abs(cxp - m.x) < 0.30 + BALL_R && cyp < m.h + 0.28) {
+          ball.vz *= -0.34; ball.vx *= 0.4; ball.vy = Math.abs(ball.vy)*0.5 + 1.2;
+          ball.curl = 0;
+          state.shake = 0.5;
+          missed('Off the wall');
+          return;
+        }
+      }
+    }
+
+    // The keeper: a late dive, and a reach he does not always have.
+    if (settings.keeper) {
+      keeper.t -= dt;
+      if (keeper.t <= 0) keeper.dive = Math.min(1, keeper.dive + dt*2.6);
+    }
+
+    var gz = state.range;
+    if (pz < gz && ball.z >= gz) {
+      var fr = (gz - pz)/Math.max(0.0001, ball.z - pz);
+      var hx = ball.x - ball.vx*dt*(1-fr);
+      var hy = ball.y - ball.vy*dt*(1-fr);
+      ball.live = false;
+
+      var inX = Math.abs(hx) < GOAL_W/2 - BALL_R*0.5;
+      var inY = hy > 0 && hy < GOAL_H - BALL_R*0.5;
+      var post = Math.abs(Math.abs(hx) - GOAL_W/2) < BALL_R*1.4 ||
+                 Math.abs(hy - GOAL_H) < BALL_R*1.4;
+
+      if (!inX || !inY) {
+        missed(post ? 'Off the frame' : 'Wide');
+        return;
+      }
+      if (settings.keeper) {
+        // Reach grows as the dive completes: beat him by pace or by placement.
+        var kx = keeper.x*keeper.dive;
+        var reach = keeper.reach*(0.45 + 0.55*keeper.dive);
+        var dxk = Math.abs(hx - kx), dyk = Math.abs(hy - 0.95);
+        if (dxk < reach && dyk < 1.30) { missed('Saved'); return; }
+      }
+      scored();
+      return;
+    }
+
+    // Gone past everything, or died on the turf short of the line.
+    if (ball.z > gz + 6 || (ball.z > 3 && Math.hypot(ball.vx, ball.vy, ball.vz) < 1.6)) {
+      ball.live = false;
+      missed(ball.z > gz ? 'Wide' : 'Short');
+    }
+  }
+
+  /* ---------------- drawing ---------------- */
+
+  function poly(points, col, w, close) {
+    ctx.strokeStyle = col; ctx.lineWidth = w || 1;
+    ctx.beginPath();
+    for (var i = 0; i < points.length; i++) {
+      var p = project(points[i][0], points[i][1], points[i][2]);
+      if (i === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
+    }
+    if (close) ctx.closePath();
+    ctx.stroke();
+  }
+
+  function drawScene() {
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, cssW, cssH);
+    ctx.save();
+    if (state.shake > 0) {
+      var s = state.shake*state.shake*8;
+      ctx.translate((Math.random()-0.5)*s, (Math.random()-0.5)*s);
+    }
+
+    // Night ground, lit from within.
+    var g = ctx.createLinearGradient(0, 0, 0, cssH);
+    g.addColorStop(0, '#0b0609');
+    g.addColorStop(0.46, '#170b10');
+    g.addColorStop(1, '#0d0709');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, cssW, cssH);
+
+    // A stand behind the goal: near-black, but not nothing.
+    var hy = CY - cssH*0.02;
+    var sky = ctx.createLinearGradient(0, 0, 0, hy);
+    sky.addColorStop(0, '#0b0609');
+    sky.addColorStop(1, '#1d0e15');
+    ctx.fillStyle = sky; ctx.fillRect(0, 0, cssW, hy);
+    ctx.strokeStyle = 'rgba(233,216,197,.07)'; ctx.lineWidth = 1;
+    for (var sc = 0; sc < 7; sc++) {
+      var syy = hy - sc*(cssH*0.016);
+      ctx.beginPath(); ctx.moveTo(0, syy); ctx.lineTo(cssW, syy); ctx.stroke();
+    }
+
+    var gz = state.range;
+
+    // Turf: lines running away, then the six-yard and penalty boxes. Depth has
+    // to be readable or judging the range is guesswork.
+    for (var i = -6; i <= 6; i++) {
+      poly([[i*4, 0, -8], [i*4, 0, gz + 10]], 'rgba(233,216,197,.075)', 1);
+    }
+    for (var zL = -4; zL <= gz + 8; zL += 4) {
+      // Nearer bands are brighter: that gradient is most of what sells distance.
+      poly([[-26, 0, zL], [26, 0, zL]],
+           'rgba(233,216,197,' + (0.11 - 0.075*Math.min(1, (zL + 4)/(gz + 12))).toFixed(3) + ')', 1);
+    }
+    poly([[-20.16, 0, gz], [-20.16, 0, gz - 16.5], [20.16, 0, gz - 16.5], [20.16, 0, gz]],
+         'rgba(233,216,197,.16)', 1.4);
+    poly([[-9.16, 0, gz], [-9.16, 0, gz - 5.5], [9.16, 0, gz - 5.5], [9.16, 0, gz]],
+         'rgba(233,216,197,.13)', 1.2);
+    poly([[-26, 0, gz], [26, 0, gz]], 'rgba(233,216,197,.30)', 1.6);
+
+    // Net, then frame. Bone hairlines over oxblood.
+    var hw = GOAL_W/2, dpth = 1.9;
+    ctx.save();
+    for (var n = 0; n <= 10; n++) {
+      var t = n/10;
+      poly([[-hw + GOAL_W*t, 0, gz], [-hw + GOAL_W*t, GOAL_H*0.92, gz + dpth]],
+           'rgba(233,216,197,.09)', 1);
+    }
+    for (var m = 1; m <= 4; m++) {
+      var yy = (m/5)*GOAL_H;
+      poly([[-hw, yy, gz], [hw, yy, gz]], 'rgba(233,216,197,.07)', 1);
+    }
+    ctx.restore();
+    poly([[-hw, 0, gz], [-hw, GOAL_H, gz], [hw, GOAL_H, gz], [hw, 0, gz]], '#e9d8c5', 2.6);
+    poly([[-hw, GOAL_H, gz], [-hw, GOAL_H*0.92, gz + dpth]], 'rgba(233,216,197,.4)', 1.4);
+    poly([[hw, GOAL_H, gz], [hw, GOAL_H*0.92, gz + dpth]], 'rgba(233,216,197,.4)', 1.4);
+
+    // Keeper, on his line until he goes.
+    if (settings.keeper) {
+      var kx = keeper.x*keeper.dive;
+      var lean = keeper.dive*0.55;
+      var kp = project(kx, 0.95, gz - 0.35);
+      var kh = (GOAL_H*0.78)*kp.s/ (F/ (gz - 0.35 - cam.z));
+      ctx.save();
+      ctx.strokeStyle = '#c3a9ad'; ctx.lineWidth = 2;
+      ctx.fillStyle = 'rgba(36,17,25,.9)';
+      var kw = 0.62*kp.s, khh = 1.72*kp.s;
+      ctx.translate(kp.x, kp.y);
+      ctx.rotate(keeper.dir*lean*0.5);
+      ctx.fillRect(-kw/2, -khh*0.5, kw, khh);
+      ctx.strokeRect(-kw/2, -khh*0.5, kw, khh);
+      // Arms go where he is diving; that is the reach you have to beat.
+      ctx.beginPath();
+      ctx.moveTo(-kw*0.5, -khh*0.22);
+      ctx.lineTo(-kw*0.5 - keeper.reach*kp.s*0.5*(keeper.dir < 0 ? 1 : 0.35), -khh*0.42);
+      ctx.moveTo(kw*0.5, -khh*0.22);
+      ctx.lineTo(kw*0.5 + keeper.reach*kp.s*0.5*(keeper.dir > 0 ? 1 : 0.35), -khh*0.42);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // The wall.
+    for (var w2 = 0; w2 < wall.length; w2++) {
+      var mm = wall[w2];
+      var jump = mm.jump > 0 ? Math.sin(Math.min(1, mm.jump)*Math.PI)*0.42 : 0;
+      mm.jump = Math.max(0, mm.jump - 0.02);
+      var base = project(mm.x, jump, mm.z);
+      var top = project(mm.x, mm.h + jump, mm.z);
+      var ww = 0.56*base.s;
+      ctx.fillStyle = 'rgba(26,13,18,.94)';
+      ctx.strokeStyle = 'rgba(195,169,173,.55)';
+      ctx.lineWidth = 1.4;
+      ctx.fillRect(base.x - ww/2, top.y, ww, base.y - top.y);
+      ctx.strokeRect(base.x - ww/2, top.y, ww, base.y - top.y);
+    }
+
+    // Flight path — this is what makes a curl legible after the fact.
+    if (settings.trail && flight.length >= 6) {
+      ctx.lineWidth = 2;
+      for (var k = 3; k < flight.length; k += 3) {
+        var f = k/flight.length;
+        var p0 = project(flight[k-3], flight[k-2], flight[k-1]);
+        var p1 = project(flight[k], flight[k+1], flight[k+2]);
+        ctx.strokeStyle = 'rgba(216,58,88,' + (0.40*f*f).toFixed(3) + ')';
+        ctx.beginPath(); ctx.moveTo(p0.x, p0.y); ctx.lineTo(p1.x, p1.y); ctx.stroke();
+      }
+    }
+
+    // Shadow, so height off the turf is readable.
+    var sh = project(ball.x, 0.01, ball.z);
+    ctx.fillStyle = 'rgba(0,0,0,.5)';
+    ctx.beginPath();
+    ctx.ellipse(sh.x, sh.y, Math.max(1.5, BALL_R*sh.s*1.5), Math.max(0.8, BALL_R*sh.s*0.5), 0, 0, 6.284);
+    ctx.fill();
+
+    // The striker: a near silhouette, closer to the lens than the ball and
+    // clipped by the bottom of the frame, so the shot reads as taken over his
+    // shoulder rather than by a floating camera. He swings as the ball goes.
+    if (state.phase === 'aim' || striker.t < 0.9) {
+      var swing = striker.running ? Math.min(1, striker.t/0.30) : 0;
+      var lean = Math.sin(swing*Math.PI)*0.16;
+      // Anchored to the camera, not to the ball: lateral offset is magnified
+      // hard this close to the lens, so tying him to a ball that moves each
+      // shot swung him from off-screen to standing in the goalmouth. Fixed
+      // against the camera he holds the same corner of the frame every time.
+      var sxK = cam.x - 0.55, sxZ = -4.0;
+      var foot = project(sxK, 0, sxZ);
+      var head = project(sxK, 1.80, sxZ);
+      var u = foot.s;                       // pixels per metre where he stands
+      ctx.save();
+      ctx.translate(foot.x, foot.y);
+      ctx.rotate(-lean);
+      ctx.fillStyle = 'rgba(8,4,6,.96)';
+      ctx.strokeStyle = 'rgba(233,216,197,.30)';
+      ctx.lineWidth = 1.6;
+      // torso
+      ctx.beginPath();
+      ctx.moveTo(-0.26*u, -1.62*u); ctx.lineTo(0.26*u, -1.62*u);
+      ctx.lineTo(0.20*u, -0.86*u); ctx.lineTo(-0.20*u, -0.86*u);
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+      // standing leg
+      ctx.beginPath();
+      ctx.moveTo(-0.16*u, -0.90*u); ctx.lineTo(-0.06*u, 0);
+      ctx.lineTo(0.10*u, 0); ctx.lineTo(0.06*u, -0.92*u);
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+      // striking leg, swinging through toward the ball
+      ctx.beginPath();
+      ctx.moveTo(0.06*u, -0.92*u);
+      ctx.lineTo((0.30 + swing*0.95)*u, -(0.16 + swing*0.44)*u);
+      ctx.lineTo((0.34 + swing*1.02)*u, -(0.34 + swing*0.40)*u);
+      ctx.lineTo(0.22*u, -0.94*u);
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+      // head
+      ctx.beginPath();
+      ctx.arc(0, -1.82*u, 0.20*u, 0, 6.284);
+      ctx.fill(); ctx.stroke();
+      ctx.restore();
+    }
+
+    // Ball: bone core in a blood halo.
+    var bp = project(ball.x, ball.y, ball.z);
+    var br = Math.max(2, BALL_R*bp.s);
+    var halo = ctx.createRadialGradient(bp.x, bp.y, 0, bp.x, bp.y, br*3.8);
+    halo.addColorStop(0, 'rgba(216,58,88,.42)');
+    halo.addColorStop(1, 'rgba(216,58,88,0)');
+    ctx.fillStyle = halo;
+    ctx.beginPath(); ctx.arc(bp.x, bp.y, br*3.8, 0, 6.284); ctx.fill();
+    ctx.fillStyle = '#e9d8c5';
+    ctx.beginPath(); ctx.arc(bp.x, bp.y, br, 0, 6.284); ctx.fill();
+
+    ctx.restore();
+
+    // The line you are drawing, over everything, exactly as drawn.
+    if (draw.on && draw.pts.length > 1) {
+      ctx.save();
+      ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      ctx.strokeStyle = 'rgba(233,216,197,.85)';
+      ctx.lineWidth = 3;
+      ctx.shadowColor = 'rgba(216,58,88,.6)'; ctx.shadowBlur = 14;
+      ctx.beginPath();
+      ctx.moveTo(draw.pts[0].x, draw.pts[0].y);
+      for (var q = 1; q < draw.pts.length; q++) ctx.lineTo(draw.pts[q].x, draw.pts[q].y);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+      // Its chord, so the bow you have put in is visible while you draw it.
+      var a = draw.pts[0], b = draw.pts[draw.pts.length-1];
+      ctx.setLineDash([4, 5]);
+      ctx.strokeStyle = 'rgba(195,169,173,.35)'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
+    }
+
+    if (state.flash > 0) {
+      ctx.fillStyle = 'rgba(184,29,58,' + (state.flash*0.3).toFixed(3) + ')';
+      ctx.fillRect(0, 0, cssW, cssH);
+    }
+  }
+
+  /* ---------------- loop ---------------- */
+
+  var last = 0;
+  function tick(now) {
+    requestAnimationFrame(tick);
+    var t = now*0.001;
+    var dt = last ? Math.min(0.05, t - last) : 0.016;
+    last = t;
+    var steps = Math.max(1, Math.min(5, Math.round(dt/0.008)));
+    for (var i = 0; i < steps; i++) update(dt/steps);
+    drawScene();
+  }
+
+  /* ---------------- ui ---------------- */
+
+  var introEl = document.getElementById('intro'), setEl = document.getElementById('settings');
+  var swFs = document.getElementById('swFs'), swHaptic = document.getElementById('swHaptic'),
+      swTrail = document.getElementById('swTrail'), swKeeper = document.getElementById('swKeeper');
+
+  function setSwitch(el, on) { el.setAttribute('aria-checked', on ? 'true' : 'false'); }
+  function applyFullscreen() {
+    try { window.parent.postMessage({ type: 'arcade:fullscreen', on: !!settings.fullscreen }, '*'); } catch (e) {}
+  }
+  function applySettings() {
+    setSwitch(swFs, settings.fullscreen); setSwitch(swHaptic, settings.haptics);
+    setSwitch(swTrail, settings.trail); setSwitch(swKeeper, settings.keeper);
+    applyFullscreen(); saveSettings(); resize();
+  }
+  swFs.addEventListener('click', function () { settings.fullscreen = !settings.fullscreen; applySettings(); });
+  swHaptic.addEventListener('click', function () { settings.haptics = !settings.haptics; applySettings(); buzz(10); });
+  swTrail.addEventListener('click', function () { settings.trail = !settings.trail; applySettings(); });
+  swKeeper.addEventListener('click', function () { settings.keeper = !settings.keeper; applySettings(); });
+
+  document.getElementById('btnGear').addEventListener('click', function () {
+    state.paused = true; setEl.classList.remove('hide'); applySettings();
+  });
+  document.getElementById('btnSettingsIntro').addEventListener('click', function () {
+    setEl.classList.remove('hide'); applySettings();
+  });
+  document.getElementById('btnSetBack').addEventListener('click', function () {
+    setEl.classList.add('hide');
+    if (!state.over && introEl.classList.contains('hide')) state.paused = false;
+  });
+  setEl.addEventListener('click', function (e) {
+    if (e.target === setEl) document.getElementById('btnSetBack').click();
+  });
+  document.getElementById('btnLeave').addEventListener('click', function () {
+    try { window.parent.postMessage({ type: 'arcade:exit' }, '*'); } catch (e) {}
+  });
+  document.getElementById('btnPlay').addEventListener('click', function () {
+    introEl.classList.add('hide'); reset();
+  });
+  document.getElementById('btnAgain').addEventListener('click', function () {
+    overEl.classList.add('hide'); reset();
+  });
+  document.getElementById('btnMenu').addEventListener('click', function () {
+    overEl.classList.add('hide'); introEl.classList.remove('hide');
+    state.running = false; state.over = false;
+  });
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden && state.running) state.paused = true;
+  });
+
+  /* ---------------- arcade contract ---------------- */
+
+  window.addEventListener('message', function (e) {
+    if (!e.data || e.data.type !== 'arcade:spec?') return;
+    var vv = window.visualViewport, doc = document.documentElement, cs = getComputedStyle(probe);
+    function v(n) { return Math.round(parseFloat(cs[n]) || 0); }
+    try {
+      window.parent.postMessage({
+        type: 'arcade:spec', name: 'Set Piece',
+        win: (window.innerWidth || 0) + '×' + (window.innerHeight || 0),
+        doc: (doc.clientWidth || 0) + '×' + (doc.clientHeight || 0),
+        vv: vv ? Math.round(vv.width) + '×' + Math.round(vv.height) : 'n/a',
+        stage: Math.round(cssW) + '×' + Math.round(cssH),
+        canvas: cv.width + '×' + cv.height,
+        ins: v('paddingTop') + ' / ' + v('paddingRight') + ' / ' +
+             v('paddingBottom') + ' / ' + v('paddingLeft'),
+        fps: Math.round(fps), scale: Math.round(dpr*100) + '%',
+        pads: 'draw ' + draw.pts.length + 'pt' + (draw.on ? '*' : '') + ' phase ' + state.phase,
+        touch: ('ontouchstart' in window ? 'yes' : 'no') +
+               ' / pts ' + (navigator.maxTouchPoints || 0)
+      }, '*');
+    } catch (err) {}
+  });
+
+  var fps = 0, fpsN = 0, fpsT = 0;
+  (function fpsLoop() {
+    requestAnimationFrame(fpsLoop);
+    fpsN++;
+    var n = performance.now();
+    if (!fpsT) fpsT = n;
+    if (n - fpsT >= 500) { fps = fpsN*1000/(n - fpsT); fpsN = 0; fpsT = n; }
+  }());
+
+  /* ---------------- go ---------------- */
+
+  resize();
+  applySettings();
+  nextShot();
+  state.running = false;
+  paintHud();
+  requestAnimationFrame(tick);
+}());
+</script>
+</body>
+</html>
