@@ -86,4 +86,15 @@ python3 arcade/tools/build-pwa.py      # regenerate play/
   Tailscale admin console and running `tailscale serve --bg 8123` fronts it at
   `https://<machine>.<tailnet>.ts.net/` with a real certificate, where sensors
   and service workers behave as they do on Pages.
+- **Helios can start it.** The repo is registered as the `arcade` app
+  (`Misc/Global Bridge/apps.json`, `type: python-server`, port 8123, icon
+  `src/icons/arcade.png`). Start/stop it from the Helios tray or phone panel;
+  its **LNK** button copies the tailnet URL. `start.bat` launches
+  `arcade/tools/serve.py` under `pythonw`, and the server answers
+  `GET /api/status` (Helios's liveness check) and `POST /api/shutdown` (its
+  polite stop). `/` redirects to `/arcade/` because the LNK button copies the
+  bare root and there is no field for a path.
+  See `Global Bridge/docs/SERVED_APPS.md` for the whole contract — including the
+  `pythonw` trap, where `sys.stdout` is `None` and a bare `sys.stdout.write` in
+  a per-request path kills every response while the port stays open.
 - Live at https://mioutic.github.io/games/play/

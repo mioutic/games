@@ -39,10 +39,12 @@ certificate. Sensors and service workers then behave exactly as they do on Pages
 
 import argparse
 import http.server
+import json
 import os
 import socket
 import subprocess
 import sys
+import threading
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -53,10 +55,54 @@ EXTRA_TYPES = {
     ".svg": "image/svg+xml",
 }
 
+# Filled in by main(). Helios reads /api/status to decide whether this app is
+# running, and the phone URL it hands back is the one worth copying.
+STATE = {"port": None, "url": None, "urls": [], "root": ROOT}
+SERVER = {"srv": None}
+
 
 class Handler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *a, **kw):
         super().__init__(*a, directory=ROOT, **kw)
+
+    # ── the small API Helios speaks ────────────────────────────────────────
+    def _json(self, obj, code=200):
+        body = json.dumps(obj).encode("utf-8")
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_GET(self):
+        path = self.path.split("?")[0]
+        # Helios's LNK button copies the bare root (http://host:port), so the
+        # root has to be the thing worth opening. Sending it to the source
+        # build means the copied link lands on the launcher, ready to test,
+        # instead of on a directory listing of the repo.
+        if path == "/":
+            self.send_response(302)
+            self.send_header("Location", "/arcade/")
+            self.end_headers()
+            return
+        if path == "/api/status":
+            return self._json({
+                "ok": True, "app": "arcade", "status": "running",
+                "port": STATE["port"], "url": STATE["url"], "urls": STATE["urls"],
+                "root": STATE["root"],
+            })
+        return super().do_GET()
+
+    def do_POST(self):
+        if self.path.split("?")[0] == "/api/shutdown":
+            self._json({"ok": True, "stopping": True})
+            # Answer first, then stop: shutdown() blocks until the loop exits,
+            # so calling it inline would deadlock this handler's own thread.
+            threading.Thread(target=lambda: SERVER["srv"] and SERVER["srv"].shutdown(),
+                             daemon=True).start()
+            return
+        self.send_error(405, "only /api/shutdown accepts POST")
 
     def end_headers(self):
         # The whole point of serving locally is that a refresh shows the edit.
@@ -76,7 +122,19 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def log_message(self, fmt, *args):
         # One line per request, without the date noise the base class adds.
-        sys.stdout.write("  %s\n" % (fmt % args))
+        #
+        # Launched by Helios through pythonw there is no console at all and
+        # sys.stdout is None. print() tolerates that (it returns early), but a
+        # bare sys.stdout.write does not — and since this runs per request, it
+        # took down every response while the socket still accepted connections.
+        # A server that listens and answers nothing is the worst failure shape
+        # available, so this stays defensive.
+        if sys.stdout is None:
+            return
+        try:
+            print("  %s" % (fmt % args))
+        except Exception:
+            pass
 
 
 def tailscale_host():
@@ -125,6 +183,13 @@ def main():
     name, ip = tailscale_host()
     lan = lan_ip()
 
+    # The tailnet name first: it survives a changed IP, and it is the one to copy.
+    STATE["port"] = args.port
+    STATE["urls"] = ["http://%s:%d/arcade/" % (h, args.port)
+                     for h in (name, ip, lan) if h]
+    STATE["url"] = STATE["urls"][0] if STATE["urls"] else \
+        "http://localhost:%d/arcade/" % args.port
+
     print("\n  Serving %s" % ROOT)
     print("  Everything no-store, so a refresh always shows the edit.\n")
     print("  On the phone (Tailscale):")
@@ -148,10 +213,12 @@ def main():
         srv = http.server.ThreadingHTTPServer(("0.0.0.0", args.port), Handler)
     except OSError as e:
         sys.exit("could not bind port %d: %s" % (args.port, e))
+    SERVER["srv"] = srv
     try:
         srv.serve_forever()
     except KeyboardInterrupt:
-        print("\n  stopped\n")
+        pass
+    print("\n  stopped\n")
 
 
 if __name__ == "__main__":
