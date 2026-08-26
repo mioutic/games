@@ -5,3 +5,7 @@
 * text=auto eol=lf
 
 *.png binary
+
+# Batch files keep CRLF: cmd.exe is tolerant of LF for simple scripts but not
+# reliably so around labels and goto, and this one is how Helios starts the app.
+*.bat text eol=crlf
