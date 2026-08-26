@@ -27,6 +27,19 @@
       }
     },
     {
+      "slug": "curveball",
+      "name": "Curveball",
+      "glyph": "orb",
+      "description": "A ball down a stone throat. Cut across it and it bends in the air.",
+      "ink": "#6fb3ab",
+      "entry": "index.html",
+      "stat": {
+        "key": "curveball.best",
+        "label": "Best",
+        "format": "int"
+      }
+    },
+    {
       "slug": "ossuary",
       "name": "Ossuary",
       "glyph": "crypt",

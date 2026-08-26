@@ -1,0 +1,947 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Curveball</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<style>
+  /* Sanguine — see DESIGN.md */
+  :root {
+    --s-0: #0b0609;  --s-1: #12080c;  --s-2: #1a0d12;  --s-3: #241119;
+    --t-0: #f2e6e6;  --t-1: #c3a9ad;  --t-2: #8f6f76;  --t-3: #5c434a;
+    --accent: #e9d8c5;  --accent-2: #b81d3a;  --brand: #d9557a;
+    --line-0: #150a0e;  --line-1: #2a141c;  --line-2: #3d1f28;
+    --error: #ff5470;  --success: #5fa777;  --warning: #d9a441;
+    --bloom: 0 0 12px rgba(216,58,88,.45), 0 0 26px rgba(216,58,88,.16);
+    --lit-within: inset 0 0 60px rgba(184,29,58,.05);
+    --scrim: #050203;
+    --font-display: Georgia, "Times New Roman", serif;
+    --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+    --radius: 2px;  --dur: 160ms;  --ease: cubic-bezier(.2,.6,.2,1);
+    --safe-t: 0px; --safe-r: 0px; --safe-b: 0px; --safe-l: 0px;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent;
+      user-select: none; -webkit-user-select: none; }
+  html, body {
+    margin: 0; height: 100%; overflow: hidden; touch-action: none;
+    background: var(--s-0); color: var(--t-0);
+    font: 400 16px/1.45 var(--font-ui); -webkit-font-smoothing: antialiased;
+    overscroll-behavior: none;
+  }
+
+  /* One stage, sized in JS. Safari reports its viewport several ways and they
+     disagree, so nothing here trusts a CSS unit (PLATFORM.md). */
+  #stage { position: fixed; top: 0; left: 0; overflow: hidden; background: #000; }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+  .micro { font: 500 9px/1 var(--font-ui); letter-spacing: .18em;
+           text-transform: uppercase; color: var(--t-2); }
+
+  .hud { position: absolute; inset: 0; pointer-events: none; z-index: 4; }
+
+  .panel {
+    background: rgba(11,6,9,.62); border: 1px solid var(--line-1);
+    border-radius: var(--radius); box-shadow: var(--lit-within);
+  }
+
+  .readout {
+    position: absolute; top: calc(var(--safe-t) + 10px); left: calc(var(--safe-l) + 10px);
+    display: flex; gap: 0; padding: 0;
+  }
+  .readout .cell { padding: 7px 12px 8px; border-right: 1px solid var(--line-0); text-align: left; }
+  .readout .cell:last-child { border-right: 0; }
+  .readout .v { margin-top: 5px; font: 500 17px/1 var(--font-mono);
+                font-variant-numeric: tabular-nums; color: var(--t-0); }
+  .readout .v.accent { color: var(--accent); }
+  .readout .v.brandish { color: var(--brand); }
+  /* Readouts drop before they wrap — landscape has no height to spare. */
+  @media (max-height: 460px) { .readout .cell.opt { display: none; } }
+
+  .lives { display: flex; gap: 4px; margin-top: 6px; }
+  .pip { width: 7px; height: 7px; border: 1px solid var(--accent);
+         background: var(--accent); box-shadow: var(--bloom); }
+  .pip.gone { background: none; border-color: var(--line-2); box-shadow: none; }
+
+  .gear {
+    position: absolute; top: calc(var(--safe-t) + 10px); right: calc(var(--safe-r) + 10px);
+    width: 38px; height: 38px; display: grid; place-items: center; pointer-events: auto;
+    appearance: none; color: var(--t-1); cursor: pointer;
+    background: rgba(11,6,9,.62); border: 1px solid var(--line-1); border-radius: var(--radius);
+  }
+  .gear:active { color: var(--accent); border-color: var(--accent-2); }
+
+  /* Spin readout: the whole game is about what you did to the ball, so say it. */
+  .spin {
+    position: absolute; left: 50%; transform: translateX(-50%);
+    top: calc(var(--safe-t) + 10px); padding: 6px 12px; display: flex; align-items: center; gap: 8px;
+    background: rgba(11,6,9,.6); border: 1px solid var(--line-1); border-radius: var(--radius);
+    opacity: 0; transition: opacity var(--dur) var(--ease);
+  }
+  .spin.on { opacity: 1; }
+  .spin b { font: 500 11px/1 var(--font-mono); letter-spacing: .1em; color: var(--accent); }
+  .spin .arc { width: 22px; height: 12px; display: block; }
+
+  .toast {
+    position: absolute; left: 50%; transform: translateX(-50%);
+    bottom: calc(var(--safe-b) + 92px); padding: 9px 16px; z-index: 6;
+    background: rgba(11,6,9,.86); border: 1px solid var(--line-2); border-radius: var(--radius);
+    font: 400 13px/1 var(--font-ui); color: var(--t-0); pointer-events: none;
+    opacity: 0; transition: opacity var(--dur) var(--ease);
+  }
+  .toast.on { opacity: 1; }
+
+  .hint {
+    position: absolute; left: 0; right: 0; bottom: calc(var(--safe-b) + 12px);
+    text-align: center; pointer-events: none;
+    font: 500 9px/1.6 var(--font-ui); letter-spacing: .18em;
+    text-transform: uppercase; color: var(--t-3);
+  }
+
+  /* ---------- overlays ---------- */
+  .overlay {
+    position: absolute; inset: 0; z-index: 8; display: flex;
+    align-items: center; justify-content: center;
+    padding: calc(var(--safe-t) + 16px) calc(var(--safe-r) + 16px)
+             calc(var(--safe-b) + 16px) calc(var(--safe-l) + 16px);
+    background: rgba(5,2,3,.92);
+  }
+  .overlay.hide { display: none; }
+  .card {
+    width: 100%; max-width: 380px; max-height: 100%; overflow-y: auto;
+    -webkit-overflow-scrolling: touch; padding: 22px 20px;
+    background: var(--s-1); border: 1px solid var(--line-2); border-radius: var(--radius);
+    box-shadow: var(--lit-within); text-align: center;
+  }
+  .card h2 { font: 400 32px/1.05 var(--font-display); letter-spacing: .04em; margin: 0 0 10px; }
+  .lede { color: var(--t-2); font-size: 13.5px; line-height: 1.65; margin: 0 0 18px; }
+  .big { font: 500 52px/1 var(--font-mono); font-variant-numeric: tabular-nums;
+         color: var(--accent); letter-spacing: -.02em; }
+  .big small { display: block; margin-top: 8px; font: 500 9px/1 var(--font-ui);
+               letter-spacing: .18em; text-transform: uppercase; color: var(--t-2); }
+  .keys { display: flex; gap: 8px; margin: 0 0 18px; }
+  .keys div { flex: 1; padding: 10px 6px; border: 1px solid var(--line-1);
+              border-radius: var(--radius); background: rgba(233,216,197,.03); }
+  .keys b { display: block; font: 400 15px/1 var(--font-display); color: var(--accent); margin-bottom: 6px; }
+  .keys span { font: 500 8.5px/1.4 var(--font-ui); letter-spacing: .12em;
+               text-transform: uppercase; color: var(--t-2); }
+  .go {
+    appearance: none; width: 100%; margin-top: 10px; padding: 14px 18px; cursor: pointer;
+    background: var(--accent); color: var(--s-0); border: 1px solid var(--accent);
+    border-radius: var(--radius); font: 500 11px/1 var(--font-ui);
+    letter-spacing: .18em; text-transform: uppercase;
+  }
+  .go.ghost { background: none; color: var(--t-1); border-color: var(--line-2); }
+  .go:active { box-shadow: var(--bloom); }
+
+  .row {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 11px 0; border-bottom: 1px solid var(--line-0); text-align: left;
+  }
+  .row:last-of-type { border-bottom: 0; }
+  .row .lab { font-size: 13px; color: var(--t-1); }
+  .row .sub { display: block; margin-top: 3px; font-size: 11px; color: var(--t-3); line-height: 1.4; }
+  .sw {
+    appearance: none; flex: none; width: 44px; height: 24px; cursor: pointer; position: relative;
+    background: var(--s-3); border: 1px solid var(--line-2); border-radius: var(--radius);
+  }
+  .sw::after {
+    content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px;
+    background: var(--t-3); transition: transform var(--dur) var(--ease), background var(--dur);
+  }
+  .sw[aria-checked="true"] { border-color: var(--accent-2); }
+  .sw[aria-checked="true"]::after { transform: translateX(20px); background: var(--accent); }
+  .seg { display: flex; gap: 5px; }
+  .seg button {
+    appearance: none; padding: 7px 11px; cursor: pointer;
+    background: rgba(11,6,9,.5); border: 1px solid var(--line-2); border-radius: var(--radius);
+    color: var(--t-1); font: 500 9.5px/1 var(--font-ui); letter-spacing: .14em; text-transform: uppercase;
+  }
+  .seg button.on { border-color: var(--accent); color: var(--accent); background: rgba(233,216,197,.10); }
+
+  #probe { position: absolute; left: -9999px; top: 0; width: 1px; height: 1px;
+           padding: env(safe-area-inset-top) env(safe-area-inset-right)
+                    env(safe-area-inset-bottom) env(safe-area-inset-left); }
+</style>
+</head>
+<body>
+
+<div id="stage">
+<canvas id="cv"></canvas>
+<div id="probe"></div>
+
+<div class="hud" id="hud">
+  <div class="panel readout">
+    <div class="cell"><div class="micro">Score</div><div class="v accent" id="vScore">0</div></div>
+    <div class="cell"><div class="micro">Rally</div><div class="v" id="vRally">0</div></div>
+    <div class="cell opt"><div class="micro">Best</div><div class="v brandish" id="vBest">0</div></div>
+    <div class="cell"><div class="micro">Lives</div><div class="lives" id="vLives"></div></div>
+  </div>
+
+  <div class="spin" id="spinBox">
+    <svg class="arc" viewBox="0 0 22 12" fill="none" aria-hidden="true">
+      <path id="spinArc" d="M2 6 Q11 6 20 6" stroke="currentColor" stroke-width="1.4" style="color:var(--accent)"/>
+    </svg>
+    <b id="spinTxt">NO SPIN</b>
+  </div>
+
+  <button class="gear" id="btnGear" aria-label="Settings">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="1.5" stroke-linecap="square" aria-hidden="true">
+      <circle cx="12" cy="12" r="3.2"/>
+      <path d="M12 2.6v3M12 18.4v3M2.6 12h3M18.4 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M18.7 5.3l-2.1 2.1M7.4 16.6l-2.1 2.1"/>
+    </svg>
+  </button>
+
+  <div class="toast" id="toast"></div>
+  <div class="hint" id="hint">Drag to move &middot; cut across the ball to curve it</div>
+</div>
+
+<div class="overlay" id="intro">
+  <div class="card">
+    <h2>Curveball</h2>
+    <p class="lede">A ball down a stone throat. Slice across it as you return and
+      it bends in the air — the wall it ends up behind is not the one it was
+      heading for.</p>
+    <div class="keys">
+      <div><b>&#10070;</b><span>Drag<br>to move</span></div>
+      <div><b>&#10022;</b><span>Cut across<br>to curve</span></div>
+      <div><b>&#8225;</b><span>Three<br>lives</span></div>
+    </div>
+    <button class="go" id="btnPlay">Play</button>
+    <button class="go ghost" id="btnSettingsIntro">Settings</button>
+  </div>
+</div>
+
+<div class="overlay hide" id="over">
+  <div class="card">
+    <div id="overHead"></div>
+    <button class="go" id="btnAgain">Again</button>
+    <button class="go ghost" id="btnMenu">Main screen</button>
+  </div>
+</div>
+
+<div class="overlay hide" id="settings">
+  <div class="card">
+    <h2 style="font-size:26px">Settings</h2>
+    <div class="row">
+      <div><span class="lab">Fullscreen</span>
+        <span class="sub">Hide the arcade bar and take the whole screen.</span></div>
+      <button class="sw" id="swFs" role="switch" aria-checked="false" aria-label="Fullscreen"></button>
+    </div>
+    <div class="row">
+      <div><span class="lab">Haptics</span>
+        <span class="sub">A tap on the paddle and on a point.</span></div>
+      <button class="sw" id="swHaptic" role="switch" aria-checked="true" aria-label="Haptics"></button>
+    </div>
+    <div class="row">
+      <div><span class="lab">Trail</span>
+        <span class="sub">Draw the path the ball has taken. Makes curve obvious.</span></div>
+      <button class="sw" id="swTrail" role="switch" aria-checked="true" aria-label="Trail"></button>
+    </div>
+    <div class="row">
+      <div><span class="lab">Difficulty</span>
+        <span class="sub">How fast it starts and how well the far side reads you.</span></div>
+      <div class="seg" id="segDiff">
+        <button data-d="calm">Calm</button><button data-d="keen">Keen</button><button data-d="cruel">Cruel</button>
+      </div>
+    </div>
+    <button class="go ghost" id="btnSetBack" style="margin-top:16px">Back</button>
+    <button class="go ghost" id="btnLeave">Leave to Arcade</button>
+  </div>
+</div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var stageEl = document.getElementById('stage');
+  var cv = document.getElementById('cv');
+  var ctx = cv.getContext('2d');
+  var probe = document.getElementById('probe');
+  var hudEl = document.getElementById('hud');
+
+  var BKEY = 'curveball.best', SKEY = 'curveball.settings';
+
+  /* ---------------- settings ---------------- */
+
+  var settings = { fullscreen: false, haptics: true, trail: true, diff: 'keen' };
+  try {
+    var raw = JSON.parse(localStorage.getItem(SKEY) || 'null');
+    if (raw && typeof raw === 'object') {
+      if (typeof raw.fullscreen === 'boolean') settings.fullscreen = raw.fullscreen;
+      if (typeof raw.haptics === 'boolean') settings.haptics = raw.haptics;
+      if (typeof raw.trail === 'boolean') settings.trail = raw.trail;
+      if (/^(calm|keen|cruel)$/.test(raw.diff)) settings.diff = raw.diff;
+    }
+  } catch (e) {}
+  function saveSettings() {
+    try { localStorage.setItem(SKEY, JSON.stringify(settings)); } catch (e) {}
+  }
+  function buzz(p) { if (settings.haptics && navigator.vibrate) navigator.vibrate(p); }
+
+  var DIFF = {
+    calm:  { speed: 5.4, gain: 0.16, aiLag: 0.30, aiErr: 0.34, aiSpin: 0.35 },
+    keen:  { speed: 6.6, gain: 0.22, aiLag: 0.20, aiErr: 0.22, aiSpin: 0.60 },
+    cruel: { speed: 7.8, gain: 0.30, aiLag: 0.12, aiErr: 0.13, aiSpin: 0.85 }
+  };
+  function tune() { return DIFF[settings.diff] || DIFF.keen; }
+
+  /* ---------------- stage ---------------- */
+
+  var cssW = 0, cssH = 0, dpr = 1;
+
+  function insets() {
+    var cs = getComputedStyle(probe);
+    function v(n) { return parseFloat(cs[n]) || 0; }
+    // env(safe-area-inset-bottom) silently changes meaning when Safari's
+    // toolbar retracts, so it is capped (DESIGN.md).
+    return { t: v('paddingTop'), r: v('paddingRight'),
+             b: Math.min(v('paddingBottom'), 34), l: v('paddingLeft') };
+  }
+
+  function framed() { try { return window.parent !== window; } catch (e) { return true; } }
+  function standalone() {
+    if (window.navigator.standalone === true) return true;
+    return !!(window.matchMedia && (matchMedia('(display-mode: standalone)').matches ||
+                                    matchMedia('(display-mode: fullscreen)').matches));
+  }
+
+  function measure() {
+    var vv = window.visualViewport, doc = document.documentElement;
+    var w = Math.max(doc.clientWidth || 0, window.innerWidth || 0,
+                     vv ? Math.round(vv.width + (vv.offsetLeft || 0)) : 0);
+    var h = Math.max(doc.clientHeight || 0, window.innerHeight || 0,
+                     vv ? Math.round(vv.height + (vv.offsetTop || 0)) : 0);
+    // Installed with nothing above us, a viewport short of the screen is Safari
+    // being wrong rather than something owning those pixels (PLATFORM.md).
+    var clear = !framed() || settings.fullscreen;
+    if (standalone() && clear && screen.width && screen.height) {
+      var lng = Math.max(screen.width, screen.height), sht = Math.min(screen.width, screen.height);
+      if (h >= w) { h = Math.max(h, lng); w = Math.max(w, sht); }
+      else        { h = Math.max(h, sht); w = Math.max(w, lng); }
+    }
+    return { w: w, h: h };
+  }
+
+  function resize() {
+    var m = measure();
+    cssW = m.w; cssH = m.h;
+    stageEl.style.width = cssW + 'px';
+    stageEl.style.height = cssH + 'px';
+    dpr = Math.min(window.devicePixelRatio || 1, 2);   // dpr 3 is not worth it
+    cv.width = Math.round(cssW*dpr); cv.height = Math.round(cssH*dpr);
+
+    var ins = insets();
+    var root = document.documentElement.style;
+    // Framed and not fullscreen the launcher bar already paid the top inset —
+    // charging it twice leaves a dead strip (PLATFORM.md).
+    root.setProperty('--safe-t', ((framed() && !settings.fullscreen) ? 0 : ins.t) + 'px');
+    root.setProperty('--safe-r', ins.r + 'px');
+    root.setProperty('--safe-b', ins.b + 'px');
+    root.setProperty('--safe-l', ins.l + 'px');
+    layout();
+  }
+  window.addEventListener('resize', resize);
+  window.addEventListener('orientationchange', function () {
+    // Safari reports the pre-rotation size during the rotation itself.
+    setTimeout(resize, 60); setTimeout(resize, 260); setTimeout(resize, 600);
+  });
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', resize);
+    window.visualViewport.addEventListener('scroll', resize);
+  }
+
+  /* ---------------- the throat ----------------
+
+     A rectangular shaft running away from the eye. Its cross-section matches
+     the screen so one uniform scale projects it without distorting the ball. */
+
+  var TUNNEL = 13.0;          // length, in half-height units
+  var CAM = 3.15;             // eye distance in front of the near mouth
+  var HW = 1, HH = 1;         // half width / half height of the cross-section
+  var S = 100;                // pixels per unit at the near mouth
+  var CX = 0, CY = 0;
+
+  function layout() {
+    var ins = insets();
+    var top = (framed() && !settings.fullscreen) ? 0 : ins.t;
+    var availW = Math.max(120, cssW - ins.l - ins.r);
+    var availH = Math.max(120, cssH - top - ins.b);
+    CX = ins.l + availW/2;
+    CY = top + availH/2;
+    HH = 1;
+    HW = Math.max(0.55, Math.min(2.4, availW/availH));
+    S = (availH/2) * 0.96;
+  }
+
+  // Perspective. p is 1 at the near mouth and shrinks down the shaft.
+  function pf(z) { return CAM / (CAM + z); }
+  function px(x, z) { return CX + x * pf(z) * S; }
+  function py(y, z) { return CY - y * pf(z) * S; }
+
+  /* ---------------- state ---------------- */
+
+  var ball = { x: 0, y: 0, z: TUNNEL*0.5, vx: 0, vy: 0, vz: 0, sx: 0, sy: 0, r: 0.062 };
+  var me   = { x: 0, y: 0, px: 0, py: 0, vx: 0, vy: 0, w: 0.30, h: 0.30 };
+  var them = { x: 0, y: 0, w: 0.34, h: 0.34, tx: 0, ty: 0 };
+  var trail = [];
+
+  var state = {
+    running: false, over: false, paused: false,
+    score: 0, rally: 0, lives: 3, speed: 6.6,
+    serveT: 0, servingToMe: false, flash: 0, shake: 0, t: 0, hitFlash: 0
+  };
+  var best = parseInt(localStorage.getItem(BKEY) || '0', 10) || 0;
+
+  var elScore = document.getElementById('vScore'), elRally = document.getElementById('vRally'),
+      elBest = document.getElementById('vBest'), elLives = document.getElementById('vLives'),
+      spinBox = document.getElementById('spinBox'), spinTxt = document.getElementById('spinTxt'),
+      spinArc = document.getElementById('spinArc'),
+      toastEl = document.getElementById('toast'), hintEl = document.getElementById('hint');
+
+  function paintHud() {
+    elScore.textContent = state.score;
+    elRally.textContent = state.rally;
+    elBest.textContent = best;
+    var h = '';
+    for (var i = 0; i < 3; i++) h += '<i class="pip' + (i < state.lives ? '' : ' gone') + '"></i>';
+    elLives.innerHTML = h;
+  }
+
+  var toastT = 0;
+  function toast(msg) {
+    toastEl.textContent = msg; toastEl.classList.add('on'); toastT = 1.5;
+  }
+
+  function paintSpin() {
+    var s = Math.hypot(ball.sx, ball.sy);
+    if (s < 0.35) {
+      spinBox.classList.remove('on');
+      return;
+    }
+    spinBox.classList.add('on');
+    // The arc bends the way the ball will. Reading it should be instant.
+    var bend = Math.max(-5, Math.min(5, ball.sx*1.5));
+    var lift = Math.max(-5, Math.min(5, -ball.sy*1.5));
+    spinArc.setAttribute('d', 'M2 ' + (6 - lift/2) + ' Q11 ' + (6 + bend + lift) + ' 20 ' + (6 - lift/2));
+    var dir = Math.abs(ball.sx) > Math.abs(ball.sy)
+      ? (ball.sx > 0 ? 'CURVING RIGHT' : 'CURVING LEFT')
+      : (ball.sy > 0 ? 'LIFTING' : 'DROPPING');
+    spinTxt.textContent = dir;
+  }
+
+  /* ---------------- run ---------------- */
+
+  function serve(toMe) {
+    var t = tune();
+    ball.x = 0; ball.y = 0;
+    ball.z = toMe ? TUNNEL*0.42 : TUNNEL*0.58;
+    ball.sx = 0; ball.sy = 0;
+    var sp = state.speed;
+    var ang = (Math.random()-0.5)*0.5;
+    ball.vx = Math.sin(ang)*sp*0.24;
+    ball.vy = (Math.random()-0.5)*sp*0.16;
+    ball.vz = toMe ? -sp : sp;
+    trail.length = 0;
+    state.serveT = 0.65;
+    state.servingToMe = !!toMe;
+    them.tx = 0; them.ty = 0;
+    paintSpin();
+  }
+
+  function reset() {
+    var t = tune();
+    state.score = 0; state.rally = 0; state.lives = 3;
+    state.speed = t.speed; state.over = false; state.running = true;
+    state.flash = 0; state.shake = 0;
+    me.x = 0; me.y = 0; me.px = 0; me.py = 0; me.vx = 0; me.vy = 0;
+    them.x = 0; them.y = 0;
+    serve(true);
+    paintHud();
+    hintEl.style.display = '';
+  }
+
+  function point(mine) {
+    if (mine) {
+      state.score++;
+      if (state.score > best) {
+        best = state.score;
+        try { localStorage.setItem(BKEY, String(best)); } catch (e) {}
+      }
+      state.speed += tune().gain;
+      toast('Point. The shaft narrows.');
+      buzz([10, 30, 10]);
+    } else {
+      state.lives--;
+      state.flash = 1;
+      state.shake = 1;
+      toast(state.lives > 0 ? 'Missed.' : 'Gone.');
+      buzz([40, 60, 40]);
+    }
+    state.rally = 0;
+    paintHud();
+    if (state.lives <= 0) return end();
+    serve(!mine);
+  }
+
+  var overEl = document.getElementById('over'), overHead = document.getElementById('overHead');
+
+  function end() {
+    state.over = true; state.running = false;
+    spinBox.classList.remove('on');
+    overHead.innerHTML =
+      '<h2>Down the throat</h2>' +
+      '<div class="big">' + state.score + '<small>points taken</small></div>' +
+      '<p class="lede" style="margin-top:18px">Best is ' + best +
+      '. The ball goes where you put it, not where you aimed.</p>';
+    overEl.classList.remove('hide');
+    buzz([40, 80, 40]);
+  }
+
+  /* ---------------- input ---------------- */
+
+  // Absolute mapping: the near mouth fills the screen, so the paddle simply
+  // goes where the finger is. Anything relative fights you when the ball is
+  // already on its way back.
+  var dragId = null;
+
+  function toPaddle(clientX, clientY) {
+    var r = stageEl.getBoundingClientRect();
+    var x = ((clientX - r.left) - CX) / S;
+    var y = -(((clientY - r.top) - CY) / S);
+    me.x = Math.max(-(HW - me.w/2), Math.min(HW - me.w/2, x));
+    me.y = Math.max(-(HH - me.h/2), Math.min(HH - me.h/2, y));
+  }
+
+  stageEl.addEventListener('touchstart', function (e) {
+    if (!state.running || state.paused) return;
+    if (dragId !== null) return;
+    var t = e.changedTouches[0];
+    // Leave the settings gear alone; everything else is the paddle.
+    if (e.target.closest && e.target.closest('.gear')) return;
+    e.preventDefault();
+    dragId = t.identifier;
+    toPaddle(t.clientX, t.clientY);
+  }, { passive: false });
+
+  window.addEventListener('touchmove', function (e) {
+    if (dragId === null) return;
+    for (var i = 0; i < e.changedTouches.length; i++) {
+      if (e.changedTouches[i].identifier === dragId) {
+        e.preventDefault();
+        toPaddle(e.changedTouches[i].clientX, e.changedTouches[i].clientY);
+      }
+    }
+  }, { passive: false });
+
+  function endTouch(e) {
+    if (dragId === null) return;
+    for (var i = 0; i < e.changedTouches.length; i++)
+      if (e.changedTouches[i].identifier === dragId) dragId = null;
+  }
+  window.addEventListener('touchend', endTouch);
+  window.addEventListener('touchcancel', endTouch);
+
+  var mouseDown = false;
+  stageEl.addEventListener('mousedown', function (e) {
+    if (!state.running || state.paused) return;
+    if (e.target.closest && e.target.closest('.gear')) return;
+    e.preventDefault(); mouseDown = true; toPaddle(e.clientX, e.clientY);
+  });
+  window.addEventListener('mousemove', function (e) {
+    if (mouseDown) toPaddle(e.clientX, e.clientY);
+  });
+  window.addEventListener('mouseup', function () { mouseDown = false; });
+
+  var keys = {};
+  window.addEventListener('keydown', function (e) {
+    keys[e.key.toLowerCase()] = true;
+    if (e.key === ' ') e.preventDefault();
+  });
+  window.addEventListener('keyup', function (e) { keys[e.key.toLowerCase()] = false; });
+
+  /* ---------------- simulation ---------------- */
+
+  function paddleHit(p, halfW, halfH) {
+    return Math.abs(ball.x - p.x) <= halfW + ball.r &&
+           Math.abs(ball.y - p.y) <= halfH + ball.r;
+  }
+
+  function update(dt) {
+    state.t += dt;
+    state.flash = Math.max(0, state.flash - dt*2.2);
+    state.shake = Math.max(0, state.shake - dt*2.6);
+    state.hitFlash = Math.max(0, state.hitFlash - dt*3.5);
+    if (toastT > 0) { toastT -= dt; if (toastT <= 0) toastEl.classList.remove('on'); }
+    if (!state.running || state.paused) return;
+
+    // Keys nudge the paddle; touch sets it outright.
+    var kx = (keys.arrowright || keys.d ? 1 : 0) - (keys.arrowleft || keys.a ? 1 : 0);
+    var ky = (keys.arrowup || keys.w ? 1 : 0) - (keys.arrowdown || keys.s ? 1 : 0);
+    if (kx || ky) {
+      me.x = Math.max(-(HW - me.w/2), Math.min(HW - me.w/2, me.x + kx*2.6*dt));
+      me.y = Math.max(-(HH - me.h/2), Math.min(HH - me.h/2, me.y + ky*2.6*dt));
+    }
+
+    // Paddle velocity is measured, not read from the input — it is the same
+    // number whether the paddle was moved by a thumb or by a key, and it is
+    // the only thing that puts spin on the ball.
+    me.vx = (me.x - me.px)/Math.max(dt, 0.0001);
+    me.vy = (me.y - me.py)/Math.max(dt, 0.0001);
+    me.px = me.x; me.py = me.y;
+
+    if (state.serveT > 0) { state.serveT -= dt; return; }
+
+    var t = tune();
+
+    // Curve. Spin bends the flight sideways and decays as it spends itself.
+    ball.vx += ball.sx*dt;
+    ball.vy += ball.sy*dt;
+    ball.sx *= Math.max(0, 1 - dt*0.30);
+    ball.sy *= Math.max(0, 1 - dt*0.30);
+
+    ball.x += ball.vx*dt;
+    ball.y += ball.vy*dt;
+    ball.z += ball.vz*dt;
+
+    // Walls. A bounce kills a little of the spin, so a curve is not forever.
+    var lx = HW - ball.r, ly = HH - ball.r;
+    if (ball.x < -lx) { ball.x = -lx; ball.vx = Math.abs(ball.vx); ball.sx *= -0.55; state.hitFlash = 0.4; }
+    if (ball.x >  lx) { ball.x =  lx; ball.vx = -Math.abs(ball.vx); ball.sx *= -0.55; state.hitFlash = 0.4; }
+    if (ball.y < -ly) { ball.y = -ly; ball.vy = Math.abs(ball.vy); ball.sy *= -0.55; state.hitFlash = 0.4; }
+    if (ball.y >  ly) { ball.y =  ly; ball.vy = -Math.abs(ball.vy); ball.sy *= -0.55; state.hitFlash = 0.4; }
+
+    if (settings.trail) {
+      trail.push(ball.x, ball.y, ball.z);
+      if (trail.length > 3*90) trail.splice(0, trail.length - 3*90);
+    } else if (trail.length) trail.length = 0;
+
+    // The far side reads the ball, badly on purpose, and worse when it curves.
+    var eta = ball.vz > 0 ? (TUNNEL - ball.z)/ball.vz : 99;
+    if (ball.vz > 0 && eta < 2.4) {
+      // It predicts a straight line and only partly accounts for the spin, so a
+      // well-cut ball beats it. Reading it perfectly would make curve pointless.
+      var predX = ball.x + ball.vx*eta + 0.5*ball.sx*eta*eta*t.aiSpin;
+      var predY = ball.y + ball.vy*eta + 0.5*ball.sy*eta*eta*t.aiSpin;
+      var wob = Math.sin(state.t*1.7)*t.aiErr;
+      them.tx = Math.max(-(HW - them.w/2), Math.min(HW - them.w/2, predX + wob));
+      them.ty = Math.max(-(HH - them.h/2), Math.min(HH - them.h/2, predY + wob*0.6));
+    }
+    var lag = Math.min(1, dt/Math.max(0.016, t.aiLag));
+    them.x += (them.tx - them.x)*lag;
+    them.y += (them.ty - them.y)*lag;
+
+    // Near end — yours.
+    if (ball.z <= 0) {
+      if (paddleHit(me, me.w/2, me.h/2)) {
+        ball.z = 0.001;
+        ball.vz = Math.abs(ball.vz);
+        // Where on the paddle it struck angles the return...
+        ball.vx += (ball.x - me.x)*3.2;
+        ball.vy += (ball.y - me.y)*3.2;
+        // ...and how fast the paddle was travelling across it is the curve.
+        ball.sx = Math.max(-9, Math.min(9, me.vx*1.5));
+        ball.sy = Math.max(-9, Math.min(9, me.vy*1.5));
+        state.rally++;
+        state.hitFlash = 1;
+        buzz(8);
+        paintHud(); paintSpin();
+      } else if (ball.z < -0.7) {
+        point(false);
+      }
+    }
+
+    // Far end — theirs.
+    if (ball.z >= TUNNEL) {
+      if (paddleHit(them, them.w/2, them.h/2)) {
+        ball.z = TUNNEL - 0.001;
+        ball.vz = -Math.abs(ball.vz);
+        ball.vx += (ball.x - them.x)*2.6;
+        ball.vy += (ball.y - them.y)*2.6;
+        ball.sx = Math.max(-7, Math.min(7, (Math.random()-0.5)*6*t.aiSpin));
+        ball.sy = Math.max(-7, Math.min(7, (Math.random()-0.5)*4*t.aiSpin));
+        state.rally++;
+        paintHud(); paintSpin();
+      } else if (ball.z > TUNNEL + 0.7) {
+        point(true);
+      }
+    }
+
+    // Keep the flight honest: speed drifts up over a rally but never runs away.
+    var sp = Math.hypot(ball.vx, ball.vy, ball.vz);
+    var want = state.speed + state.rally*0.06;
+    if (sp > 0.001) {
+      var k = want/sp;
+      var blend = 1 + (k - 1)*Math.min(1, dt*3);
+      ball.vx *= blend; ball.vy *= blend; ball.vz *= blend;
+    }
+  }
+
+  /* ---------------- drawing ---------------- */
+
+  function line(ax, ay, az, bx, by, bz, col, w) {
+    ctx.strokeStyle = col; ctx.lineWidth = w || 1;
+    ctx.beginPath();
+    ctx.moveTo(px(ax, az), py(ay, az));
+    ctx.lineTo(px(bx, bz), py(by, bz));
+    ctx.stroke();
+  }
+
+  function rectAt(z, col, w) {
+    ctx.strokeStyle = col; ctx.lineWidth = w || 1;
+    var x0 = px(-HW, z), x1 = px(HW, z), y0 = py(HH, z), y1 = py(-HH, z);
+    ctx.strokeRect(x0, y0, x1-x0, y1-y0);
+  }
+
+  function draw() {
+    var W = cv.width, H = cv.height;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, cssW, cssH);
+
+    ctx.save();
+    if (state.shake > 0) {
+      var s = state.shake*state.shake*7;
+      ctx.translate((Math.random()-0.5)*s, (Math.random()-0.5)*s);
+    }
+
+    // Ground: near-black with a dried-blood cast, never neutral grey.
+    var g = ctx.createRadialGradient(CX, CY, 0, CX, CY, Math.max(cssW, cssH)*0.75);
+    g.addColorStop(0, '#1a0d12');
+    g.addColorStop(1, '#0b0609');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, cssW, cssH);
+
+    // The far wall, and the shaft running back to it.
+    var fz = TUNNEL;
+    ctx.fillStyle = '#12080c';
+    var fx0 = px(-HW, fz), fx1 = px(HW, fz), fy0 = py(HH, fz), fy1 = py(-HH, fz);
+    ctx.fillRect(fx0, fy0, fx1-fx0, fy1-fy0);
+
+    // Rings down the shaft. Depth has to be readable or the curve is unfair.
+    var RINGS = 11;
+    for (var i = 1; i <= RINGS; i++) {
+      var z = (i/RINGS)*TUNNEL;
+      var a = 0.05 + 0.13*(1 - i/RINGS);
+      rectAt(z, 'rgba(233,216,197,' + a.toFixed(3) + ')', 1);
+    }
+    // Corners, so the shaft reads as a solid throat rather than stacked frames.
+    var corners = [[-HW,-HH],[HW,-HH],[HW,HH],[-HW,HH]];
+    for (var c = 0; c < 4; c++)
+      line(corners[c][0], corners[c][1], 0, corners[c][0], corners[c][1], fz,
+           'rgba(233,216,197,.13)', 1);
+
+    // Where the ball is against the floor and the left wall. Two shadows beat
+    // one: with a single cue you can never tell height from depth.
+    var bp = pf(ball.z);
+    ctx.fillStyle = 'rgba(184,29,58,.30)';
+    var shR = Math.max(1.2, ball.r*bp*S*0.85);
+    ctx.beginPath();
+    ctx.ellipse(px(ball.x, ball.z), py(-HH, ball.z), shR, shR*0.34, 0, 0, 6.284);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(px(-HW, ball.z), py(ball.y, ball.z), shR*0.34, shR, 0, 0, 6.284);
+    ctx.fill();
+
+    // The far paddle sits against the wall it is defending.
+    var tp = pf(fz);
+    ctx.strokeStyle = 'rgba(195,169,173,.75)';
+    ctx.lineWidth = 1.4;
+    ctx.fillStyle = 'rgba(36,17,25,.85)';
+    var tw = them.w*tp*S, th = them.h*tp*S;
+    var tx = px(them.x, fz) - tw/2, ty = py(them.y, fz) - th/2;
+    ctx.fillRect(tx, ty, tw, th);
+    ctx.strokeRect(tx, ty, tw, th);
+
+    // Trail, oldest first, fading. This is what makes a curve legible.
+    if (settings.trail && trail.length >= 6) {
+      ctx.lineWidth = 1.6;
+      for (var k = 3; k < trail.length; k += 3) {
+        var f = k/trail.length;
+        ctx.strokeStyle = 'rgba(216,58,88,' + (0.35*f*f).toFixed(3) + ')';
+        ctx.beginPath();
+        ctx.moveTo(px(trail[k-3], trail[k-1]), py(trail[k-2], trail[k-1]));
+        ctx.lineTo(px(trail[k], trail[k+2]), py(trail[k+1], trail[k+2]));
+        ctx.stroke();
+      }
+    }
+
+    // The ball. Bloom is blood around a bone core — that is the whole idea.
+    var bx = px(ball.x, ball.z), by = py(ball.y, ball.z);
+    var br = Math.max(2, ball.r*bp*S);
+    var halo = ctx.createRadialGradient(bx, by, 0, bx, by, br*4.2);
+    halo.addColorStop(0, 'rgba(216,58,88,.45)');
+    halo.addColorStop(1, 'rgba(216,58,88,0)');
+    ctx.fillStyle = halo;
+    ctx.beginPath(); ctx.arc(bx, by, br*4.2, 0, 6.284); ctx.fill();
+    ctx.fillStyle = state.hitFlash > 0.5 ? '#ffffff' : '#e9d8c5';
+    ctx.beginPath(); ctx.arc(bx, by, br, 0, 6.284); ctx.fill();
+
+    // Your paddle is a bracket, not a slab: it must not hide the ball it is
+    // about to meet.
+    var mw = me.w*S, mh = me.h*S;
+    var mx = px(me.x, 0) - mw/2, my = py(me.y, 0) - mh/2;
+    var arm = Math.min(mw, mh)*0.34;
+    ctx.strokeStyle = state.hitFlash > 0 ? '#ffffff' : '#e9d8c5';
+    ctx.lineWidth = 2;
+    ctx.shadowColor = 'rgba(216,58,88,.55)';
+    ctx.shadowBlur = state.hitFlash > 0 ? 22 : 10;
+    var cs2 = [[mx, my, 1, 1], [mx+mw, my, -1, 1], [mx+mw, my+mh, -1, -1], [mx, my+mh, 1, -1]];
+    for (var q = 0; q < 4; q++) {
+      var cq = cs2[q];
+      ctx.beginPath();
+      ctx.moveTo(cq[0] + cq[2]*arm, cq[1]);
+      ctx.lineTo(cq[0], cq[1]);
+      ctx.lineTo(cq[0], cq[1] + cq[3]*arm);
+      ctx.stroke();
+    }
+    ctx.shadowBlur = 0;
+
+    // Serve pause: say which way it is about to go.
+    if (state.serveT > 0 && state.running) {
+      ctx.fillStyle = 'rgba(233,216,197,' + (0.30 + 0.25*Math.sin(state.t*9)).toFixed(3) + ')';
+      ctx.font = '500 11px ' + '-apple-system, system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(state.servingToMe ? 'INCOMING' : 'YOUR SERVE', CX, CY + S*0.62);
+    }
+
+    ctx.restore();
+
+    // A miss washes the shaft in arterial red.
+    if (state.flash > 0) {
+      ctx.fillStyle = 'rgba(184,29,58,' + (state.flash*0.34).toFixed(3) + ')';
+      ctx.fillRect(0, 0, cssW, cssH);
+    }
+  }
+
+  /* ---------------- loop ---------------- */
+
+  var last = 0;
+  function tick(now) {
+    requestAnimationFrame(tick);
+    var t = now*0.001;
+    var dt = last ? Math.min(0.05, t - last) : 0.016;
+    last = t;
+    // A fixed step keeps the bounce honest when the frame rate wobbles.
+    var steps = Math.max(1, Math.min(4, Math.round(dt/0.0125)));
+    for (var i = 0; i < steps; i++) update(dt/steps);
+    draw();
+  }
+
+  /* ---------------- ui ---------------- */
+
+  var introEl = document.getElementById('intro'), setEl = document.getElementById('settings');
+  var swFs = document.getElementById('swFs'), swHaptic = document.getElementById('swHaptic'),
+      swTrail = document.getElementById('swTrail'), segDiff = document.getElementById('segDiff');
+
+  function setSwitch(el, on) { el.setAttribute('aria-checked', on ? 'true' : 'false'); }
+
+  function applyFullscreen() {
+    // The launcher owns its own bar; the game only asks.
+    try { window.parent.postMessage({ type: 'arcade:fullscreen', on: !!settings.fullscreen }, '*'); } catch (e) {}
+  }
+
+  function applySettings() {
+    setSwitch(swFs, settings.fullscreen);
+    setSwitch(swHaptic, settings.haptics);
+    setSwitch(swTrail, settings.trail);
+    var bs = segDiff.querySelectorAll('button');
+    for (var i = 0; i < bs.length; i++)
+      bs[i].classList.toggle('on', bs[i].dataset.d === settings.diff);
+    applyFullscreen();
+    saveSettings();
+    resize();
+  }
+
+  swFs.addEventListener('click', function () { settings.fullscreen = !settings.fullscreen; applySettings(); });
+  swHaptic.addEventListener('click', function () { settings.haptics = !settings.haptics; applySettings(); buzz(10); });
+  swTrail.addEventListener('click', function () { settings.trail = !settings.trail; applySettings(); });
+  segDiff.addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    settings.diff = b.dataset.d;
+    applySettings();
+    if (!state.running) toast('Difficulty set for the next run.');
+  });
+
+  document.getElementById('btnGear').addEventListener('click', function () {
+    state.paused = true; setEl.classList.remove('hide'); applySettings();
+  });
+  document.getElementById('btnSettingsIntro').addEventListener('click', function () {
+    setEl.classList.remove('hide'); applySettings();
+  });
+  document.getElementById('btnSetBack').addEventListener('click', function () {
+    setEl.classList.add('hide');
+    if (!state.over && introEl.classList.contains('hide')) state.paused = false;
+  });
+  setEl.addEventListener('click', function (e) {
+    if (e.target === setEl) document.getElementById('btnSetBack').click();
+  });
+  // Fullscreen leaves no launcher chrome, so this is the only way out.
+  document.getElementById('btnLeave').addEventListener('click', function () {
+    try { window.parent.postMessage({ type: 'arcade:exit' }, '*'); } catch (e) {}
+  });
+
+  document.getElementById('btnPlay').addEventListener('click', function () {
+    introEl.classList.add('hide'); reset();
+  });
+  document.getElementById('btnAgain').addEventListener('click', function () {
+    overEl.classList.add('hide'); reset();
+  });
+  document.getElementById('btnMenu').addEventListener('click', function () {
+    overEl.classList.add('hide'); introEl.classList.remove('hide');
+    state.running = false; state.over = false;
+    spinBox.classList.remove('on');
+  });
+
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden && state.running) state.paused = true;
+  });
+
+  /* ---------------- arcade contract ---------------- */
+
+  // Every game answers this; it is how a viewport bug names itself (PLATFORM.md).
+  window.addEventListener('message', function (e) {
+    if (!e.data || e.data.type !== 'arcade:spec?') return;
+    var vv = window.visualViewport, doc = document.documentElement, cs = getComputedStyle(probe);
+    function v(n) { return Math.round(parseFloat(cs[n]) || 0); }
+    try {
+      window.parent.postMessage({
+        type: 'arcade:spec', name: 'Curveball',
+        win: (window.innerWidth || 0) + '×' + (window.innerHeight || 0),
+        doc: (doc.clientWidth || 0) + '×' + (doc.clientHeight || 0),
+        vv: vv ? Math.round(vv.width) + '×' + Math.round(vv.height) : 'n/a',
+        stage: Math.round(cssW) + '×' + Math.round(cssH),
+        canvas: cv.width + '×' + cv.height,
+        ins: v('paddingTop') + ' / ' + v('paddingRight') + ' / ' +
+             v('paddingBottom') + ' / ' + v('paddingLeft'),
+        fps: Math.round(fps), scale: Math.round(dpr*100) + '%',
+        pads: 'paddle ' + me.x.toFixed(2) + ',' + me.y.toFixed(2) +
+              (dragId === null && !mouseDown ? '' : '*'),
+        touch: ('ontouchstart' in window ? 'yes' : 'no') +
+               ' / pts ' + (navigator.maxTouchPoints || 0)
+      }, '*');
+    } catch (err) {}
+  });
+
+  var fps = 0, fpsN = 0, fpsT = 0;
+  (function fpsLoop() {
+    requestAnimationFrame(fpsLoop);
+    fpsN++;
+    var n = performance.now();
+    if (!fpsT) fpsT = n;
+    if (n - fpsT >= 500) { fps = fpsN*1000/(n - fpsT); fpsN = 0; fpsT = n; }
+  }());
+
+  /* ---------------- go ---------------- */
+
+  resize();
+  applySettings();
+  paintHud();
+  serve(true);            // a still frame behind the intro card
+  state.running = false;
+  requestAnimationFrame(tick);
+}());
+</script>
+</body>
+</html>

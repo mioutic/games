@@ -3,7 +3,7 @@
 A phone-first launcher for the games in this repo. Built to be bookmarked or
 added to the iPhone home screen, where it runs full screen with no Safari chrome.
 
-Live at **https://mioutic.github.io/games/arcade/** once GitHub Pages is enabled
+Live at **https://mioutic.github.io/games/play/** once GitHub Pages is enabled
 (Settings → Pages → Deploy from a branch). Note that Pages only serves a private
 repo on a paid plan — on the free plan the repo has to be public.
 
@@ -42,7 +42,10 @@ and the channel-strip ink is picked from the folder name's hash.
 ```
 
 - `glyph` names a line icon drawn by the launcher — `bolt`, `serpent`, `crypt`,
+  `blade`, `pact`, `chalice`, `orb`,
   `grid`, or `default` (a diamond). **No emoji**: the house style forbids it, and
+  `build-index.py` warns if a `game.json` still carries an `emoji` field. To add
+  a glyph, put its SVG path in the `GLYPHS` table in `arcade/index.html`.
   `build-index.py` warns if a `game.json` still carries an `emoji` field. To add
   a glyph, put its SVG path in the `GLYPHS` table in `arcade/index.html`.
 - `ink` is the 2px channel strip along the card's top edge. Keep it to the
