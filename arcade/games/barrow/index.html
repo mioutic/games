@@ -154,6 +154,54 @@
   .stick.active .lbl { opacity: 0; }
   .stick.hidden { display: none; }
 
+  /* ---------- haul, wake, and the way out ---------- */
+  .haul { display: flex; align-items: baseline; gap: 7px; margin-top: 9px;
+          padding-top: 9px; border-top: 1px solid var(--line-1); }
+  .haul b { font: 600 17px/1 var(--font-mono); color: var(--accent);
+            font-variant-numeric: tabular-nums; }
+  .haul .lost { color: var(--t-2); }
+  .track.wake i { background: linear-gradient(90deg, #6b2030, #b81d3a); }
+  .vitals.awake .track.wake i { box-shadow: 0 0 10px rgba(184,29,58,.5); }
+
+  /* The way out is never a secret — an extraction run is about deciding when
+     to leave, not about finding the door. */
+  .compass {
+    position: absolute; left: 50%; transform: translateX(-50%);
+    top: calc(var(--safe-t) + 10px); display: flex; align-items: center; gap: 8px;
+    padding: 6px 12px; background: rgba(11,6,9,.6);
+    border: 1px solid var(--line-1); border-radius: var(--radius);
+    pointer-events: none; z-index: 5;
+  }
+  .compass i { width: 0; height: 0; display: block;
+               border-left: 5px solid transparent; border-right: 5px solid transparent;
+               border-bottom: 9px solid var(--accent); }
+  .compass span { font: 500 10px/1 var(--font-mono); letter-spacing: .1em;
+                  color: var(--t-1); font-variant-numeric: tabular-nums; }
+  .compass.off { display: none; }
+  .compass.near i { border-bottom-color: var(--success); }
+  .compass.near span { color: var(--success); }
+
+  /* ---------- stash + depth ---------- */
+  .stash { display: flex; gap: 10px; margin: 4px 0 14px; }
+  .stash div { flex: 1; padding: 9px 10px; border: 1px solid var(--line-1);
+               border-radius: var(--radius); background: rgba(233,216,197,.03); }
+  .stash .k { font: 500 8.5px/1 var(--font-ui); letter-spacing: .18em;
+              text-transform: uppercase; color: var(--t-2); }
+  .stash .v { font: 600 16px/1.4 var(--font-mono); color: var(--t-0);
+              font-variant-numeric: tabular-nums; }
+  .depth { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+  .depth .lab { font: 500 9px/1 var(--font-ui); letter-spacing: .18em;
+                text-transform: uppercase; color: var(--t-2); }
+  .depth .pick { display: flex; gap: 5px; flex: 1; flex-wrap: wrap; }
+  .depth button {
+    appearance: none; min-width: 32px; padding: 7px 8px; cursor: pointer;
+    border: 1px solid var(--line-2); border-radius: var(--radius);
+    background: rgba(11,6,9,.5); color: var(--t-1);
+    font: 600 12px/1 var(--font-mono); font-variant-numeric: tabular-nums;
+  }
+  .depth button.on { border-color: var(--accent); color: var(--accent);
+                     background: rgba(233,216,197,.10); }
+
   /* ---------- damage markers ---------- */
   /* Projected from the world point that was actually struck, so a marker is a
      readout of where the blade landed rather than a generic popup. */
@@ -282,7 +330,17 @@
       <div class="meterhead"><span class="micro">Wind</span><b id="stNum">100</b></div>
       <div class="track sta"><i id="stFill" style="width:100%"></i></div>
     </div>
+    <div class="meter">
+      <div class="meterhead"><span class="micro">The barrow</span><b id="wakeNum">Asleep</b></div>
+      <div class="track wake"><i id="wakeFill" style="width:0%"></i></div>
+    </div>
+    <div class="haul">
+      <b id="haulNum">0</b>
+      <span class="micro" id="haulCt">carrying nothing</span>
+    </div>
   </div>
+
+  <div class="compass off" id="compass"><i id="compArrow"></i><span id="compDist">—</span></div>
 
   <div class="panel diag">
     <div class="row"><span>Fps</span><span id="fps">—</span></div>
@@ -331,7 +389,17 @@
       <div class="keyk"><b>‡</b><span>Strike<br>and guard</span></div>
     </div>
     <p class="lede" style="margin-bottom:14px">The blade is real. It only hits what
-      it actually passes through — aim it, do not point at things.</p>
+      it actually passes through — aim it, do not point at things. Carry what you
+      find back to the way out; the barrow keeps whatever you die holding.</p>
+    <div class="stash">
+      <div><div class="k">Banked</div><div class="v" id="stashMarks">0</div></div>
+      <div><div class="k">Deepest</div><div class="v" id="stashDeep">—</div></div>
+      <div><div class="k">Lost</div><div class="v" id="stashLost">0</div></div>
+    </div>
+    <div class="depth">
+      <span class="lab">Depth</span>
+      <div class="pick" id="depthPick"></div>
+    </div>
     <button class="go wide" id="btnDescend" style="margin-top:0">Descend</button>
     <button class="go ghost wide" id="btnTrain">Training room</button>
     <button class="go ghost wide" id="btnSettingsFromIntro">Settings</button>
@@ -436,6 +504,12 @@
   var elFps = document.getElementById('fps'), elScale = document.getElementById('scale');
   var elDraws = document.getElementById('draws'), elTris = document.getElementById('tris');
   var elView = document.getElementById('view'), elGap = document.getElementById('gap');
+  var vitalsEl = document.querySelector('.vitals');
+  var elWake = document.getElementById('wakeFill'), elWakeNum = document.getElementById('wakeNum');
+  var elHaul = document.getElementById('haulNum'), elHaulCt = document.getElementById('haulCt');
+  var compassEl = document.getElementById('compass');
+  var compArrow = document.getElementById('compArrow');
+  var compDist = document.getElementById('compDist');
   var reticle = document.getElementById('reticle');
   var stickMoveEl = document.getElementById('stickMove'), stickLookEl = document.getElementById('stickLook');
   var strikeBtn = document.getElementById('btnStrike'), guardBtn = document.getElementById('btnGuard');
@@ -961,7 +1035,15 @@
         canvas: cv.width + '×' + cv.height,
         ins: v('paddingTop') + ' / ' + v('paddingRight') + ' / ' +
              v('paddingBottom') + ' / ' + v('paddingLeft'),
-        fps: lastFps, scale: Math.round(renderScale*100) + '%'
+        fps: lastFps, scale: Math.round(renderScale*100) + '%',
+        // PLATFORM.md: instrument, do not infer. If the sticks ever go dead on a
+        // real phone again, these read live in the launcher's metrics panel.
+        pads: 'L ' + padMove.x.toFixed(2) + ',' + padMove.y.toFixed(2) +
+              (padMove.id === null ? '' : '*') +
+              '  R ' + padLook.x.toFixed(2) + ',' + padLook.y.toFixed(2) +
+              (padLook.id === null ? '' : '*'),
+        touch: ('ontouchstart' in window ? 'yes' : 'no') +
+               ' / pts ' + (navigator.maxTouchPoints || 0)
       }, '*');
     } catch (err) {}
   });
@@ -1482,14 +1564,46 @@
     x: 0, z: 0, yaw: 0, pitch: 0, vx: 0, vz: 0, bob: 0, t: 0,
     hp: 100, sta: 100, guard: false, guardHeld: 0,
     swing: null, swingT: 0, hurt: 0, shock: 0, shake: 0,
-    kills: 0, depth: 1, haveSigil: false, training: false, hitStop: 0,
+    kills: 0, depth: 1, training: false, hitStop: 0,
+    carried: 0, haulCt: 0, runT: 0, wake: 0, spawnT: 0, extracted: false,
     prevBlade: null, hitThisSwing: null,
     torchPh: 0
   };
   var best = parseInt(localStorage.getItem(BKEY) || '0', 10) || 0;
 
-  var sigil = { x: 0, z: 0, taken: false, ph: 0 };
-  var stair = { x: 0, z: 0 };
+  // What survives a run. Marks you carried out are banked; marks you were
+  // holding when you died are gone, and counted, because the number you lost is
+  // the one that makes the next run feel like a decision.
+  var STASH_KEY = 'barrow.stash';
+  var stash = { marks: 0, deepest: 0, lost: 0, extracts: 0 };
+  try {
+    var raw = JSON.parse(localStorage.getItem(STASH_KEY) || 'null');
+    if (raw && typeof raw === 'object') {
+      stash.marks = raw.marks|0; stash.deepest = raw.deepest|0;
+      stash.lost = raw.lost|0; stash.extracts = raw.extracts|0;
+    }
+  } catch (e) {}
+  function saveStash() {
+    try { localStorage.setItem(STASH_KEY, JSON.stringify(stash)); } catch (e) {}
+    // The launcher card reads this one; keep it meaning "deepest extraction".
+    if (stash.deepest > best) {
+      best = stash.deepest;
+      try { localStorage.setItem(BKEY, String(best)); } catch (e) {}
+    }
+  }
+
+  // Loot. Value rises with depth, which is the whole reason to go down.
+  var LOOT_KINDS = [
+    { id: 'urn',  name: 'Ash urn',    base: 14, sz: 0.20, col: null, rate: 0.52 },
+    { id: 'relic', name: 'Reliquary', base: 38, sz: 0.26, col: null, rate: 0.34 },
+    { id: 'hoard', name: 'Grave hoard', base: 96, sz: 0.34, col: null, rate: 0.14 }
+  ];
+  var loot = [];
+  var exit = { x: 0, z: 0 };
+
+  // How awake the barrow is, 0..1 over this many seconds. Past the halfway mark
+  // it starts sending more of the dead after you, so standing still costs.
+  var WAKE_SECONDS = 170;
 
   /* ---------------- skeletons ---------------- */
 
@@ -2019,8 +2133,11 @@
     state.dead = false; state.won = false; state.paused = false;
     state.swing = null; state.swingT = 0; state.prevBlade = null;
     state.hurt = 0; state.shock = 0; state.shake = 0; state.hitStop = 0;
-    state.kills = 0; state.haveSigil = false; state.training = true;
-    sigil.taken = true;
+    state.kills = 0; state.training = true;
+    state.carried = 0; state.haulCt = 0; state.runT = 0; state.wake = 0;
+    state.extracted = false;
+    loot.length = 0;
+    compassEl.classList.add('off');
     for (var i = 0; i < MAX_PARTS; i++) pool[i].live = false;
     clearMarks();
     state.running = true;
@@ -2043,26 +2160,69 @@
     state.dead = false; state.won = false; state.paused = false;
     state.swing = null; state.swingT = 0; state.prevBlade = null;
     state.hurt = 0; state.shock = 0; state.shake = 0;
-    state.kills = 0; state.haveSigil = false;
+    state.kills = 0;
+    state.carried = 0; state.haulCt = 0; state.runT = 0; state.wake = 0;
+    state.spawnT = 0; state.extracted = false;
     for (var i = 0; i < MAX_PARTS; i++) pool[i].live = false;
 
-    var sp = farCellFrom(state.x, state.z, CELL*5);
-    sigil.x = sp[0]; sigil.z = sp[1]; sigil.taken = false;
-    var st = farCellFrom(state.x, state.z, CELL*4);
-    stair.x = st[0]; stair.z = st[1];
+    // The way out sits near where you came in. You always know where it is —
+    // the run is about how long you dare stay away from it.
+    var st = farCellFrom(state.x, state.z, CELL*1.5);
+    exit.x = st[0]; exit.z = st[1];
+
+    // Loot in the chambers first, then scattered down the runs. Deeper barrows
+    // hold more and hold it richer.
+    loot.length = 0;
+    var d = state.depth;
+    var mult = 1 + (d - 1)*0.38;
+    var count = Math.min(16, 5 + Math.floor(d*1.5));
+    for (var li = 0; li < count; li++) {
+      var kind = LOOT_KINDS[0];
+      var roll = Math.random(), acc = 0;
+      for (var ki = 0; ki < LOOT_KINDS.length; ki++) {
+        acc += LOOT_KINDS[ki].rate;
+        if (roll <= acc) { kind = LOOT_KINDS[ki]; break; }
+      }
+      // Pieces have to stand apart, or one step hoovers up a whole room and the
+      // choice of what to carry stops being a choice. Also kept off the exit,
+      // so no run banks free marks without walking anywhere.
+      var lp = null;
+      for (var attempt = 0; attempt < 24; attempt++) {
+        var cand;
+        if (li < world.rooms.length) {
+          var lrm = world.rooms[li];
+          cand = [cellX(lrm.i) + rand(-1.6,1.6), cellZ(lrm.j) + rand(-1.6,1.6)];
+        } else {
+          cand = farCellFrom(exit.x, exit.z, CELL*2.4);
+          cand = [cand[0] + rand(-0.9,0.9), cand[1] + rand(-0.9,0.9)];
+        }
+        if (Math.hypot(cand[0]-exit.x, cand[1]-exit.z) < 3.0) continue;
+        var clash = false;
+        for (var oi = 0; oi < loot.length; oi++) {
+          if (Math.hypot(cand[0]-loot[oi].x, cand[1]-loot[oi].z) < 2.4) { clash = true; break; }
+        }
+        if (!clash) { lp = cand; break; }
+      }
+      if (!lp) continue;               // a cramped level simply holds less
+      loot.push({ x: lp[0], z: lp[1], taken: false, kind: kind,
+                  value: Math.round(kind.base*mult*rand(0.82, 1.24)),
+                  ph: rand(0, 6.28) });
+    }
 
     // Skeletons stand where the chambers are, plus a few in the runs.
     for (var r = 0; r < world.rooms.length; r++) {
       var rm = world.rooms[r];
-      spawnFoe(cellX(rm.i) + rand(-1.4,1.4), cellZ(rm.j) + rand(-1.4,1.4), r === 0);
+      spawnFoe(cellX(rm.i) + rand(-1.4,1.4), cellZ(rm.j) + rand(-1.4,1.4), r === 0 || d >= 3);
     }
-    for (var k = 0; k < 4; k++) {
+    var extra = 4 + Math.floor(d*1.2);
+    for (var k = 0; k < extra; k++) {
       var p = farCellFrom(state.x, state.z, CELL*3.2);
-      spawnFoe(p[0] + rand(-0.9,0.9), p[1] + rand(-0.9,0.9), false);
+      spawnFoe(p[0] + rand(-0.9,0.9), p[1] + rand(-0.9,0.9), d >= 4 && k % 3 === 0);
     }
     state.running = true;
     state.hitStop = 0;
-    setObjective('Find the sigil');
+    compassEl.classList.remove('off');
+    setObjective('Take what you can carry');
     updateVitals();
     padMove.home(); padLook.home();
   }
@@ -2075,28 +2235,75 @@
     elHpTrack.classList.toggle('low', state.hp <= 30);
     elSt.style.width = clamp(state.sta, 0, 100) + '%';
     elStNum.textContent = Math.round(state.sta);
+
+    elWake.style.width = Math.round(state.wake*100) + '%';
+    elWakeNum.textContent = state.training ? '—'
+      : state.wake < 0.02 ? 'Asleep'
+      : state.wake < 0.34 ? 'Stirring'
+      : state.wake < 0.72 ? 'Awake'
+      : 'Hunting';
+    vitalsEl.classList.toggle('awake', !state.training && state.wake >= 0.34);
+    elHaul.textContent = state.carried;
+    elHaulCt.textContent = state.haulCt === 0 ? 'carrying nothing'
+      : state.haulCt === 1 ? '1 piece' : state.haulCt + ' pieces';
+    elHaul.classList.toggle('lost', state.carried === 0);
+  }
+
+  // Straight line to the way out, drawn relative to where you are facing.
+  function updateCompass() {
+    if (state.training || !state.running) return;
+    var dx = exit.x - state.x, dz = exit.z - state.z;
+    var dist = Math.hypot(dx, dz);
+    // Forward is (-sin yaw, -cos yaw); the arrow points at the difference.
+    var fwd = Math.atan2(-Math.sin(state.yaw), -Math.cos(state.yaw));
+    var rel = ((Math.atan2(dx, dz) - fwd + Math.PI*3) % (Math.PI*2)) - Math.PI;
+    compArrow.style.transform = 'rotate(' + (rel*180/Math.PI).toFixed(1) + 'deg)';
+    compDist.textContent = dist < 1.6 ? 'THE WAY OUT' : Math.round(dist) + 'm';
+    compassEl.classList.toggle('near', dist < 1.6);
   }
 
   var overEl = document.getElementById('over'), overHead = document.getElementById('overHead');
+  var btnAgainEl = document.getElementById('btnAgain');
 
   function die() {
     state.dead = true; state.running = false;
+    compassEl.classList.add('off');
+    var lostNow = state.carried;
+    stash.lost += lostNow;
+    saveStash();
     overHead.innerHTML =
       '<h2>Put down</h2>' +
-      '<div class="big">' + state.kills + '<small>bones broken</small></div>' +
-      '<p class="lede" style="margin-top:18px">The barrow keeps what it takes.</p>';
+      '<div class="big">' + lostNow + '<small>marks left behind</small></div>' +
+      '<p class="lede" style="margin-top:18px">' +
+      (lostNow > 0
+        ? 'You were carrying it when they caught you, so the barrow has it now.'
+        : 'You died holding nothing, which is at least a cheap lesson.') +
+      '</p>';
+    btnAgainEl.textContent = 'Descend again';
     overEl.classList.remove('hide');
     buzz([40,80,40]);
   }
-  function win() {
-    state.won = true; state.running = false;
-    var score = state.depth;
-    if (score > best) { best = score; try { localStorage.setItem(BKEY, String(best)); } catch (e) {} }
+
+  // Getting out is the win condition. Depth only unlocks by surviving it.
+  function extract() {
+    if (state.extracted) return;
+    state.extracted = true; state.won = true; state.running = false;
+    compassEl.classList.add('off');
+    var got = state.carried;
+    stash.marks += got;
+    stash.extracts++;
+    if (state.depth > stash.deepest) stash.deepest = state.depth;
+    saveStash();
+    var left = 0;
+    for (var li = 0; li < loot.length; li++) if (!loot[li].taken) left++;
     overHead.innerHTML =
-      '<h2>Deeper</h2>' +
-      '<div class="big">' + state.depth + '<small>levels down</small></div>' +
-      '<p class="lede" style="margin-top:18px">' + state.kills +
-      ' put back down. The stair keeps going.</p>';
+      '<h2>Out</h2>' +
+      '<div class="big">' + got + '<small>marks banked</small></div>' +
+      '<p class="lede" style="margin-top:18px">' +
+      'Depth ' + state.depth + ', ' + state.kills + ' put back down' +
+      (left > 0 ? ', and ' + left + ' left down there.' : ', and nothing left behind.') +
+      '</p>';
+    btnAgainEl.textContent = 'Go deeper — depth ' + (state.depth + 1);
     overEl.classList.remove('hide');
     buzz([16,40,16,40,16]);
   }
@@ -2110,6 +2317,9 @@
     staFlash = Math.max(0, staFlash - dt*2);
     if (state.shock > 0) { state.shock += dt*2.6; if (state.shock >= 1) state.shock = 0; }
     state.torchPh += dt;
+    // The light gives out as the place wakes, so the pressure is visible before
+    // it is lethal.
+    torchDim = state.training ? 1 : (1 - state.wake*0.32);
 
     updateParts(dt);
     if (!state.running || state.paused) return;
@@ -2168,14 +2378,42 @@
 
     if (state.training) return;
 
-    // Sigil and stair
-    if (!sigil.taken && Math.hypot(sigil.x-state.x, sigil.z-state.z) < 1.1) {
-      sigil.taken = true; state.haveSigil = true;
-      burst(sigil.x, 1.1, sigil.z, 60, GOLD, 4.4, 1.0, 0.045, 2.6, 2.0);
-      setObjective('Reach the stair');
-      buzz([10,30,10]);
+    // The barrow wakes on a clock. Nothing forces you out — it just gets
+    // steadily worse at letting you stay, which is the decision the run is made of.
+    state.runT += dt;
+    var wake = Math.min(1, state.runT/WAKE_SECONDS);
+    if (wake !== state.wake) state.wake = wake;
+    if (state.wake >= 0.34) {
+      state.spawnT -= dt;
+      if (state.spawnT <= 0) {
+        // They come in behind you, never on top of you.
+        state.spawnT = 15 - state.wake*8;
+        if (foes.length < 26) {
+          var sp = farCellFrom(state.x, state.z, CELL*3);
+          spawnFoe(sp[0] + rand(-0.8,0.8), sp[1] + rand(-0.8,0.8),
+                   state.wake > 0.7 && Math.random() < 0.4);
+        }
+      }
     }
-    if (state.haveSigil && Math.hypot(stair.x-state.x, stair.z-state.z) < 1.2) win();
+
+    // Loot
+    for (var li = 0; li < loot.length; li++) {
+      var it = loot[li];
+      if (it.taken) continue;
+      if (Math.hypot(it.x-state.x, it.z-state.z) < 1.05) {
+        it.taken = true;
+        state.carried += it.value;
+        state.haulCt++;
+        burst(it.x, 0.85, it.z, 40, GOLD, 3.6, 0.9, 0.04, 2.4, 1.9);
+        setObjective(it.kind.name + ' — ' + it.value + ' marks');
+        buzz([8, 22, 8]);
+      }
+    }
+
+    // The way out. Stepping onto it ends the run and banks what you hold.
+    if (Math.hypot(exit.x-state.x, exit.z-state.z) < 1.25) extract();
+
+    updateCompass();
   }
 
   function setGuard(on) {
@@ -2382,18 +2620,24 @@
       drawFlame(tc.x, tc.y, tc.z, state.t*6.1 + tc.ph, 1.0);
     }
 
-    if (!sigil.taken) {
-      var sy = 1.05 + Math.sin(state.t*1.7)*0.10;
-      boxes.push(sigil.x, sy, sigil.z, 0.34, 0.34, 0.06, state.t*0.9, GOLD, 1.15, 0.3, 0.8, 0, 1);
-      glow.push(sigil.x, sy, sigil.z, 0.62, 0.62, 0.62, 0, GOLD, 0.16, 1, 0, 0, 1);
+    // Loot sits low and turns slowly. Richer pieces are bigger and burn hotter,
+    // so what a room is worth reads from the doorway.
+    for (var li = 0; li < loot.length; li++) {
+      var it = loot[li];
+      if (it.taken) continue;
+      var lz = it.kind.sz;
+      var ly = 0.34 + Math.sin(state.t*1.5 + it.ph)*0.06;
+      boxes.push(it.x, ly, it.z, lz, lz, lz, state.t*0.6 + it.ph, GOLD,
+                 0.85 + lz, 0.35, 0.75, li, 1);
+      glow.push(it.x, ly, it.z, lz*2.6, lz*2.6, lz*2.6, 0, GOLD, 0.13, 1, 0, li, 1);
     }
-    // The stair only lights once it can be used, so it never misleads.
-    var stairLit = state.haveSigil;
+    // The way out is lit from the first second — an extraction run is about
+    // when to leave, not about finding the door.
     for (var s = 0; s < 4; s++) {
-      boxes.push(stair.x, 0.12 + s*0.22, stair.z + s*0.34 - 0.5, 1.9, 0.22, 0.34, 0,
-                 stairLit ? MORTAR : STONE_D, stairLit ? 0.10 : 0, 0.8, 0.0, 20+s);
+      boxes.push(exit.x, 0.12 + s*0.22, exit.z + s*0.34 - 0.5, 1.9, 0.22, 0.34, 0,
+                 MORTAR, 0.10, 0.8, 0.0, 20+s);
     }
-    if (stairLit) glow.push(stair.x, 0.9, stair.z, 1.5, 1.5, 1.5, 0, GOLD, 0.10, 1, 0, 0, 1);
+    glow.push(exit.x, 0.9, exit.z, 1.6, 1.6, 1.6, 0, GOLD, 0.12, 1, 0, 0, 1);
 
     for (var k = 0; k < foes.length; k++) {
       var f = foes[k];
@@ -2423,6 +2667,8 @@
   /* ---------------- lights ---------------- */
 
   var lightPosArr = new Float32Array(MAX_LIGHTS*3), lightColArr = new Float32Array(MAX_LIGHTS*3);
+  // Falls off as the barrow wakes: the run gets darker before it gets deadly.
+  var torchDim = 1;
 
   function flicker(ph, speed) {
     return 0.76 + 0.24*Math.sin(state.t*speed + ph)*Math.sin(state.t*speed*0.41 + ph*2.1);
@@ -2432,7 +2678,7 @@
     // Light 0 is always the carried torch: it is the shadow caster, and the
     // shader special-cases index 0.
     var fl = flicker(0, 9.4);
-    var pow = 10.0*fl;
+    var pow = 10.0*fl*torchDim;
     lightPosArr[0] = torchTip[0]; lightPosArr[1] = torchTip[1]; lightPosArr[2] = torchTip[2];
     lightColArr[0] = TORCHLIGHT[0]*pow; lightColArr[1] = TORCHLIGHT[1]*pow;
     lightColArr[2] = TORCHLIGHT[2]*pow;
@@ -2740,9 +2986,35 @@
   guardBtn.addEventListener('mousedown', guardOn);
   window.addEventListener('mouseup', function () { if (state.guard) setGuard(false); });
 
+  // You may dive to any depth you have already survived, plus one. Getting out
+  // is what unlocks the next one, so depth is earned by leaving, not by killing.
+  var chosenDepth = 1;
+  function paintIntro() {
+    document.getElementById('stashMarks').textContent = stash.marks;
+    document.getElementById('stashDeep').textContent = stash.deepest || '—';
+    document.getElementById('stashLost').textContent = stash.lost;
+    var maxD = Math.min(12, stash.deepest + 1);
+    if (chosenDepth > maxD) chosenDepth = maxD;
+    var pick = document.getElementById('depthPick');
+    pick.innerHTML = '';
+    for (var d = 1; d <= maxD; d++) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = d;
+      b.className = d === chosenDepth ? 'on' : '';
+      b.dataset.d = d;
+      b.addEventListener('click', function () {
+        chosenDepth = parseInt(this.dataset.d, 10) || 1;
+        paintIntro();
+      });
+      pick.appendChild(b);
+    }
+  }
+  paintIntro();
+
   document.getElementById('btnDescend').addEventListener('click', function () {
     introEl.classList.add('hide');
-    state.depth = 1;
+    state.depth = chosenDepth;
     resetRun();
   });
   document.getElementById('btnTrain').addEventListener('click', function () {
@@ -2751,12 +3023,16 @@
   });
   document.getElementById('btnAgain').addEventListener('click', function () {
     overEl.classList.add('hide');
-    state.depth = state.won ? state.depth + 1 : 1;
+    // Surviving earns the next depth; dying sends you back to the one you know.
+    state.depth = state.won ? Math.min(12, state.depth + 1) : Math.max(1, state.depth);
+    chosenDepth = state.depth;
     resetRun();
   });
   document.getElementById('btnMenu').addEventListener('click', function () {
     overEl.classList.add('hide');
+    paintIntro();
     introEl.classList.remove('hide');
+    compassEl.classList.add('off');
     state.running = false;
     dummy = null;
     benchEls.box.classList.add('off');

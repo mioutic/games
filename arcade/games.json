@@ -4,7 +4,7 @@
       "slug": "barrow",
       "name": "Barrow",
       "glyph": "blade",
-      "description": "First person, down in the tombs. The blade is real geometry.",
+      "description": "Extraction crawl. Take what you can carry, and get back out alive.",
       "ink": "#c96a8e",
       "entry": "index.html",
       "stat": {

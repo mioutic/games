@@ -15,6 +15,11 @@ const path = require('path');
 const SW_PATH = path.join(__dirname, '..', 'play', 'sw.js');
 const TIMEOUT = 60;
 const ORIGIN = 'https://mioutic.github.io';
+// Read the cache name out of the worker rather than hard-coding it, so bumping
+// arcade/VERSION never fails this suite for the wrong reason.
+const CACHE = (fs.readFileSync(SW_PATH, 'utf8').match(/CACHE_VERSION = '([^']+)'/) || [])[1];
+if (!CACHE) throw new Error('CACHE_VERSION not found in sw.js');
+const OLDER = 'arcade-vOLD';   // any cache name that is not the current one
 
 class Res {
   constructor(tag, { ok = true, type = 'basic' } = {}) {
@@ -108,7 +113,7 @@ const check = (name, cond, got) => {
   console.log('\n[A] weak signal + a cached copy  (the launch hang)');
   {
     const { listeners, caches } = loadSW(() => delay(3000, new Res('net')));
-    const c = await caches.open((await caches.keys())[0] || 'arcade-v1.12.0');
+    const c = await caches.open((await caches.keys())[0] || CACHE);
     await c.put(req(PAGE), new Res('cached'));
     const t0 = Date.now();
     const out = await fire(listeners, req(PAGE))._res;
@@ -121,7 +126,7 @@ const check = (name, cond, got) => {
   console.log('\n[B] good signal + a cached copy');
   {
     const { listeners, caches } = loadSW(() => delay(5, new Res('net')));
-    const c = await caches.open('arcade-v1.12.0');
+    const c = await caches.open(CACHE);
     await c.put(req(PAGE), new Res('cached'));
     const out = await fire(listeners, req(PAGE))._res;
     check('fresh copy wins the race', out.tag === 'net', out.tag);
@@ -130,7 +135,7 @@ const check = (name, cond, got) => {
   console.log('\n[C] fully offline + a cached copy');
   {
     const { listeners, caches } = loadSW(() => Promise.reject(new Error('offline')));
-    const c = await caches.open('arcade-v1.12.0');
+    const c = await caches.open(CACHE);
     await c.put(req(PAGE), new Res('cached'));
     const t0 = Date.now();
     const out = await fire(listeners, req(PAGE))._res;
@@ -150,7 +155,7 @@ const check = (name, cond, got) => {
     const ev = fire(listeners, req(PAGE));
     await ev._res;
     await delay(20);
-    const c = await caches.open('arcade-v1.12.0');
+    const c = await caches.open(CACHE);
     check('and the response is cached for next time',
           (await c.match(req(PAGE)))?.tag === 'net');
   }
@@ -183,16 +188,16 @@ const check = (name, cond, got) => {
   console.log('\n[G] a version bump still evicts the old build');
   {
     const { listeners, caches } = loadSW(() => Promise.resolve(new Res('net')));
-    (await caches.open('arcade-v1.11.0')).put(req(PAGE), new Res('stale'));
+    (await caches.open(OLDER)).put(req(PAGE), new Res('stale'));
     const ev = { waitUntil: (p) => { ev._p = p; } };
     listeners.activate.forEach((fn) => fn(ev));
     await ev._p;
-    check('old caches deleted on activate', !(await caches.keys()).includes('arcade-v1.11.0'),
+    check('old caches deleted on activate', !(await caches.keys()).includes(OLDER),
           await caches.keys());
 
-    const c = await caches.open('arcade-v1.12.0');
+    const c = await caches.open(CACHE);
     await c.put(req(PAGE), new Res('current'));
-    (await caches.open('arcade-v1.11.0')).put(req(PAGE), new Res('stale'));
+    (await caches.open(OLDER)).put(req(PAGE), new Res('stale'));
     const out = await fire(listeners, req(PAGE))._res;
     check('a leftover cache can never answer for the current build',
           out.tag !== 'stale', out.tag);
