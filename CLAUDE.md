@@ -72,4 +72,18 @@ python3 arcade/tools/build-pwa.py      # regenerate play/
   404s. `build-pwa.py` fails the build if a non-relative path survives.
 - Games run in an iframe and must be self-contained: no CDNs, no ES modules,
   `localStorage` for saved progress.
+- **Testing does not need a deploy.** `python3 arcade/tools/serve.py` serves the
+  repo on the tailnet; open the printed `/arcade/` URL on the phone. `arcade/`
+  is the source build — it fetches `games.json` and loads each game from its own
+  folder, so an edit shows on refresh with no build, no commit and no push.
+  Everything is sent `no-store`, because a stale copy on the phone looks exactly
+  like a broken game and has cost this project more time than any real bug.
+  Reserve `play/` for confirming the shipped build before merging.
+- Over plain HTTP on a tailnet address the page is **not a secure context**: no
+  service worker (which is the point while testing) and no
+  `DeviceOrientationEvent.requestPermission`, so tilt controls cannot work there.
+  Touch-stick games are unaffected. Enabling HTTPS certificates once in the
+  Tailscale admin console and running `tailscale serve --bg 8123` fronts it at
+  `https://<machine>.<tailnet>.ts.net/` with a real certificate, where sensors
+  and service workers behave as they do on Pages.
 - Live at https://mioutic.github.io/games/play/
