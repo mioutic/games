@@ -7,131 +7,411 @@
 <style>
   /* Sanguine — see DESIGN.md */
   :root {
-    --s-0: #0b0609;  --s-1: #12080c;  --s-2: #1a0d12;
+    --s-0: #0b0609;  --s-1: #12080c;  --s-2: #1a0d12;  --s-3: #241119;
     --t-0: #f2e6e6;  --t-1: #c3a9ad;  --t-2: #8f6f76;  --t-3: #5c434a;
     --accent: #e9d8c5;  --accent-2: #b81d3a;  --brand: #d9557a;
     --line-0: #150a0e;  --line-1: #2a141c;  --line-2: #3d1f28;
     --error: #ff5470;
     --bloom: 0 0 12px rgba(216,58,88,.45), 0 0 26px rgba(216,58,88,.16);
-    --bloom-lg: 0 0 22px rgba(216,58,88,.45), 0 0 52px rgba(216,58,88,.16);
+    --lit-within: inset 0 0 60px rgba(184,29,58,.05);
     --font-display: Georgia, "Times New Roman", serif;
-    --font-ui: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
     --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
     --radius: 2px;  --dur: 160ms;  --ease: cubic-bezier(.2,.6,.2,1);
+    --safe-t: 0px; --safe-r: 0px; --safe-b: 0px; --safe-l: 0px;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent;
       user-select: none; -webkit-user-select: none; }
   html, body {
-    margin: 0; height: 100%; overflow: hidden;
+    margin: 0; height: 100%; overflow: hidden; touch-action: none;
     background: var(--s-0); color: var(--t-0);
     font: 400 16px/1.45 var(--font-ui); -webkit-font-smoothing: antialiased;
-    overscroll-behavior: none; touch-action: manipulation;
+    overscroll-behavior: none;
   }
-  #app {
-    height: 100%; display: flex; flex-direction: column;
-    padding: 14px calc(env(safe-area-inset-right,0px) + 14px)
-             calc(env(safe-area-inset-bottom,0px) + 14px) calc(env(safe-area-inset-left,0px) + 14px);
+  /* One stage, sized in JS — Safari's viewport cannot be trusted (PLATFORM.md). */
+  #stage { position: fixed; top: 0; left: 0; overflow: hidden; background: var(--s-0); }
+
+  .micro { font: 500 9px/1 var(--font-ui); letter-spacing: .18em;
+           text-transform: uppercase; color: var(--t-2); }
+
+  .readout {
+    position: absolute; top: calc(var(--safe-t) + 10px); left: calc(var(--safe-l) + 10px);
+    display: flex; background: rgba(11,6,9,.62); border: 1px solid var(--line-1);
+    border-radius: var(--radius); box-shadow: var(--lit-within); z-index: 4;
   }
+  .readout .cell { padding: 7px 12px 8px; border-right: 1px solid var(--line-0); }
+  .readout .cell:last-child { border-right: 0; }
+  .readout .v { margin-top: 5px; font: 500 17px/1 var(--font-mono);
+                font-variant-numeric: tabular-nums; color: var(--t-0); }
+  .readout .v small { font-size: 10px; color: var(--t-3); }
+  .readout .v.accent { color: var(--accent); }
+  .readout .v.brandish { color: var(--brand); }
 
-  /* instrument rail */
-  .hud { flex: none; display: flex; border: 1px solid var(--line-1); border-radius: var(--radius);
-         background: var(--s-1); margin-bottom: 12px; }
-  .stat { flex: 1; padding: 9px 6px 8px; text-align: center; border-right: 1px solid var(--line-0); }
-  .stat:last-child { border-right: 0; }
-  .k { font: 500 9px/1 var(--font-ui); letter-spacing: .16em; text-transform: uppercase; color: var(--t-2); }
-  .v { margin-top: 6px; font: 500 19px/1 var(--font-mono); font-variant-numeric: tabular-nums; color: var(--t-0); }
-  .v small { font-size: 11px; color: var(--t-3); }
-  .v.brandish { color: var(--brand); }
+  .gear { position: absolute; top: calc(var(--safe-t) + 10px); right: calc(var(--safe-r) + 10px);
+          width: 38px; height: 38px; display: grid; place-items: center; z-index: 5;
+          appearance: none; color: var(--t-1); cursor: pointer;
+          background: rgba(11,6,9,.62); border: 1px solid var(--line-1); border-radius: var(--radius); }
+  .gear:active { color: var(--accent); border-color: var(--accent-2); }
 
-  /* progress: a segmented gauge, one segment per round */
-  .gauge { flex: none; display: flex; gap: 2px; margin-bottom: 12px; }
-  .seg { flex: 1; height: 3px; background: var(--line-1); transition: background var(--dur) var(--ease); }
-  .seg.on { background: var(--accent-2); }
-
-  .board { flex: 1; display: grid; grid-template-columns: repeat(3, 1fr);
-           grid-template-rows: repeat(4, 1fr); gap: 8px; min-height: 0; }
+  /* The board fills whatever the stage leaves; the grid shape follows the
+     orientation so the cells stay big enough to hit with a thumb. */
+  .board { position: absolute; display: grid; gap: 8px; z-index: 2; }
   .cell {
-    border-radius: var(--radius); background: var(--s-1); border: 1px solid var(--line-1);
-    position: relative;
+    border: 1px solid var(--line-1); border-radius: var(--radius);
+    background: var(--s-1); box-shadow: var(--lit-within);
     transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease),
-                box-shadow var(--dur) var(--ease), transform 90ms var(--ease);
+                box-shadow var(--dur) var(--ease);
   }
-  .cell::after {                       /* corner bracket, machined bezel */
-    content: ""; position: absolute; right: 5px; bottom: 5px; width: 6px; height: 6px;
-    border-right: 1px solid var(--line-2); border-bottom: 1px solid var(--line-2);
-  }
-  .cell.lit {
-    background: var(--accent); border-color: var(--accent);
-    box-shadow: var(--bloom-lg);
-  }
-  .cell.lit::after { border-color: rgba(11,6,9,.28); }
-  .cell.hit { transform: scale(.94); }
-  .cell.bad { border-color: var(--error); background: rgba(255,84,112,.14); }
+  .cell.lit { background: var(--accent); border-color: var(--accent); box-shadow: var(--bloom); }
+  .cell.hit { background: var(--s-3); border-color: var(--accent-2); }
+  .cell.bad { background: rgba(255,84,112,.16); border-color: var(--error); }
 
-  .overlay {
-    position: absolute; inset: 0; display: grid; place-items: center; padding: 24px;
-    background: rgba(5,2,3,.9); text-align: center;
-  }
+  /* Fifteen segments, one per round — an instrument, not a progress bar. */
+  .gauge { position: absolute; left: calc(var(--safe-l) + 12px); right: calc(var(--safe-r) + 12px);
+           bottom: calc(var(--safe-b) + 30px); display: flex; gap: 3px; z-index: 3; }
+  .seg { flex: 1; height: 3px; background: var(--line-1); }
+  .seg.on { background: var(--accent); box-shadow: 0 0 8px rgba(216,58,88,.5); }
+
+  .hint { position: absolute; left: 0; right: 0; bottom: calc(var(--safe-b) + 12px);
+          text-align: center; z-index: 3;
+          font: 500 9px/1.6 var(--font-ui); letter-spacing: .18em;
+          text-transform: uppercase; color: var(--t-3); }
+
+  .overlay { position: absolute; inset: 0; z-index: 8; display: flex;
+             align-items: center; justify-content: center;
+             padding: calc(var(--safe-t) + 16px) calc(var(--safe-r) + 16px)
+                      calc(var(--safe-b) + 16px) calc(var(--safe-l) + 16px);
+             background: rgba(5,2,3,.92); }
   .overlay.hide { display: none; }
-  .overlay h2 { font: 400 30px/1.1 var(--font-display); letter-spacing: .04em; margin: 0 0 10px; }
-  .overlay p { color: var(--t-2); font-size: 13.5px; margin: 0 0 24px; max-width: 290px;
-               line-height: 1.65; margin-inline: auto; }
-  .big { font: 500 54px/1 var(--font-mono); font-variant-numeric: tabular-nums;
+  .card { width: 100%; max-width: 360px; max-height: 100%; overflow-y: auto;
+          -webkit-overflow-scrolling: touch; padding: 22px 20px;
+          background: var(--s-1); border: 1px solid var(--line-2); border-radius: var(--radius);
+          box-shadow: var(--lit-within); text-align: center; }
+  .card h2 { font: 400 32px/1.05 var(--font-display); letter-spacing: .04em; margin: 0 0 10px; }
+  .lede { color: var(--t-2); font-size: 13.5px; line-height: 1.65; margin: 0 0 18px; }
+  .big { font: 500 52px/1 var(--font-mono); font-variant-numeric: tabular-nums;
          color: var(--accent); letter-spacing: -.02em; }
-  .big small { font: 500 11px/1 var(--font-ui); letter-spacing: .16em; text-transform: uppercase;
-               color: var(--t-2); display: block; margin-top: 10px; }
-  .ornament { color: var(--accent-2); font-size: 15px; margin-bottom: 14px; }
-  button.go {
-    appearance: none; border: 1px solid var(--accent); border-radius: var(--radius);
-    padding: 13px 34px; background: var(--accent); color: var(--s-0);
-    font: 500 11px/1 var(--font-ui); letter-spacing: .18em; text-transform: uppercase;
-    transition: box-shadow var(--dur) var(--ease), transform 90ms var(--ease);
-  }
-  button.go:active { transform: scale(.97); box-shadow: var(--bloom); }
-  button.go:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
-
-  @media (prefers-reduced-motion: reduce) {
-    *, *::before, *::after { animation: none !important; transition-duration: 1ms !important; }
-  }
+  .big small { display: block; margin-top: 8px; font: 500 9px/1 var(--font-ui);
+               letter-spacing: .18em; text-transform: uppercase; color: var(--t-2); }
+  .go { appearance: none; width: 100%; margin-top: 10px; padding: 14px 18px; cursor: pointer;
+        background: var(--accent); color: var(--s-0); border: 1px solid var(--accent);
+        border-radius: var(--radius); font: 500 11px/1 var(--font-ui);
+        letter-spacing: .18em; text-transform: uppercase; }
+  .go.ghost { background: none; color: var(--t-1); border-color: var(--line-2); }
+  .go:active { box-shadow: var(--bloom); }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+         padding: 11px 0; border-bottom: 1px solid var(--line-0); text-align: left; }
+  .row:last-of-type { border-bottom: 0; }
+  .row .lab { font-size: 13px; color: var(--t-1); }
+  .row .sub { display: block; margin-top: 3px; font-size: 11px; color: var(--t-3); line-height: 1.4; }
+  .sw { appearance: none; flex: none; width: 44px; height: 24px; cursor: pointer; position: relative;
+        background: var(--s-3); border: 1px solid var(--line-2); border-radius: var(--radius); }
+  .sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px;
+               background: var(--t-3); transition: transform var(--dur) var(--ease), background var(--dur); }
+  .sw[aria-checked="true"] { border-color: var(--accent-2); }
+  .sw[aria-checked="true"]::after { transform: translateX(20px); background: var(--accent); }
+  #probe { position: absolute; left: -9999px; top: 0; width: 1px; height: 1px;
+           padding: env(safe-area-inset-top) env(safe-area-inset-right)
+                    env(safe-area-inset-bottom) env(safe-area-inset-left); }
 </style>
 </head>
 <body>
-<div id="app">
-  <div class="hud">
-    <div class="stat"><div class="k">Round</div><div class="v" id="round">0<small>/15</small></div></div>
-    <div class="stat"><div class="k">Last</div><div class="v" id="last">—</div></div>
-    <div class="stat"><div class="k">Best avg</div><div class="v brandish" id="best">—</div></div>
+
+<div id="stage">
+<div id="probe"></div>
+
+<div class="readout">
+  <div class="cell"><div class="micro">Round</div><div class="v accent" id="vRound">0<small>/15</small></div></div>
+  <div class="cell"><div class="micro">Last</div><div class="v" id="vLast">—</div></div>
+  <div class="cell"><div class="micro">Best avg</div><div class="v brandish" id="vBest">—</div></div>
+</div>
+<button class="gear" id="btnGear" aria-label="Settings">
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+       stroke-width="1.5" stroke-linecap="square" aria-hidden="true">
+    <circle cx="12" cy="12" r="3.2"/>
+    <path d="M12 2.6v3M12 18.4v3M2.6 12h3M18.4 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M18.7 5.3l-2.1 2.1M7.4 16.6l-2.1 2.1"/>
+  </svg>
+</button>
+
+<div class="board" id="board"></div>
+<div class="gauge" id="gauge"></div>
+<div class="hint">Strike the lit cell &middot; a wrong one costs you</div>
+
+<div class="overlay" id="intro">
+  <div class="card">
+    <h2>Reflex</h2>
+    <p class="lede">One cell lights. Strike it. Fifteen rounds, and what you
+      leave with is the average — so a single slow one costs more than it
+      feels like it should. Hitting the wrong cell adds 150ms to the round.</p>
+    <button class="go" id="btnPlay">Begin</button>
+    <button class="go ghost" id="btnSettingsIntro">Settings</button>
   </div>
-  <div class="gauge" id="gauge"></div>
-  <div class="board" id="board"></div>
 </div>
 
-<div class="overlay" id="overlay">
-  <div>
-    <div id="head">
-      <div class="ornament">❦</div>
-      <h2>Reflex</h2>
-      <p>One cell lights. Strike it. Fifteen rounds, averaged.</p>
-    </div>
-    <button class="go" id="go">Begin</button>
+<div class="overlay hide" id="over">
+  <div class="card">
+    <div id="overHead"></div>
+    <button class="go" id="btnAgain">Again</button>
+    <button class="go ghost" id="btnMenu">Main screen</button>
   </div>
+</div>
+
+<div class="overlay hide" id="settings">
+  <div class="card">
+    <h2 style="font-size:26px">Settings</h2>
+    <div class="row">
+      <div><span class="lab">Fullscreen</span>
+        <span class="sub">Hide the arcade bar and take the whole screen.</span></div>
+      <button class="sw" id="swFs" role="switch" aria-checked="false" aria-label="Fullscreen"></button>
+    </div>
+    <div class="row">
+      <div><span class="lab">Sound</span>
+        <span class="sub">The strike and the miss. Never the light — you would
+          hear it coming and stop watching for it.</span></div>
+      <button class="sw" id="swSound" role="switch" aria-checked="true" aria-label="Sound"></button>
+    </div>
+    <div class="row">
+      <div><span class="lab">Haptics</span>
+        <span class="sub">A knock on a wrong cell.</span></div>
+      <button class="sw" id="swHaptic" role="switch" aria-checked="true" aria-label="Haptics"></button>
+    </div>
+    <button class="go ghost" id="btnSetBack" style="margin-top:16px">Back</button>
+    <button class="go ghost" id="btnLeave">Leave to Arcade</button>
+  </div>
+</div>
 </div>
 
 <script>
 (function () {
   'use strict';
 
-  var ROUNDS = 15, CELLS = 12, BKEY = 'reflex.best';
+  var ROUNDS = 15, CELLS = 12, BKEY = 'reflex.best', SKEY = 'reflex.settings';
 
-  var board   = document.getElementById('board');
-  var gauge   = document.getElementById('gauge');
-  var overlay = document.getElementById('overlay');
-  var head    = document.getElementById('head');
-  var elRound = document.getElementById('round');
-  var elLast  = document.getElementById('last');
-  var elBest  = document.getElementById('best');
+  var stageEl = document.getElementById('stage');
+  var probe = document.getElementById('probe');
+  var board = document.getElementById('board'), gauge = document.getElementById('gauge');
+
+  var settings = { fullscreen: false, sound: true, haptics: true };
+  try {
+    var sv = JSON.parse(localStorage.getItem(SKEY) || 'null');
+    if (sv) for (var sk in settings) if (typeof sv[sk] === 'boolean') settings[sk] = sv[sk];
+  } catch (e) {}
+  function saveSettings() { try { localStorage.setItem(SKEY, JSON.stringify(settings)); } catch (e) {} }
+  function buzz(p) { if (settings.haptics && navigator.vibrate) navigator.vibrate(p); }
+
+  /* ---------------- sound ----------------
+
+     Procedural only: the offline build inlines every game into a single page,
+     so anything fetched breaks it. iOS will not start an AudioContext outside a
+     user gesture, and one created too early lands 'suspended' and stays there
+     without ever throwing — so it is built on the first touch and nowhere else.
+
+     Nothing plays when a cell lights. A cue there would let you react to the
+     sound instead of the light, which is the entire game. */
+  var Snd = (function () {
+    var AC = window.AudioContext || window.webkitAudioContext;
+    var ctx = null, master = null, bedGain = null, bedNodes = [];
+    var want = true, noiseBuf = null;
+
+    function ensure() {
+      if (ctx || !AC) return ctx;
+      try { ctx = new AC(); } catch (e) { return null; }
+      master = ctx.createGain();
+      master.gain.value = want ? 1 : 0.0001;
+      master.connect(ctx.destination);
+      bedGain = ctx.createGain();
+      bedGain.gain.value = 0.0001;
+      bedGain.connect(master);
+      return ctx;
+    }
+    function unlock() {
+      var c = ensure();
+      if (c && c.state === 'suspended') c.resume();
+    }
+    ['touchstart', 'mousedown', 'keydown'].forEach(function (ev) {
+      window.addEventListener(ev, unlock, { passive: true });
+    });
+    function noise_() {
+      if (noiseBuf) return noiseBuf;
+      var n = Math.floor(ctx.sampleRate * 0.6);
+      noiseBuf = ctx.createBuffer(1, n, ctx.sampleRate);
+      var d = noiseBuf.getChannelData(0);
+      for (var i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+      return noiseBuf;
+    }
+    function tone(freq, dur, o) {
+      var c = ensure(); if (!c || !want) return;
+      o = o || {};
+      var t = c.currentTime, osc = c.createOscillator(), g = c.createGain();
+      osc.type = o.type || 'sine';
+      osc.frequency.setValueAtTime(freq, t);
+      if (o.to) osc.frequency.exponentialRampToValueAtTime(Math.max(20, o.to), t + dur);
+      var peak = o.gain == null ? 0.20 : o.gain;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(peak, t + (o.attack || 0.006));
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      osc.connect(g); g.connect(master);
+      osc.start(t); osc.stop(t + dur + 0.03);
+    }
+    function hit(dur, o) {
+      var c = ensure(); if (!c || !want) return;
+      o = o || {};
+      var t = c.currentTime, src = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain();
+      src.buffer = noise_();
+      f.type = o.type || 'bandpass';
+      f.frequency.setValueAtTime(o.freq || 900, t);
+      if (o.to) f.frequency.exponentialRampToValueAtTime(Math.max(40, o.to), t + dur);
+      f.Q.value = o.q == null ? 1.1 : o.q;
+      var peak = o.gain == null ? 0.18 : o.gain;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(peak, t + (o.attack || 0.004));
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      src.connect(f); f.connect(g); g.connect(master);
+      src.start(t); src.stop(t + dur + 0.03);
+    }
+    function bell(freq, dur, gain) {
+      tone(freq, dur, { type: 'sine', gain: gain == null ? 0.16 : gain });
+      tone(freq * 2.02, dur * 0.6, { type: 'sine', gain: (gain == null ? 0.16 : gain) * 0.45 });
+    }
+    function bed(profile) {
+      var c = ensure(); if (!c) return;
+      stopBed();
+      if (!profile) return;
+      var t = c.currentTime;
+      var f = c.createBiquadFilter();
+      f.type = 'lowpass'; f.frequency.value = profile.cut || 320; f.Q.value = 0.7;
+      f.connect(bedGain);
+      (profile.freqs || [55, 82.5]).forEach(function (hz, i) {
+        var o = c.createOscillator(), g = c.createGain();
+        o.type = i ? 'triangle' : 'sine';
+        o.frequency.value = hz;
+        g.gain.value = i ? 0.30 : 0.55;
+        o.connect(g); g.connect(f);
+        o.start(t); bedNodes.push(o);
+      });
+      if (profile.air) {
+        var src = c.createBufferSource(), nf = c.createBiquadFilter(), ng = c.createGain();
+        src.buffer = noise_(); src.loop = true;
+        nf.type = 'bandpass'; nf.frequency.value = profile.airFreq || 600; nf.Q.value = 0.5;
+        ng.gain.value = profile.air;
+        src.connect(nf); nf.connect(ng); ng.connect(bedGain);
+        src.start(t); bedNodes.push(src);
+      }
+      var lfo = c.createOscillator(), la = c.createGain();
+      lfo.frequency.value = profile.wob || 0.07;
+      la.gain.value = (profile.cut || 320) * 0.35;
+      lfo.connect(la); la.connect(f.frequency);
+      lfo.start(t); bedNodes.push(lfo);
+      ramp(bedGain.gain, profile.level == null ? 0.15 : profile.level, 1.6);
+    }
+    function stopBed() {
+      if (!ctx) return;
+      if (bedGain) ramp(bedGain.gain, 0.0001, 0.45);
+      var dying = bedNodes; bedNodes = [];
+      setTimeout(function () {
+        for (var i = 0; i < dying.length; i++) { try { dying[i].stop(); } catch (e) {} }
+      }, 700);
+    }
+    function ramp(param, to, secs) {
+      var t = ctx.currentTime;
+      param.cancelScheduledValues(t);
+      param.setValueAtTime(param.value, t);
+      param.linearRampToValueAtTime(to, t + secs);
+    }
+    function enable(on) {
+      want = !!on;
+      // Deliberately does NOT create the context: called at boot it would build
+      // one outside a gesture, which iOS leaves suspended forever.
+      if (!ctx) return;
+      ramp(master.gain, want ? 1 : 0.0001, 0.12);
+      if (want && ctx.state === 'suspended') ctx.resume();
+    }
+    return { tone: tone, hit: hit, bell: bell, bed: bed, stopBed: stopBed, enable: enable };
+  }());
+
+  // A held breath: almost nothing, so the strike lands against silence.
+  var BED = { freqs: [52, 78], cut: 180, air: 0.018, airFreq: 700, wob: 0.04, level: 0.09 };
+  var bedStarted = false;
+  ['touchstart', 'mousedown', 'keydown'].forEach(function (ev) {
+    window.addEventListener(ev, function () {
+      if (bedStarted) return;
+      bedStarted = true;
+      Snd.bed(BED);
+    }, { passive: true });
+  });
+
+  /* ---------------- stage ---------------- */
+
+  var cssW = 0, cssH = 0;
+
+  function insets() {
+    var cs = getComputedStyle(probe);
+    function v(n) { return parseFloat(cs[n]) || 0; }
+    return { t: v('paddingTop'), r: v('paddingRight'),
+             b: Math.min(v('paddingBottom'), 34), l: v('paddingLeft') };
+  }
+  function framed() { try { return window.parent !== window; } catch (e) { return true; } }
+  function standalone() {
+    if (window.navigator.standalone === true) return true;
+    return !!(window.matchMedia && (matchMedia('(display-mode: standalone)').matches ||
+                                    matchMedia('(display-mode: fullscreen)').matches));
+  }
+  function measure() {
+    var vv = window.visualViewport, doc = document.documentElement;
+    var w = Math.max(doc.clientWidth || 0, window.innerWidth || 0,
+                     vv ? Math.round(vv.width + (vv.offsetLeft || 0)) : 0);
+    var h = Math.max(doc.clientHeight || 0, window.innerHeight || 0,
+                     vv ? Math.round(vv.height + (vv.offsetTop || 0)) : 0);
+    var clear = !framed() || settings.fullscreen;
+    if (standalone() && clear && screen.width && screen.height) {
+      var lng = Math.max(screen.width, screen.height), sht = Math.min(screen.width, screen.height);
+      if (h >= w) { h = Math.max(h, lng); w = Math.max(w, sht); }
+      else        { h = Math.max(h, sht); w = Math.max(w, lng); }
+    }
+    return { w: w, h: h };
+  }
+
+  function resize() {
+    var m = measure();
+    cssW = m.w; cssH = m.h;
+    stageEl.style.width = cssW + 'px';
+    stageEl.style.height = cssH + 'px';
+    var ins = insets(), root = document.documentElement.style;
+    root.setProperty('--safe-t', ((framed() && !settings.fullscreen) ? 0 : ins.t) + 'px');
+    root.setProperty('--safe-r', ins.r + 'px');
+    root.setProperty('--safe-b', ins.b + 'px');
+    root.setProperty('--safe-l', ins.l + 'px');
+
+    // Twelve cells, shaped to the screen: tall and narrow in portrait, wide and
+    // shallow in landscape, so a cell is never smaller than a thumb.
+    var top = ((framed() && !settings.fullscreen) ? 0 : ins.t) + 60;
+    var bottom = ins.b + 48;
+    var left = ins.l + 12, right = ins.r + 12;
+    var w = Math.max(120, cssW - left - right);
+    var h = Math.max(120, cssH - top - bottom);
+    var cols = w >= h ? 6 : 3;
+    var rows = CELLS / cols;
+    board.style.left = left + 'px';
+    board.style.top = top + 'px';
+    board.style.width = w + 'px';
+    board.style.height = h + 'px';
+    board.style.gridTemplateColumns = 'repeat(' + cols + ', 1fr)';
+    board.style.gridTemplateRows = 'repeat(' + rows + ', 1fr)';
+  }
+  window.addEventListener('resize', resize);
+  window.addEventListener('orientationchange', function () {
+    // Safari reports the pre-rotation size during the rotation itself.
+    setTimeout(resize, 60); setTimeout(resize, 260); setTimeout(resize, 600);
+  });
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', resize);
+    window.visualViewport.addEventListener('scroll', resize);
+  }
+
+  /* ---------------- state ---------------- */
 
   var cells = [], segs = [], times = [], round = 0, active = -1, litAt = 0, waiting = null;
+  var running = false;
 
   for (var i = 0; i < CELLS; i++) {
     var c = document.createElement('div');
@@ -148,11 +428,13 @@
   }
 
   var best = parseFloat(localStorage.getItem(BKEY) || '0') || 0;
+  var elRound = document.getElementById('vRound'), elLast = document.getElementById('vLast'),
+      elBest = document.getElementById('vBest');
   if (best) elBest.textContent = Math.round(best) + 'ms';
 
   board.addEventListener('pointerdown', function (e) {
     var c = e.target.closest('.cell');
-    if (!c || active < 0) return;
+    if (!c || active < 0 || !running) return;
     e.preventDefault();
 
     if (+c.dataset.i === active) {
@@ -163,6 +445,8 @@
       c.classList.add('hit');
       setTimeout(function () { c.classList.remove('hit'); }, 110);
       segs[round - 1].classList.add('on');
+      // Faster strikes ring higher, so a good round sounds like one.
+      Snd.tone(Math.max(300, 1200 - ms * 1.6), 0.07, { type: 'triangle', gain: 0.13 });
       active = -1;
       if (round >= ROUNDS) finish(); else next();
     } else {
@@ -170,7 +454,8 @@
       c.classList.add('bad');
       setTimeout(function () { c.classList.remove('bad'); }, 140);
       litAt -= 150;
-      if (navigator.vibrate) navigator.vibrate(12);
+      Snd.hit(0.09, { freq: 260, to: 120, q: 0.7, gain: 0.15 });
+      buzz(12);
     }
   });
 
@@ -179,63 +464,151 @@
     elRound.innerHTML = round + '<small>/' + ROUNDS + '</small>';
     var delay = 450 + Math.random() * 1250;
     waiting = setTimeout(function () {
-      var i;
-      do { i = Math.floor(Math.random() * CELLS); } while (i === active);
-      active = i;
-      cells[i].classList.add('lit');
+      var i2;
+      do { i2 = Math.floor(Math.random() * CELLS); } while (i2 === active);
+      active = i2;
+      cells[i2].classList.add('lit');
       litAt = performance.now();
     }, delay);
   }
 
+  var overEl = document.getElementById('over'), overHead = document.getElementById('overHead');
+
   function finish() {
+    running = false;
+    Snd.stopBed();
     var avg = times.reduce(function (a, b) { return a + b; }, 0) / times.length;
     var isBest = !best || avg < best;
-    if (isBest) { best = avg; localStorage.setItem(BKEY, String(avg)); elBest.textContent = Math.round(avg) + 'ms'; }
-
-    head.innerHTML =
+    if (isBest) {
+      best = avg;
+      try { localStorage.setItem(BKEY, String(avg)); } catch (e) {}
+      elBest.textContent = Math.round(avg) + 'ms';
+      Snd.bell(659.25, 0.7, 0.15); Snd.bell(987.77, 0.9, 0.10);
+    } else {
+      Snd.tone(220, 0.5, { type: 'sine', to: 150, gain: 0.11 });
+    }
+    overHead.innerHTML =
       '<div class="big">' + Math.round(avg) + '<small>ms average</small></div>' +
-      '<p>' + (isBest ? 'A new personal best.' : 'Your best stands at ' + Math.round(best) + 'ms.') +
+      '<p class="lede" style="margin-top:18px">' +
+      (isBest ? 'A new personal best.' : 'Your best stands at ' + Math.round(best) + 'ms.') +
       ' Fastest single strike: ' + Math.round(Math.min.apply(null, times)) + 'ms.</p>';
-    document.getElementById('go').textContent = 'Again';
-    overlay.classList.remove('hide');
+    overEl.classList.remove('hide');
   }
 
-  document.getElementById('go').addEventListener('click', function () {
+  function reset() {
     clearTimeout(waiting);
     cells.forEach(function (c) { c.className = 'cell'; });
     segs.forEach(function (s) { s.className = 'seg'; });
     times = []; round = 0; active = -1;
     elLast.textContent = '—';
-    overlay.classList.add('hide');
+    elRound.innerHTML = '0<small>/' + ROUNDS + '</small>';
+    running = true;
+    Snd.bed(BED);
     next();
-  });
-})();
+  }
 
-  // The launcher's metrics panel asks; every game answers, so a viewport
-  // mismatch names which side of the frame boundary lost the pixels.
-  (function () {
-    var probe = document.createElement('div');
-    probe.style.cssText = 'position:fixed;top:0;left:0;width:0;height:0;visibility:hidden;' +
-      'pointer-events:none;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) ' +
-      'env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)';
-    document.body.appendChild(probe);
-    window.addEventListener('message', function (e) {
-      if (!e.data || e.data.type !== 'arcade:spec?') return;
-      var vv = window.visualViewport, doc = document.documentElement, cs = getComputedStyle(probe);
-      function v(n) { return Math.round(parseFloat(cs[n]) || 0); }
-      try {
-        window.parent.postMessage({
-          type: 'arcade:spec', name: 'Reflex',
-          win: (window.innerWidth || 0) + '\u00d7' + (window.innerHeight || 0),
-          doc: (doc.clientWidth || 0) + '\u00d7' + (doc.clientHeight || 0),
-          vv: vv ? Math.round(vv.width) + '\u00d7' + Math.round(vv.height) : 'n/a',
-          stage: Math.round(document.body.clientWidth) + '\u00d7' + Math.round(document.body.clientHeight),
-          ins: v('paddingTop') + ' / ' + v('paddingRight') + ' / ' +
-               v('paddingBottom') + ' / ' + v('paddingLeft')
-        }, '*');
-      } catch (err) {}
-    });
-  }());
+  /* ---------------- ui ---------------- */
+
+  var introEl = document.getElementById('intro'), setEl = document.getElementById('settings');
+  var swFs = document.getElementById('swFs'), swSound = document.getElementById('swSound'),
+      swHaptic = document.getElementById('swHaptic');
+
+  function setSwitch(el, on) { el.setAttribute('aria-checked', on ? 'true' : 'false'); }
+  function applySettings() {
+    setSwitch(swFs, settings.fullscreen);
+    setSwitch(swSound, settings.sound);
+    setSwitch(swHaptic, settings.haptics);
+    Snd.enable(settings.sound);
+    try { window.parent.postMessage({ type: 'arcade:fullscreen', on: !!settings.fullscreen }, '*'); } catch (e) {}
+    saveSettings();
+    resize();
+  }
+  swFs.addEventListener('click', function () { settings.fullscreen = !settings.fullscreen; applySettings(); });
+  swSound.addEventListener('click', function () {
+    settings.sound = !settings.sound;
+    applySettings();
+    if (settings.sound) Snd.bell(659.25, 0.26, 0.13);
+  });
+  // iOS Safari has never supported the Vibration API, so this switch would
+  // promise something the phone will not do. Hide it rather than lie.
+  if (!navigator.vibrate) {
+    var hapRow = swHaptic.closest && swHaptic.closest('.row');
+    if (hapRow) hapRow.style.display = 'none';
+  }
+  swHaptic.addEventListener('click', function () { settings.haptics = !settings.haptics; applySettings(); buzz(10); });
+
+  // Opening settings mid-round would hand you a free look at the board, so the
+  // round is abandoned rather than paused.
+  function abandon() {
+    clearTimeout(waiting);
+    if (active >= 0) cells[active].classList.remove('lit');
+    active = -1;
+    running = false;
+  }
+  document.getElementById('btnGear').addEventListener('click', function () {
+    abandon(); setEl.classList.remove('hide'); applySettings();
+  });
+  document.getElementById('btnSettingsIntro').addEventListener('click', function () {
+    setEl.classList.remove('hide'); applySettings();
+  });
+  document.getElementById('btnSetBack').addEventListener('click', function () {
+    setEl.classList.add('hide');
+    if (!introEl.classList.contains('hide') || !overEl.classList.contains('hide')) return;
+    reset();                       // the abandoned run starts over
+  });
+  setEl.addEventListener('click', function (e) {
+    if (e.target === setEl) document.getElementById('btnSetBack').click();
+  });
+  // In fullscreen the launcher shows no chrome at all, so this is the only exit.
+  document.getElementById('btnLeave').addEventListener('click', function () {
+    try { window.parent.postMessage({ type: 'arcade:exit' }, '*'); } catch (e) {}
+  });
+  document.getElementById('btnPlay').addEventListener('click', function () {
+    introEl.classList.add('hide'); reset();
+  });
+  document.getElementById('btnAgain').addEventListener('click', function () {
+    overEl.classList.add('hide'); reset();
+  });
+  document.getElementById('btnMenu').addEventListener('click', function () {
+    overEl.classList.add('hide'); introEl.classList.remove('hide');
+    abandon(); Snd.stopBed();
+  });
+
+  // A reaction time measured across a backgrounded tab is meaningless, so the
+  // round is thrown away rather than recorded.
+  function bail() { if (running) { abandon(); } }
+  document.addEventListener('visibilitychange', function () { if (document.hidden) bail(); });
+  window.addEventListener('blur', bail);
+
+  /* ---------------- arcade contract ---------------- */
+
+  window.addEventListener('message', function (e) {
+    if (!e.data || e.data.type !== 'arcade:spec?') return;
+    var vv = window.visualViewport, doc = document.documentElement, cs = getComputedStyle(probe);
+    function v(n) { return Math.round(parseFloat(cs[n]) || 0); }
+    var br = board.getBoundingClientRect();
+    try {
+      window.parent.postMessage({
+        type: 'arcade:spec', name: 'Reflex',
+        win: (window.innerWidth || 0) + '×' + (window.innerHeight || 0),
+        doc: (doc.clientWidth || 0) + '×' + (doc.clientHeight || 0),
+        vv: vv ? Math.round(vv.width) + '×' + Math.round(vv.height) : 'n/a',
+        stage: Math.round(cssW) + '×' + Math.round(cssH),
+        canvas: Math.round(br.width) + '×' + Math.round(br.height),
+        ins: v('paddingTop') + ' / ' + v('paddingRight') + ' / ' +
+             v('paddingBottom') + ' / ' + v('paddingLeft'),
+        pads: 'round ' + round + '/' + ROUNDS + (active >= 0 ? ' lit ' + active : ''),
+        touch: ('ontouchstart' in window ? 'yes' : 'no') +
+               ' / pts ' + (navigator.maxTouchPoints || 0)
+      }, '*');
+    } catch (err) {}
+  });
+
+  /* ---------------- go ---------------- */
+
+  resize();
+  applySettings();
+}());
 </script>
 </body>
 </html>

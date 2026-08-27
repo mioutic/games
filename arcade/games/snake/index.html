@@ -7,16 +7,17 @@
 <style>
   /* Sanguine — see DESIGN.md */
   :root {
-    --s-0: #0b0609;  --s-1: #12080c;  --s-2: #1a0d12;
+    --s-0: #0b0609;  --s-1: #12080c;  --s-2: #1a0d12;  --s-3: #241119;
     --t-0: #f2e6e6;  --t-1: #c3a9ad;  --t-2: #8f6f76;  --t-3: #5c434a;
     --accent: #e9d8c5;  --accent-2: #b81d3a;  --brand: #d9557a;
     --line-0: #150a0e;  --line-1: #2a141c;  --line-2: #3d1f28;
     --bloom: 0 0 12px rgba(216,58,88,.45), 0 0 26px rgba(216,58,88,.16);
     --lit-within: inset 0 0 60px rgba(184,29,58,.05);
     --font-display: Georgia, "Times New Roman", serif;
-    --font-ui: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
     --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
     --radius: 2px;  --dur: 160ms;  --ease: cubic-bezier(.2,.6,.2,1);
+    --safe-t: 0px; --safe-r: 0px; --safe-b: 0px; --safe-l: 0px;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent;
       user-select: none; -webkit-user-select: none; }
@@ -26,205 +27,530 @@
     font: 400 16px/1.45 var(--font-ui); -webkit-font-smoothing: antialiased;
     overscroll-behavior: none;
   }
-  #app {
-    height: 100%; display: flex; flex-direction: column; align-items: center;
-    padding: 14px calc(env(safe-area-inset-right,0px) + 14px)
-             calc(env(safe-area-inset-bottom,0px) + 14px) calc(env(safe-area-inset-left,0px) + 14px);
-  }
-  .hud { flex: none; width: 100%; max-width: 520px; display: flex;
-         border: 1px solid var(--line-1); border-radius: var(--radius); background: var(--s-1); }
-  .stat { flex: 1; padding: 9px 6px 8px; text-align: center; border-right: 1px solid var(--line-0); }
-  .stat:last-child { border-right: 0; }
-  .k { font: 500 9px/1 var(--font-ui); letter-spacing: .16em; text-transform: uppercase; color: var(--t-2); }
-  .v { margin-top: 6px; font: 500 19px/1 var(--font-mono); font-variant-numeric: tabular-nums; color: var(--t-0); }
-  .v.brandish { color: var(--brand); }
+  /* One stage, sized in JS — Safari's viewport cannot be trusted (PLATFORM.md). */
+  #stage { position: fixed; top: 0; left: 0; overflow: hidden; background: var(--s-0); }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 
-  .stage { flex: 1; width: 100%; display: grid; place-items: center; min-height: 0; padding: 14px 0; }
-  canvas {
-    background: var(--s-1); border: 1px solid var(--line-2); border-radius: var(--radius);
-    display: block; max-width: 100%; max-height: 100%; touch-action: none;
-    box-shadow: var(--lit-within);
+  .micro { font: 500 9px/1 var(--font-ui); letter-spacing: .18em;
+           text-transform: uppercase; color: var(--t-2); }
+  .hud { position: absolute; inset: 0; pointer-events: none; z-index: 4; }
+
+  .readout {
+    position: absolute; top: calc(var(--safe-t) + 10px); left: calc(var(--safe-l) + 10px);
+    display: flex; background: rgba(11,6,9,.62); border: 1px solid var(--line-1);
+    border-radius: var(--radius); box-shadow: var(--lit-within);
   }
-  .hint { flex: none; font: 500 9px/1 var(--font-ui); letter-spacing: .16em;
+  .readout .cell { padding: 7px 12px 8px; border-right: 1px solid var(--line-0); }
+  .readout .cell:last-child { border-right: 0; }
+  .readout .v { margin-top: 5px; font: 500 17px/1 var(--font-mono);
+                font-variant-numeric: tabular-nums; color: var(--t-0); }
+  .readout .v.accent { color: var(--accent); }
+  .readout .v.brandish { color: var(--brand); }
+
+  .gear { position: absolute; top: calc(var(--safe-t) + 10px); right: calc(var(--safe-r) + 10px);
+          width: 38px; height: 38px; display: grid; place-items: center; pointer-events: auto;
+          appearance: none; color: var(--t-1); cursor: pointer;
+          background: rgba(11,6,9,.62); border: 1px solid var(--line-1); border-radius: var(--radius); }
+  .gear:active { color: var(--accent); border-color: var(--accent-2); }
+
+  .hint { position: absolute; left: 0; right: 0; bottom: calc(var(--safe-b) + 12px);
+          text-align: center; pointer-events: none;
+          font: 500 9px/1.6 var(--font-ui); letter-spacing: .18em;
           text-transform: uppercase; color: var(--t-3); }
+  @media (max-height: 460px) { .hint { display: none; } }
 
-  .overlay {
-    position: absolute; inset: 0; display: grid; place-items: center; padding: 24px;
-    background: rgba(5,2,3,.9); text-align: center;
-  }
+  .overlay { position: absolute; inset: 0; z-index: 8; display: flex;
+             align-items: center; justify-content: center;
+             padding: calc(var(--safe-t) + 16px) calc(var(--safe-r) + 16px)
+                      calc(var(--safe-b) + 16px) calc(var(--safe-l) + 16px);
+             background: rgba(5,2,3,.92); }
   .overlay.hide { display: none; }
-  .overlay h2 { font: 400 30px/1.1 var(--font-display); letter-spacing: .04em; margin: 0 0 10px; }
-  .overlay p { color: var(--t-2); font-size: 13.5px; margin: 0 0 24px; max-width: 290px;
-               line-height: 1.65; margin-inline: auto; }
-  .big { font: 500 54px/1 var(--font-mono); font-variant-numeric: tabular-nums;
+  .card { width: 100%; max-width: 360px; max-height: 100%; overflow-y: auto;
+          -webkit-overflow-scrolling: touch; padding: 22px 20px;
+          background: var(--s-1); border: 1px solid var(--line-2); border-radius: var(--radius);
+          box-shadow: var(--lit-within); text-align: center; }
+  .card h2 { font: 400 32px/1.05 var(--font-display); letter-spacing: .04em; margin: 0 0 10px; }
+  .lede { color: var(--t-2); font-size: 13.5px; line-height: 1.65; margin: 0 0 18px; }
+  .big { font: 500 52px/1 var(--font-mono); font-variant-numeric: tabular-nums;
          color: var(--accent); letter-spacing: -.02em; }
-  .big small { font: 500 11px/1 var(--font-ui); letter-spacing: .16em; text-transform: uppercase;
-               color: var(--t-2); display: block; margin-top: 10px; }
-  .ornament { color: var(--accent-2); font-size: 15px; margin-bottom: 14px; }
-  button.go {
-    appearance: none; border: 1px solid var(--accent); border-radius: var(--radius);
-    padding: 13px 34px; background: var(--accent); color: var(--s-0);
-    font: 500 11px/1 var(--font-ui); letter-spacing: .18em; text-transform: uppercase;
-    transition: box-shadow var(--dur) var(--ease), transform 90ms var(--ease);
-  }
-  button.go:active { transform: scale(.97); box-shadow: var(--bloom); }
-  button.go:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
-
-  @media (prefers-reduced-motion: reduce) {
-    *, *::before, *::after { animation: none !important; transition-duration: 1ms !important; }
-  }
+  .big small { display: block; margin-top: 8px; font: 500 9px/1 var(--font-ui);
+               letter-spacing: .18em; text-transform: uppercase; color: var(--t-2); }
+  .go { appearance: none; width: 100%; margin-top: 10px; padding: 14px 18px; cursor: pointer;
+        background: var(--accent); color: var(--s-0); border: 1px solid var(--accent);
+        border-radius: var(--radius); font: 500 11px/1 var(--font-ui);
+        letter-spacing: .18em; text-transform: uppercase; }
+  .go.ghost { background: none; color: var(--t-1); border-color: var(--line-2); }
+  .go:active { box-shadow: var(--bloom); }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+         padding: 11px 0; border-bottom: 1px solid var(--line-0); text-align: left; }
+  .row:last-of-type { border-bottom: 0; }
+  .row .lab { font-size: 13px; color: var(--t-1); }
+  .row .sub { display: block; margin-top: 3px; font-size: 11px; color: var(--t-3); line-height: 1.4; }
+  .sw { appearance: none; flex: none; width: 44px; height: 24px; cursor: pointer; position: relative;
+        background: var(--s-3); border: 1px solid var(--line-2); border-radius: var(--radius); }
+  .sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px;
+               background: var(--t-3); transition: transform var(--dur) var(--ease), background var(--dur); }
+  .sw[aria-checked="true"] { border-color: var(--accent-2); }
+  .sw[aria-checked="true"]::after { transform: translateX(20px); background: var(--accent); }
+  #probe { position: absolute; left: -9999px; top: 0; width: 1px; height: 1px;
+           padding: env(safe-area-inset-top) env(safe-area-inset-right)
+                    env(safe-area-inset-bottom) env(safe-area-inset-left); }
 </style>
 </head>
 <body>
-<div id="app">
-  <div class="hud">
-    <div class="stat"><div class="k">Score</div><div class="v" id="score">0</div></div>
-    <div class="stat"><div class="k">Best</div><div class="v brandish" id="best">0</div></div>
+
+<div id="stage">
+<canvas id="cv"></canvas>
+<div id="probe"></div>
+
+<div class="hud">
+  <div class="readout">
+    <div class="cell"><div class="micro">Collected</div><div class="v accent" id="vScore">0</div></div>
+    <div class="cell"><div class="micro">Best</div><div class="v brandish" id="vBest">0</div></div>
+    <div class="cell"><div class="micro">Length</div><div class="v" id="vLen">3</div></div>
   </div>
-  <div class="stage"><canvas id="cv"></canvas></div>
-  <div class="hint">Swipe to steer</div>
+  <button class="gear" id="btnGear" aria-label="Settings">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="1.5" stroke-linecap="square" aria-hidden="true">
+      <circle cx="12" cy="12" r="3.2"/>
+      <path d="M12 2.6v3M12 18.4v3M2.6 12h3M18.4 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M18.7 5.3l-2.1 2.1M7.4 16.6l-2.1 2.1"/>
+    </svg>
+  </button>
+  <div class="hint">Swipe to steer &middot; the walls wrap</div>
 </div>
 
-<div class="overlay" id="overlay">
-  <div>
-    <div id="head">
-      <div class="ornament">❦</div>
-      <h2>Snake</h2>
-      <p>Swipe to steer. Take the drops, grow, and stay clear of yourself. The walls wrap.</p>
-    </div>
-    <button class="go" id="go">Begin</button>
+<div class="overlay" id="intro">
+  <div class="card">
+    <h2>Snake</h2>
+    <p class="lede">Swipe to steer. Take the drops, grow, and stay clear of
+      yourself. The walls wrap, so there is nowhere to hide but the space you
+      have not filled yet.</p>
+    <button class="go" id="btnPlay">Begin</button>
+    <button class="go ghost" id="btnSettingsIntro">Settings</button>
   </div>
+</div>
+
+<div class="overlay hide" id="over">
+  <div class="card">
+    <div id="overHead"></div>
+    <button class="go" id="btnAgain">Again</button>
+    <button class="go ghost" id="btnMenu">Main screen</button>
+  </div>
+</div>
+
+<div class="overlay hide" id="settings">
+  <div class="card">
+    <h2 style="font-size:26px">Settings</h2>
+    <div class="row">
+      <div><span class="lab">Fullscreen</span>
+        <span class="sub">Hide the arcade bar and take the whole screen.</span></div>
+      <button class="sw" id="swFs" role="switch" aria-checked="false" aria-label="Fullscreen"></button>
+    </div>
+    <div class="row">
+      <div><span class="lab">Sound</span>
+        <span class="sub">A low room, and a note for every drop taken.</span></div>
+      <button class="sw" id="swSound" role="switch" aria-checked="true" aria-label="Sound"></button>
+    </div>
+    <div class="row">
+      <div><span class="lab">Haptics</span>
+        <span class="sub">A tap on every bite.</span></div>
+      <button class="sw" id="swHaptic" role="switch" aria-checked="true" aria-label="Haptics"></button>
+    </div>
+    <button class="go ghost" id="btnSetBack" style="margin-top:16px">Back</button>
+    <button class="go ghost" id="btnLeave">Leave to Arcade</button>
+  </div>
+</div>
 </div>
 
 <script>
 (function () {
   'use strict';
 
-  var N = 17, BKEY = 'snake.best';
-
-  // Sanguine palette, read straight from the tokens above.
-  var C_GRID = '#150a0e', C_HEAD = '#f2e6e6', C_BODY = '233,216,197', C_FOOD = '#b81d3a';
-
+  var stageEl = document.getElementById('stage');
   var cv = document.getElementById('cv'), ctx = cv.getContext('2d');
-  var overlay = document.getElementById('overlay'), head = document.getElementById('head');
-  var elScore = document.getElementById('score'), elBest = document.getElementById('best');
+  var probe = document.getElementById('probe');
 
-  var cell = 0, dpr = Math.min(window.devicePixelRatio || 1, 3);
-  var snake, dir, queued, food, score, tick, timer, dead = true;
+  var BKEY = 'snake.best', SKEY = 'snake.settings';
 
-  var best = parseInt(localStorage.getItem(BKEY) || '0', 10) || 0;
-  elBest.textContent = best;
+  var settings = { fullscreen: false, sound: true, haptics: true };
+  try {
+    var sv = JSON.parse(localStorage.getItem(SKEY) || 'null');
+    if (sv) for (var sk in settings) if (typeof sv[sk] === 'boolean') settings[sk] = sv[sk];
+  } catch (e) {}
+  function saveSettings() { try { localStorage.setItem(SKEY, JSON.stringify(settings)); } catch (e) {} }
+  function buzz(p) { if (settings.haptics && navigator.vibrate) navigator.vibrate(p); }
 
-  function size() {
-    var stage = document.querySelector('.stage');
-    var side = Math.floor(Math.min(stage.clientWidth, stage.clientHeight));
-    side = Math.max(160, side - (side % N));
-    cell = side / N;
-    cv.style.width = side + 'px';
-    cv.style.height = side + 'px';
-    cv.width = side * dpr;
-    cv.height = side * dpr;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  /* ---------------- sound ----------------
+
+     Procedural only: the offline build inlines every game into a single page,
+     so anything fetched breaks it. Every sound here is an oscillator or a burst
+     of filtered noise. That suits the register anyway — this wants a struck
+     bell and the hum of a stone room, not a soundtrack.
+
+     iOS will not start an AudioContext outside a user gesture, and one created
+     too early lands 'suspended' and stays there without ever throwing. So the
+     context is built on the first touch and nowhere else. */
+  var Snd = (function () {
+    var AC = window.AudioContext || window.webkitAudioContext;
+    var ctx2 = null, master = null, bedGain = null, bedNodes = [], curBed = null;
+    var want = true, noiseBuf = null;
+
+    function ensure() {
+      if (ctx2 || !AC) return ctx2;
+      try { ctx2 = new AC(); } catch (e) { return null; }
+      master = ctx2.createGain();
+      master.gain.value = want ? 1 : 0.0001;
+      master.connect(ctx2.destination);
+      bedGain = ctx2.createGain();
+      bedGain.gain.value = 0.0001;
+      bedGain.connect(master);
+      return ctx2;
+    }
+    function unlock() {
+      var c = ensure();
+      if (c && c.state === 'suspended') c.resume();
+    }
+    ['touchstart', 'mousedown', 'keydown'].forEach(function (ev) {
+      window.addEventListener(ev, unlock, { passive: true });
+    });
+    function noise_() {
+      if (noiseBuf) return noiseBuf;
+      var n = Math.floor(ctx2.sampleRate * 0.6);
+      noiseBuf = ctx2.createBuffer(1, n, ctx2.sampleRate);
+      var d = noiseBuf.getChannelData(0);
+      for (var i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+      return noiseBuf;
+    }
+    function tone(freq, dur, o) {
+      var c = ensure(); if (!c || !want) return;
+      o = o || {};
+      var t = c.currentTime, osc = c.createOscillator(), g = c.createGain();
+      osc.type = o.type || 'sine';
+      osc.frequency.setValueAtTime(freq, t);
+      if (o.to) osc.frequency.exponentialRampToValueAtTime(Math.max(20, o.to), t + dur);
+      var peak = o.gain == null ? 0.20 : o.gain;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(peak, t + (o.attack || 0.006));
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      osc.connect(g); g.connect(master);
+      osc.start(t); osc.stop(t + dur + 0.03);
+    }
+    function hit(dur, o) {
+      var c = ensure(); if (!c || !want) return;
+      o = o || {};
+      var t = c.currentTime, src = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain();
+      src.buffer = noise_();
+      f.type = o.type || 'bandpass';
+      f.frequency.setValueAtTime(o.freq || 900, t);
+      if (o.to) f.frequency.exponentialRampToValueAtTime(Math.max(40, o.to), t + dur);
+      f.Q.value = o.q == null ? 1.1 : o.q;
+      var peak = o.gain == null ? 0.18 : o.gain;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(peak, t + (o.attack || 0.004));
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      src.connect(f); f.connect(g); g.connect(master);
+      src.start(t); src.stop(t + dur + 0.03);
+    }
+    function bell(freq, dur, gain) {
+      tone(freq, dur, { type: 'sine', gain: gain == null ? 0.16 : gain });
+      tone(freq * 2.02, dur * 0.6, { type: 'sine', gain: (gain == null ? 0.16 : gain) * 0.45 });
+    }
+    function bed(profile) {
+      var c = ensure(); if (!c) return;
+      stopBed();
+      if (!profile) return;
+      curBed = profile;
+      var t = c.currentTime;
+      var f = c.createBiquadFilter();
+      f.type = 'lowpass'; f.frequency.value = profile.cut || 320; f.Q.value = 0.7;
+      f.connect(bedGain);
+      (profile.freqs || [55, 82.5]).forEach(function (hz, i) {
+        var o = c.createOscillator(), g = c.createGain();
+        o.type = i ? 'triangle' : 'sine';
+        o.frequency.value = hz;
+        g.gain.value = i ? 0.30 : 0.55;
+        o.connect(g); g.connect(f);
+        o.start(t); bedNodes.push(o);
+      });
+      if (profile.air) {
+        var src = c.createBufferSource(), nf = c.createBiquadFilter(), ng = c.createGain();
+        src.buffer = noise_(); src.loop = true;
+        nf.type = 'bandpass'; nf.frequency.value = profile.airFreq || 600; nf.Q.value = 0.5;
+        ng.gain.value = profile.air;
+        src.connect(nf); nf.connect(ng); ng.connect(bedGain);
+        src.start(t); bedNodes.push(src);
+      }
+      var lfo = c.createOscillator(), la = c.createGain();
+      lfo.frequency.value = profile.wob || 0.07;
+      la.gain.value = (profile.cut || 320) * 0.35;
+      lfo.connect(la); la.connect(f.frequency);
+      lfo.start(t); bedNodes.push(lfo);
+      ramp(bedGain.gain, profile.level == null ? 0.15 : profile.level, 1.6);
+    }
+    function stopBed() {
+      if (!ctx2) return;
+      if (bedGain) ramp(bedGain.gain, 0.0001, 0.45);
+      var dying = bedNodes; bedNodes = []; curBed = null;
+      setTimeout(function () {
+        for (var i = 0; i < dying.length; i++) { try { dying[i].stop(); } catch (e) {} }
+      }, 700);
+    }
+    function ramp(param, to, secs) {
+      var t = ctx2.currentTime;
+      param.cancelScheduledValues(t);
+      param.setValueAtTime(param.value, t);
+      param.linearRampToValueAtTime(to, t + secs);
+    }
+    function enable(on) {
+      want = !!on;
+      // Deliberately does NOT create the context: called at boot it would build
+      // one outside a gesture, which iOS leaves suspended forever.
+      if (!ctx2) return;
+      ramp(master.gain, want ? 1 : 0.0001, 0.12);
+      if (want && ctx2.state === 'suspended') ctx2.resume();
+    }
+    return { tone: tone, hit: hit, bell: bell, bed: bed, stopBed: stopBed, enable: enable };
+  }());
+
+  var BED = { freqs: [43.7, 65.4], cut: 210, air: 0.022, airFreq: 480, wob: 0.06, level: 0.12 };
+  var bedStarted = false;
+  ['touchstart', 'mousedown', 'keydown'].forEach(function (ev) {
+    window.addEventListener(ev, function () {
+      if (bedStarted) return;
+      bedStarted = true;
+      Snd.bed(BED);
+    }, { passive: true });
+  });
+
+  /* ---------------- stage ---------------- */
+
+  var cssW = 0, cssH = 0, dpr = 1;
+
+  function insets() {
+    var cs = getComputedStyle(probe);
+    function v(n) { return parseFloat(cs[n]) || 0; }
+    // env(safe-area-inset-bottom) changes meaning as Safari's toolbar retracts,
+    // so it is capped (DESIGN.md).
+    return { t: v('paddingTop'), r: v('paddingRight'),
+             b: Math.min(v('paddingBottom'), 34), l: v('paddingLeft') };
+  }
+  function framed() { try { return window.parent !== window; } catch (e) { return true; } }
+  function standalone() {
+    if (window.navigator.standalone === true) return true;
+    return !!(window.matchMedia && (matchMedia('(display-mode: standalone)').matches ||
+                                    matchMedia('(display-mode: fullscreen)').matches));
+  }
+  function measure() {
+    var vv = window.visualViewport, doc = document.documentElement;
+    var w = Math.max(doc.clientWidth || 0, window.innerWidth || 0,
+                     vv ? Math.round(vv.width + (vv.offsetLeft || 0)) : 0);
+    var h = Math.max(doc.clientHeight || 0, window.innerHeight || 0,
+                     vv ? Math.round(vv.height + (vv.offsetTop || 0)) : 0);
+    var clear = !framed() || settings.fullscreen;
+    if (standalone() && clear && screen.width && screen.height) {
+      var lng = Math.max(screen.width, screen.height), sht = Math.min(screen.width, screen.height);
+      if (h >= w) { h = Math.max(h, lng); w = Math.max(w, sht); }
+      else        { h = Math.max(h, sht); w = Math.max(w, lng); }
+    }
+    return { w: w, h: h };
+  }
+
+  /* ---------------- the board ----------------
+
+     The old board was a square pinned to the shorter side, which on a 430x932
+     phone left it covering barely a third of the screen. The grid is built from
+     the space available instead: square cells, as many rows and columns as fit,
+     so it fills the display in either orientation. */
+
+  var COLS = 17, ROWS = 17, cell = 20, offX = 0, offY = 0;
+
+  function layout() {
+    var ins = insets();
+    var top = ((framed() && !settings.fullscreen) ? 0 : ins.t) + 62;   // under the readout
+    var availW = Math.max(120, cssW - ins.l - ins.r - 16);
+    var availH = Math.max(120, cssH - top - ins.b - 30);
+    // ~26px cells read well on a phone and keep the grid legible at arm's length.
+    COLS = Math.max(10, Math.min(30, Math.round(availW / 26)));
+    cell = Math.floor(availW / COLS);
+    ROWS = Math.max(10, Math.min(48, Math.floor(availH / cell)));
+    offX = Math.round(ins.l + (cssW - ins.l - ins.r - COLS * cell) / 2);
+    offY = Math.round(top + (availH - ROWS * cell) / 2);
+  }
+
+  function resize() {
+    var m = measure();
+    cssW = m.w; cssH = m.h;
+    stageEl.style.width = cssW + 'px';
+    stageEl.style.height = cssH + 'px';
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    cv.width = Math.round(cssW * dpr); cv.height = Math.round(cssH * dpr);
+    var ins = insets(), root = document.documentElement.style;
+    root.setProperty('--safe-t', ((framed() && !settings.fullscreen) ? 0 : ins.t) + 'px');
+    root.setProperty('--safe-r', ins.r + 'px');
+    root.setProperty('--safe-b', ins.b + 'px');
+    root.setProperty('--safe-l', ins.l + 'px');
+    layout();
+    clampToBoard();
     draw();
   }
-  window.addEventListener('resize', size);
+  window.addEventListener('resize', resize);
+  window.addEventListener('orientationchange', function () {
+    // Safari reports the pre-rotation size during the rotation itself.
+    setTimeout(resize, 60); setTimeout(resize, 260); setTimeout(resize, 600);
+  });
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', resize);
+    window.visualViewport.addEventListener('scroll', resize);
+  }
+
+  /* ---------------- state ---------------- */
+
+  var snake = [], dir = { x: 1, y: 0 }, queued = null, food = null;
+  var score = 0, tick = 145, timer = null, running = false, paused = false;
+  var best = parseInt(localStorage.getItem(BKEY) || '0', 10) || 0;
+
+  var elScore = document.getElementById('vScore'), elBest = document.getElementById('vBest'),
+      elLen = document.getElementById('vLen');
+
+  function paintHud() {
+    elScore.textContent = score;
+    elBest.textContent = best;
+    elLen.textContent = snake.length;
+  }
+
+  // A rotation can shrink the board under the snake; fold anything that now
+  // sits outside back into range rather than losing the run to a resize.
+  function clampToBoard() {
+    for (var i = 0; i < snake.length; i++) {
+      snake[i].x = ((snake[i].x % COLS) + COLS) % COLS;
+      snake[i].y = ((snake[i].y % ROWS) + ROWS) % ROWS;
+    }
+    if (food) { food.x = ((food.x % COLS) + COLS) % COLS; food.y = ((food.y % ROWS) + ROWS) % ROWS; }
+  }
 
   function spawnFood() {
     var open = [];
-    for (var y = 0; y < N; y++) for (var x = 0; x < N; x++) {
-      if (!snake.some(function (s) { return s.x === x && s.y === y; })) open.push({ x: x, y: y });
+    for (var y = 0; y < ROWS; y++) for (var x = 0; x < COLS; x++) {
+      var taken = false;
+      for (var i = 0; i < snake.length; i++) if (snake[i].x === x && snake[i].y === y) { taken = true; break; }
+      if (!taken) open.push({ x: x, y: y });
     }
-    food = open[Math.floor(Math.random() * open.length)];
+    food = open.length ? open[Math.floor(Math.random() * open.length)] : null;
   }
 
   function reset() {
-    snake = [{ x: 8, y: 8 }, { x: 7, y: 8 }, { x: 6, y: 8 }];
+    layout();
+    var cx = Math.floor(COLS / 2), cy = Math.floor(ROWS / 2);
+    snake = [{ x: cx, y: cy }, { x: cx - 1, y: cy }, { x: cx - 2, y: cy }];
     dir = { x: 1, y: 0 };
     queued = null;
-    score = 0; tick = 145; dead = false;
-    elScore.textContent = '0';
+    score = 0; tick = 145; running = true; paused = false;
+    Snd.bed(BED);
     spawnFood();
+    paintHud();
     clearInterval(timer);
     timer = setInterval(step, tick);
     draw();
   }
 
   function step() {
+    if (!running || paused) return;
     if (queued) { dir = queued; queued = null; }
-    var h = { x: (snake[0].x + dir.x + N) % N, y: (snake[0].y + dir.y + N) % N };
+    var h = { x: (snake[0].x + dir.x + COLS) % COLS, y: (snake[0].y + dir.y + ROWS) % ROWS };
 
-    if (snake.some(function (s, i) { return i < snake.length - 1 && s.x === h.x && s.y === h.y; })) return die();
+    for (var i = 0; i < snake.length - 1; i++) {
+      if (snake[i].x === h.x && snake[i].y === h.y) return die();
+    }
 
     snake.unshift(h);
-    if (h.x === food.x && h.y === food.y) {
+    if (food && h.x === food.x && h.y === food.y) {
       score++;
-      elScore.textContent = score;
       spawnFood();
+      // The note climbs with the run, so a long one sounds like one.
+      Snd.tone(392 + Math.min(700, score * 18), 0.10, { type: 'triangle', gain: 0.12 });
+      buzz(8);
       if (score % 4 === 0 && tick > 70) {           // ramp the pace every few bites
         tick -= 8;
         clearInterval(timer);
         timer = setInterval(step, tick);
+        Snd.tone(180, 0.16, { type: 'sine', to: 240, gain: 0.07 });
       }
-      if (navigator.vibrate) navigator.vibrate(8);
     } else {
       snake.pop();
     }
+    paintHud();
     draw();
   }
 
+  var overEl = document.getElementById('over'), overHead = document.getElementById('overHead');
+
   function die() {
-    dead = true;
+    running = false;
     clearInterval(timer);
-    if (navigator.vibrate) navigator.vibrate([18, 40, 18]);
-    if (score > best) { best = score; localStorage.setItem(BKEY, String(best)); elBest.textContent = best; }
-    head.innerHTML = '<div class="big">' + score + '<small>collected</small></div>' +
-      '<p>' + (score >= best && score > 0 ? 'A new personal best.' : 'Your best stands at ' + best + '.') + '</p>';
-    document.getElementById('go').textContent = 'Again';
-    overlay.classList.remove('hide');
+    Snd.stopBed();
+    Snd.hit(0.26, { freq: 640, to: 140, q: 0.6, gain: 0.17 });
+    Snd.tone(98, 0.85, { type: 'sine', to: 46, gain: 0.13 });
+    buzz([18, 40, 18]);
+    var isBest = score > best;
+    if (isBest) { best = score; try { localStorage.setItem(BKEY, String(best)); } catch (e) {} }
+    paintHud();
+    overHead.innerHTML =
+      '<div class="big">' + score + '<small>collected</small></div>' +
+      '<p class="lede" style="margin-top:18px">' +
+      (isBest && score > 0 ? 'A new personal best.' : 'Your best stands at ' + best + '.') +
+      ' You finished ' + snake.length + ' long.</p>';
+    overEl.classList.remove('hide');
   }
 
-  function rect(x, y, w, h) { ctx.fillRect(x, y, w, h); }
+  /* ---------------- drawing ---------------- */
 
   function draw() {
-    if (!cell) return;
-    var side = N * cell;
-    ctx.clearRect(0, 0, side, side);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, cssW, cssH);
 
-    // Faint machined grid — the instrument bed the game sits on.
-    ctx.strokeStyle = C_GRID;
+    var w = COLS * cell, h = ROWS * cell;
+
+    // The bed the game sits on: a machined grid, and a hairline bezel.
+    ctx.fillStyle = '#12080c';
+    ctx.fillRect(offX, offY, w, h);
+    ctx.strokeStyle = '#150a0e';
     ctx.lineWidth = 1;
     ctx.beginPath();
-    for (var g = 1; g < N; g++) {
-      var p = Math.round(g * cell) + 0.5;
-      ctx.moveTo(p, 0); ctx.lineTo(p, side);
-      ctx.moveTo(0, p); ctx.lineTo(side, p);
+    for (var g = 1; g < COLS; g++) {
+      var px = Math.round(offX + g * cell) + 0.5;
+      ctx.moveTo(px, offY); ctx.lineTo(px, offY + h);
+    }
+    for (var r = 1; r < ROWS; r++) {
+      var py = Math.round(offY + r * cell) + 0.5;
+      ctx.moveTo(offX, py); ctx.lineTo(offX + w, py);
     }
     ctx.stroke();
+    ctx.strokeStyle = '#2a141c';
+    ctx.strokeRect(offX + 0.5, offY + 0.5, w - 1, h - 1);
 
     if (food) {
-      // Arterial drop, with its bloom.
       ctx.save();
       ctx.shadowColor = 'rgba(216,58,88,.75)';
       ctx.shadowBlur = cell * 0.9;
-      ctx.fillStyle = C_FOOD;
+      ctx.fillStyle = '#b81d3a';
       var fp = cell * 0.24;
-      rect(food.x * cell + fp, food.y * cell + fp, cell - fp * 2, cell - fp * 2);
+      ctx.fillRect(offX + food.x * cell + fp, offY + food.y * cell + fp, cell - fp * 2, cell - fp * 2);
       ctx.restore();
     }
 
-    if (snake) {
-      var m = cell * 0.12;
-      for (var i = snake.length - 1; i >= 0; i--) {
-        if (i === 0) {
-          ctx.fillStyle = C_HEAD;
-        } else {
-          var t = 1 - (i / Math.max(snake.length, 1)) * 0.6;
-          ctx.fillStyle = 'rgba(' + C_BODY + ',' + t.toFixed(3) + ')';
-        }
-        rect(snake[i].x * cell + m, snake[i].y * cell + m, cell - m * 2, cell - m * 2);
+    var m = cell * 0.12;
+    for (var i = snake.length - 1; i >= 0; i--) {
+      if (i === 0) ctx.fillStyle = '#f2e6e6';
+      else {
+        var t = 1 - (i / Math.max(snake.length, 1)) * 0.6;
+        ctx.fillStyle = 'rgba(233,216,197,' + t.toFixed(3) + ')';
       }
+      ctx.fillRect(offX + snake[i].x * cell + m, offY + snake[i].y * cell + m,
+                   cell - m * 2, cell - m * 2);
     }
   }
+
+  /* ---------------- input ---------------- */
 
   function turn(x, y) {
     var cur = queued || dir;
@@ -234,56 +560,129 @@
   }
 
   var sx = 0, sy = 0, swiping = false;
-  window.addEventListener('touchstart', function (e) {
+  stageEl.addEventListener('touchstart', function (e) {
+    if (e.target.closest && e.target.closest('.gear')) return;
     sx = e.touches[0].clientX; sy = e.touches[0].clientY; swiping = true;
   }, { passive: true });
-  window.addEventListener('touchmove', function (e) {
-    if (!swiping || dead) return;
+  stageEl.addEventListener('touchmove', function (e) {
+    if (!swiping) return;
     var dx = e.touches[0].clientX - sx, dy = e.touches[0].clientY - sy;
-    if (Math.abs(dx) < 24 && Math.abs(dy) < 24) return;
-    if (Math.abs(dx) > Math.abs(dy)) turn(dx > 0 ? 1 : -1, 0); else turn(0, dy > 0 ? 1 : -1);
+    if (Math.abs(dx) < 22 && Math.abs(dy) < 22) return;
+    if (Math.abs(dx) > Math.abs(dy)) turn(dx > 0 ? 1 : -1, 0);
+    else turn(0, dy > 0 ? 1 : -1);
     swiping = false;
   }, { passive: true });
+  window.addEventListener('touchend', function () { swiping = false; });
 
   window.addEventListener('keydown', function (e) {
-    var m = { ArrowUp: [0,-1], ArrowDown: [0,1], ArrowLeft: [-1,0], ArrowRight: [1,0],
-              w: [0,-1], s: [0,1], a: [-1,0], d: [1,0] }[e.key];
-    if (m) { e.preventDefault(); turn(m[0], m[1]); }
+    var k = e.key.toLowerCase();
+    if (k === 'arrowleft' || k === 'a') turn(-1, 0);
+    else if (k === 'arrowright' || k === 'd') turn(1, 0);
+    else if (k === 'arrowup' || k === 'w') turn(0, -1);
+    else if (k === 'arrowdown' || k === 's') turn(0, 1);
+    else return;
+    e.preventDefault();
   });
 
-  document.getElementById('go').addEventListener('click', function () {
-    overlay.classList.add('hide');
-    reset();
+  /* ---------------- ui ---------------- */
+
+  var introEl = document.getElementById('intro'), setEl = document.getElementById('settings');
+  var swFs = document.getElementById('swFs'), swSound = document.getElementById('swSound'),
+      swHaptic = document.getElementById('swHaptic');
+
+  function setSwitch(el, on) { el.setAttribute('aria-checked', on ? 'true' : 'false'); }
+  function applySettings() {
+    setSwitch(swFs, settings.fullscreen);
+    setSwitch(swSound, settings.sound);
+    setSwitch(swHaptic, settings.haptics);
+    Snd.enable(settings.sound);
+    // The launcher owns its bar; the game only asks.
+    try { window.parent.postMessage({ type: 'arcade:fullscreen', on: !!settings.fullscreen }, '*'); } catch (e) {}
+    saveSettings();
+    resize();
+  }
+  swFs.addEventListener('click', function () { settings.fullscreen = !settings.fullscreen; applySettings(); });
+  swSound.addEventListener('click', function () {
+    settings.sound = !settings.sound;
+    applySettings();
+    if (settings.sound) Snd.bell(659.25, 0.26, 0.13);
+  });
+  // iOS Safari has never supported the Vibration API, so this switch would
+  // promise something the phone will not do. Hide it rather than lie.
+  if (!navigator.vibrate) {
+    var hapRow = swHaptic.closest && swHaptic.closest('.row');
+    if (hapRow) hapRow.style.display = 'none';
+  }
+  swHaptic.addEventListener('click', function () { settings.haptics = !settings.haptics; applySettings(); buzz(10); });
+
+  document.getElementById('btnGear').addEventListener('click', function () {
+    paused = true; setEl.classList.remove('hide'); applySettings();
+  });
+  document.getElementById('btnSettingsIntro').addEventListener('click', function () {
+    setEl.classList.remove('hide'); applySettings();
+  });
+  document.getElementById('btnSetBack').addEventListener('click', function () {
+    setEl.classList.add('hide');
+    if (running) paused = false;
+  });
+  setEl.addEventListener('click', function (e) {
+    if (e.target === setEl) document.getElementById('btnSetBack').click();
+  });
+  // In fullscreen the launcher shows no chrome at all, so this is the only exit.
+  document.getElementById('btnLeave').addEventListener('click', function () {
+    try { window.parent.postMessage({ type: 'arcade:exit' }, '*'); } catch (e) {}
+  });
+  document.getElementById('btnPlay').addEventListener('click', function () {
+    introEl.classList.add('hide'); reset();
+  });
+  document.getElementById('btnAgain').addEventListener('click', function () {
+    overEl.classList.add('hide'); reset();
+  });
+  document.getElementById('btnMenu').addEventListener('click', function () {
+    overEl.classList.add('hide'); introEl.classList.remove('hide');
+    running = false; clearInterval(timer); Snd.stopBed();
   });
 
-  size();
-})();
+  function pause() { if (running) paused = true; }
+  document.addEventListener('visibilitychange', function () { if (document.hidden) pause(); });
+  window.addEventListener('blur', pause);
 
-  // The launcher's metrics panel asks; every game answers, so a viewport
-  // mismatch names which side of the frame boundary lost the pixels.
-  (function () {
-    var probe = document.createElement('div');
-    probe.style.cssText = 'position:fixed;top:0;left:0;width:0;height:0;visibility:hidden;' +
-      'pointer-events:none;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) ' +
-      'env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)';
-    document.body.appendChild(probe);
-    window.addEventListener('message', function (e) {
-      if (!e.data || e.data.type !== 'arcade:spec?') return;
-      var vv = window.visualViewport, doc = document.documentElement, cs = getComputedStyle(probe);
-      function v(n) { return Math.round(parseFloat(cs[n]) || 0); }
-      try {
-        window.parent.postMessage({
-          type: 'arcade:spec', name: 'Snake',
-          win: (window.innerWidth || 0) + '\u00d7' + (window.innerHeight || 0),
-          doc: (doc.clientWidth || 0) + '\u00d7' + (doc.clientHeight || 0),
-          vv: vv ? Math.round(vv.width) + '\u00d7' + Math.round(vv.height) : 'n/a',
-          stage: Math.round(document.body.clientWidth) + '\u00d7' + Math.round(document.body.clientHeight),
-          ins: v('paddingTop') + ' / ' + v('paddingRight') + ' / ' +
-               v('paddingBottom') + ' / ' + v('paddingLeft')
-        }, '*');
-      } catch (err) {}
-    });
-  }());
+  /* ---------------- arcade contract ---------------- */
+
+  // Every game answers this; it is how a viewport bug names itself (PLATFORM.md).
+  window.addEventListener('message', function (e) {
+    if (!e.data || e.data.type !== 'arcade:spec?') return;
+    var vv = window.visualViewport, doc = document.documentElement, cs = getComputedStyle(probe);
+    function v(n) { return Math.round(parseFloat(cs[n]) || 0); }
+    try {
+      window.parent.postMessage({
+        type: 'arcade:spec', name: 'Snake',
+        win: (window.innerWidth || 0) + '×' + (window.innerHeight || 0),
+        doc: (doc.clientWidth || 0) + '×' + (doc.clientHeight || 0),
+        vv: vv ? Math.round(vv.width) + '×' + Math.round(vv.height) : 'n/a',
+        stage: Math.round(cssW) + '×' + Math.round(cssH),
+        canvas: cv.width + '×' + cv.height,
+        ins: v('paddingTop') + ' / ' + v('paddingRight') + ' / ' +
+             v('paddingBottom') + ' / ' + v('paddingLeft'),
+        scale: Math.round(dpr * 100) + '%',
+        pads: 'grid ' + COLS + '×' + ROWS + ' cell ' + cell + 'px',
+        touch: ('ontouchstart' in window ? 'yes' : 'no') +
+               ' / pts ' + (navigator.maxTouchPoints || 0)
+      }, '*');
+    } catch (err) {}
+  });
+
+  /* ---------------- go ---------------- */
+
+  resize();
+  applySettings();
+  // A still board behind the intro card.
+  var cx0 = Math.floor(COLS / 2), cy0 = Math.floor(ROWS / 2);
+  snake = [{ x: cx0, y: cy0 }, { x: cx0 - 1, y: cy0 }, { x: cx0 - 2, y: cy0 }];
+  spawnFood();
+  paintHud();
+  draw();
+}());
 </script>
 </body>
 </html>
