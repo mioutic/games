@@ -173,6 +173,20 @@
   button.go.ghost { background: transparent; color: var(--accent); border-color: var(--line-2); }
   .diag.off, .gear.off { display: none; }
 
+  /* Landscape leaves ~390px of height. Ossuary never got a breakpoint, so the
+     gauge, the hint and the gear all kept their portrait offsets and crowded
+     the bottom of the frame. The hint is the first thing to go — it is a
+     one-time instruction sitting in permanent screen space. */
+  @media (max-height: 460px) {
+    .hint { display: none; }
+    .gauge { bottom: calc(var(--safe-b) + 14px); }
+    .gear { bottom: calc(var(--safe-b) + 34px); width: 34px; height: 34px; }
+    /* Defensive: this card fits today at 266px, but nothing was stopping it
+       growing past the viewport the way Barrow's did. */
+    .card { max-height: 100%; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+    .card h2 { font-size: 23px; }
+  }
+
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { transition-duration: 1ms !important; }
   }
@@ -1722,6 +1736,14 @@
     });
   });
 
+  // iOS Safari has never supported the Vibration API, so on the phone this
+  // arcade is built for every buzz() above is a no-op. Hide the switch rather
+  // than offer a setting that changes nothing — the calls themselves stay,
+  // because they do fire on Android and anywhere else that implements it.
+  if (!navigator.vibrate) {
+    var hapRow = swHaptic.closest && swHaptic.closest('.row, .opt');
+    if (hapRow) hapRow.style.display = 'none';
+  }
   swHaptic.addEventListener('click', function () {
     settings.haptics = !settings.haptics; applySettings(); buzz(10);
   });

@@ -1025,6 +1025,14 @@
     applyFullscreen(); saveSettings(); resize();
   }
   swFs.addEventListener('click', function () { settings.fullscreen = !settings.fullscreen; applySettings(); });
+  // iOS Safari has never supported the Vibration API, so on the phone this
+  // arcade is built for every buzz() above is a no-op. Hide the switch rather
+  // than offer a setting that changes nothing — the calls themselves stay,
+  // because they do fire on Android and anywhere else that implements it.
+  if (!navigator.vibrate) {
+    var hapRow = swHaptic.closest && swHaptic.closest('.row, .opt');
+    if (hapRow) hapRow.style.display = 'none';
+  }
   swHaptic.addEventListener('click', function () { settings.haptics = !settings.haptics; applySettings(); buzz(10); });
   swTrail.addEventListener('click', function () { settings.trail = !settings.trail; applySettings(); });
   swKeeper.addEventListener('click', function () { settings.keeper = !settings.keeper; applySettings(); });

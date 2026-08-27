@@ -242,6 +242,21 @@
     .guard  { bottom: calc(var(--safe-b) + 118px); height: 46px; }
     .gear   { bottom: calc(var(--safe-b) + 118px); }
     .diag { display: none; }
+
+    /* The intro grew a stash and a depth picker, which pushed Descend 216px
+       below the fold at 430px of height. It still scrolled — but you should not
+       have to go looking for the only button that matters. So the card sheds
+       its least load-bearing parts instead: the control legend and the long
+       second paragraph, both of which are read once and never again. */
+    .card h2 { font-size: 23px; }
+    .card .lede { font-size: 12px; line-height: 1.5; margin-bottom: 9px; }
+    .keys, .card .lede.tail { display: none; }
+    .stash { margin: 2px 0 9px; }
+    .stash > div { padding: 6px 8px; }
+    .stash .v { font-size: 13px; }
+    .depth { margin-bottom: 8px; }
+    .depth button { min-width: 28px; padding: 5px 7px; font-size: 11px; }
+    .card .go { padding: 10px 14px; margin-top: 6px; }
   }
 
   /* ---------- overlays ---------- */
@@ -388,7 +403,7 @@
       <div class="keyk"><b>✦</b><span>Right pad<br>looks</span></div>
       <div class="keyk"><b>‡</b><span>Strike<br>and guard</span></div>
     </div>
-    <p class="lede" style="margin-bottom:14px">The blade is real. It only hits what
+    <p class="lede tail" style="margin-bottom:14px">The blade is real. It only hits what
       it actually passes through — aim it, do not point at things. Carry what you
       find back to the way out; the barrow keeps whatever you die holding.</p>
     <div class="stash">
@@ -2957,6 +2972,14 @@
   });
   swShadow.addEventListener('click', function () { settings.shadows = !settings.shadows; applySettings(); });
   swInvert.addEventListener('click', function () { settings.invert = !settings.invert; applySettings(); });
+  // iOS Safari has never supported the Vibration API, so on the phone this
+  // arcade is built for every buzz() above is a no-op. Hide the switch rather
+  // than offer a setting that changes nothing — the calls themselves stay,
+  // because they do fire on Android and anywhere else that implements it.
+  if (!navigator.vibrate) {
+    var hapRow = swHaptic.closest && swHaptic.closest('.row, .opt');
+    if (hapRow) hapRow.style.display = 'none';
+  }
   swHaptic.addEventListener('click', function () { settings.haptics = !settings.haptics; applySettings(); buzz(10); });
   swGrain.addEventListener('click', function () { settings.grain = !settings.grain; applySettings(); });
   swDiag.addEventListener('click', function () { settings.diag = !settings.diag; applySettings(); });
