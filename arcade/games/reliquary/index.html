@@ -357,6 +357,10 @@
     </div>
 
     <div class="opt">
+      <div><div class="optk">Sound</div><div class="optd">Weather on stone, and whatever is moving in it.</div></div>
+      <button class="sw" id="swSound" role="switch" aria-checked="true"><span></span></button>
+    </div>
+    <div class="opt">
       <div><div class="optk">Haptics</div><div class="optd">Buzz on pickups and hits.</div></div>
       <button class="sw" id="swHaptic" role="switch" aria-checked="true"><span></span></button>
     </div>
@@ -1313,7 +1317,7 @@
   /* ---------------- settings ---------------- */
 
   var settings = { rev: 2, fullscreen: true, reflect: true, rain: true, shafts: true,
-                   look: 10, haptics: true, grain: true, diag: true, fights: true,
+                   look: 10, haptics: true, sound: true, grain: true, diag: true, fights: true,
                    third: false };
   try {
     var sv = JSON.parse(localStorage.getItem(SKEY) || 'null');
@@ -1409,6 +1413,7 @@
     flash(0.5, [0.42,0.36,0.30]);
     burst(state.x, 1.4, state.z, 40, BONE, 4.5, 0.9, 0.07, 2.2, 2.4);
     buzz(14);
+    Snd.hit(0.20, { freq: 360, to: 120, q: 0.5, gain: 0.17 });
   });
 
   /* ---------------- battle ---------------- */
@@ -1453,6 +1458,7 @@
     setBars(); setActs(true); showControls(false);
     battleEl.classList.add('on');
     buzz([18,60,18]);
+    Snd.tone(73, 0.9, { type: 'triangle', to: 110, gain: 0.14 });
   }
 
   function fleeBattle() {
@@ -1537,6 +1543,7 @@
       burst(f.tx, f.ty, f.tz, f.kind === 'ward' ? 40 : 90, a.col,
             f.kind === 'ward' ? 3 : 7, 0.9, 0.1, 3.2, 2.6);
       buzz(f.kind === 'ward' ? 10 : 20);
+      Snd.hit(0.10, { freq: f.kind === 'ward' ? 1800 : 1100, to: 500, q: 1.3, gain: 0.15 });
       if (f.onHit) f.onHit();
     }
     if (f.t >= a.total) {
@@ -1822,6 +1829,7 @@
         burst(r.x, 1.2, r.z, 70, BLOOD, 5, 1.1, 0.09, 3.0, 2.4);
         elRelics.textContent = state.found + '/' + RELIC_TARGET;
         buzz([10,30,10]);
+        Snd.bell(1174.7, 0.5, 0.12);
         if (state.found >= RELIC_TARGET) return finish();
         continue;
       }
@@ -1850,6 +1858,7 @@
     elSpec.textContent = lastFps + ' fps · ' + Math.round(renderScale*100) + '% scale';
     overlay.classList.remove('hide');
     buzz([16,40,16,40,16]);
+    Snd.stopBed(); Snd.bell(523.25, 0.9, 0.15); Snd.bell(784, 1.2, 0.10);
   }
 
   function resetRun() {
@@ -2346,10 +2355,179 @@
   var swShafts = document.getElementById('swShafts');
   var swRain = document.getElementById('swRain');
   var swHaptic = document.getElementById('swHaptic');
+  var swSound = document.getElementById('swSound');
   var swGrain = document.getElementById('swGrain');
   var swDiag = document.getElementById('swDiag');
   var lookEl = document.getElementById('look');
   var lookVal = document.getElementById('lookVal');
+
+
+  /* ---------------- sound ----------------
+
+     Procedural only: the offline build inlines every game into a single page,
+     so anything fetched breaks it. Every sound here is an oscillator or a burst
+     of filtered noise. That suits the register anyway — this wants a struck
+     bell and the hum of a stone room, not a soundtrack.
+
+     iOS will not start an AudioContext outside a user gesture, and one created
+     too early lands 'suspended' and stays there without ever throwing. So the
+     context is built on the first touch and nowhere else. */
+  var Snd = (function () {
+    var AC = window.AudioContext || window.webkitAudioContext;
+    var ctx = null, master = null, bedGain = null, bedNodes = [], curBed = null;
+    var want = true, noiseBuf = null;
+
+    function ensure() {
+      if (ctx || !AC) return ctx;
+      try { ctx = new AC(); } catch (e) { return null; }
+      master = ctx.createGain();
+      master.gain.value = want ? 1 : 0.0001;
+      master.connect(ctx.destination);
+      bedGain = ctx.createGain();
+      bedGain.gain.value = 0.0001;
+      bedGain.connect(master);
+      return ctx;
+    }
+    function unlock() {
+      var c = ensure();
+      if (c && c.state === 'suspended') c.resume();
+    }
+    ['touchstart', 'mousedown', 'keydown'].forEach(function (ev) {
+      window.addEventListener(ev, unlock, { passive: true });
+    });
+
+    // One shared noise buffer. Building a fresh one per hit is the classic way
+    // to make a phone stutter on the frame that matters most.
+    function noise_() {
+      if (noiseBuf) return noiseBuf;
+      var n = Math.floor(ctx.sampleRate * 0.6);
+      noiseBuf = ctx.createBuffer(1, n, ctx.sampleRate);
+      var d = noiseBuf.getChannelData(0);
+      for (var i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+      return noiseBuf;
+    }
+
+    function tone(freq, dur, o) {
+      var c = ensure(); if (!c || !want) return;
+      o = o || {};
+      var t = c.currentTime, osc = c.createOscillator(), g = c.createGain();
+      osc.type = o.type || 'sine';
+      osc.frequency.setValueAtTime(freq, t);
+      if (o.to) osc.frequency.exponentialRampToValueAtTime(Math.max(20, o.to), t + dur);
+      var peak = o.gain == null ? 0.20 : o.gain;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(peak, t + (o.attack || 0.006));
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      osc.connect(g); g.connect(master);
+      osc.start(t); osc.stop(t + dur + 0.03);
+    }
+
+    function hit(dur, o) {
+      var c = ensure(); if (!c || !want) return;
+      o = o || {};
+      var t = c.currentTime, src = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain();
+      src.buffer = noise_();
+      src.playbackRate.value = o.rate || 1;
+      f.type = o.type || 'bandpass';
+      f.frequency.setValueAtTime(o.freq || 900, t);
+      if (o.to) f.frequency.exponentialRampToValueAtTime(Math.max(40, o.to), t + dur);
+      f.Q.value = o.q == null ? 1.1 : o.q;
+      var peak = o.gain == null ? 0.18 : o.gain;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(peak, t + (o.attack || 0.004));
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      src.connect(f); f.connect(g); g.connect(master);
+      src.start(t); src.stop(t + dur + 0.03);
+    }
+
+    // Two struck partials, slightly out of tune with each other. A single sine
+    // reads as a beep; the detune is what makes it a bell.
+    function bell(freq, dur, gain) {
+      tone(freq, dur, { type: 'sine', gain: gain == null ? 0.16 : gain });
+      tone(freq * 2.02, dur * 0.6, { type: 'sine', gain: (gain == null ? 0.16 : gain) * 0.45 });
+    }
+
+    /* A room, not a tune: detuned oscillators under a slowly breathing filter,
+       with an optional breath of air over the top. */
+    function bed(profile) {
+      var c = ensure(); if (!c) return;
+      stopBed();
+      if (!profile) return;
+      curBed = profile;
+      var t = c.currentTime;
+      var f = c.createBiquadFilter();
+      f.type = 'lowpass';
+      f.frequency.value = profile.cut || 320;
+      f.Q.value = 0.7;
+      f.connect(bedGain);
+      (profile.freqs || [55, 82.5]).forEach(function (hz, i) {
+        var o = c.createOscillator(), g = c.createGain();
+        o.type = i ? 'triangle' : 'sine';
+        o.frequency.value = hz;
+        g.gain.value = i ? 0.30 : 0.55;
+        o.connect(g); g.connect(f);
+        o.start(t); bedNodes.push(o);
+      });
+      if (profile.air) {
+        var src = c.createBufferSource(), nf = c.createBiquadFilter(), ng = c.createGain();
+        src.buffer = noise_(); src.loop = true;
+        nf.type = 'bandpass'; nf.frequency.value = profile.airFreq || 600; nf.Q.value = 0.5;
+        ng.gain.value = profile.air;
+        src.connect(nf); nf.connect(ng); ng.connect(bedGain);
+        src.start(t); bedNodes.push(src);
+      }
+      var lfo = c.createOscillator(), la = c.createGain();
+      lfo.frequency.value = profile.wob || 0.07;
+      la.gain.value = (profile.cut || 320) * 0.35;
+      lfo.connect(la); la.connect(f.frequency);
+      lfo.start(t); bedNodes.push(lfo);
+      ramp(bedGain.gain, profile.level == null ? 0.15 : profile.level, 1.6);
+    }
+    function stopBed() {
+      if (!ctx) return;
+      if (bedGain) ramp(bedGain.gain, 0.0001, 0.45);
+      var dying = bedNodes; bedNodes = []; curBed = null;
+      setTimeout(function () {
+        for (var i = 0; i < dying.length; i++) { try { dying[i].stop(); } catch (e) {} }
+      }, 700);
+    }
+    function bedLevel(v) {
+      if (!ctx || !bedGain || !curBed) return;
+      ramp(bedGain.gain, Math.max(0.0001, v), 0.8);
+    }
+    function ramp(param, to, secs) {
+      var t = ctx.currentTime;
+      param.cancelScheduledValues(t);
+      param.setValueAtTime(param.value, t);
+      param.linearRampToValueAtTime(to, t + secs);
+    }
+    function enable(on) {
+      want = !!on;
+      // Deliberately does NOT create the context. Called at boot from
+      // applySettings, it would build one outside a user gesture — which on
+      // iOS lands 'suspended' forever and never throws. ensure() sets the
+      // master gain from `want`, so the first real touch picks this up.
+      if (!ctx) return;
+      ramp(master.gain, want ? 1 : 0.0001, 0.12);
+      if (want && ctx.state === 'suspended') ctx.resume();
+    }
+    return { tone: tone, hit: hit, bell: bell, bed: bed, stopBed: stopBed,
+             bedLevel: bedLevel, enable: enable, unlock: unlock, on: function () { return want; },
+             state: function () { return ctx ? ctx.state : 'none'; } };
+  }());
+
+  // The room starts breathing on the first touch — which is also the only
+  // moment iOS will let audio begin at all — so the atmosphere is already
+  // there on the menu rather than snapping in at kick-off.
+  var BED = { freqs: [45.0, 67.5], cut: 240, air: 0.060, airFreq: 700, wob: 0.06, level: 0.13 };
+  var bedStarted = false;
+  ['touchstart', 'mousedown', 'keydown'].forEach(function (ev) {
+    window.addEventListener(ev, function () {
+      if (bedStarted) return;
+      bedStarted = true;
+      Snd.bed(BED);
+    }, { passive: true });
+  });
 
   function setSwitch(el, on) { el.setAttribute('aria-checked', on ? 'true' : 'false'); }
   function applySettings() {
@@ -2359,6 +2537,8 @@
     setSwitch(swShafts, settings.shafts);
     setSwitch(swRain, settings.rain);
     setSwitch(swHaptic, settings.haptics);
+    setSwitch(swSound, settings.sound);
+    Snd.enable(settings.sound);
     setSwitch(swGrain, settings.grain);
     setSwitch(swDiag, settings.diag);
     lookEl.value = settings.look;
@@ -2428,6 +2608,11 @@
     var hapRow = swHaptic.closest && swHaptic.closest('.row, .opt');
     if (hapRow) hapRow.style.display = 'none';
   }
+  swSound.addEventListener('click', function () {
+    settings.sound = !settings.sound;
+    applySettings();
+    if (settings.sound) Snd.bell(659.25, 0.26, 0.13);
+  });
   swHaptic.addEventListener('click', function () { settings.haptics = !settings.haptics; applySettings(); buzz(10); });
   swGrain.addEventListener('click', function () { settings.grain = !settings.grain; applySettings(); });
   swDiag.addEventListener('click', function () { settings.diag = !settings.diag; applySettings(); });
@@ -2440,6 +2625,8 @@
   document.getElementById('go').addEventListener('click', function () {
     overlay.classList.add('hide');
     resetRun();
+    // Death stops the bed; a new run has to bring it back.
+    Snd.bed(BED);
     state.running = true;
   });
 

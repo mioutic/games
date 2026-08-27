@@ -230,6 +230,11 @@
       <button class="sw" id="swFs" role="switch" aria-checked="false" aria-label="Fullscreen"></button>
     </div>
     <div class="row">
+      <div><span class="lab">Sound</span>
+        <span class="sub">The paddle, the walls, and the shaft between them.</span></div>
+      <button class="sw" id="swSound" role="switch" aria-checked="true" aria-label="Sound"></button>
+    </div>
+    <div class="row">
       <div><span class="lab">Haptics</span>
         <span class="sub">A tap on the paddle and on a point.</span></div>
       <button class="sw" id="swHaptic" role="switch" aria-checked="true" aria-label="Haptics"></button>
@@ -266,12 +271,13 @@
 
   /* ---------------- settings ---------------- */
 
-  var settings = { fullscreen: false, haptics: true, trail: true, diff: 'keen' };
+  var settings = { fullscreen: false, haptics: true, sound: true, trail: true, diff: 'keen' };
   try {
     var raw = JSON.parse(localStorage.getItem(SKEY) || 'null');
     if (raw && typeof raw === 'object') {
       if (typeof raw.fullscreen === 'boolean') settings.fullscreen = raw.fullscreen;
       if (typeof raw.haptics === 'boolean') settings.haptics = raw.haptics;
+      if (typeof raw.sound === 'boolean') settings.sound = raw.sound;
       if (typeof raw.trail === 'boolean') settings.trail = raw.trail;
       if (/^(calm|keen|cruel)$/.test(raw.diff)) settings.diff = raw.diff;
     }
@@ -454,6 +460,8 @@
   function reset() {
     var t = tune();
     state.score = 0; state.rally = 0; state.lives = 3;
+    // Death stops the bed; a new run has to bring it back.
+    Snd.bed(BED);
     state.speed = t.speed; state.over = false; state.running = true;
     state.flash = 0; state.shake = 0;
     me.x = 0; me.y = 0; me.px = 0; me.py = 0; me.vx = 0; me.vy = 0;
@@ -473,12 +481,14 @@
       state.speed += tune().gain;
       toast('Point. The shaft narrows.');
       buzz([10, 30, 10]);
+      Snd.bell(659.25, 0.42, 0.14);
     } else {
       state.lives--;
       state.flash = 1;
       state.shake = 1;
       toast(state.lives > 0 ? 'Missed.' : 'Gone.');
       buzz([40, 60, 40]);
+      Snd.tone(130, 0.40, { type: 'sine', to: 62, gain: 0.13 });
     }
     state.rally = 0;
     paintHud();
@@ -498,6 +508,8 @@
       '. The ball goes where you put it, not where you aimed.</p>';
     overEl.classList.remove('hide');
     buzz([40, 80, 40]);
+    Snd.stopBed();
+    Snd.tone(104, 1.20, { type: 'sine', to: 48, gain: 0.14 });
   }
 
   /* ---------------- input ---------------- */
@@ -608,10 +620,13 @@
 
     // Walls. A bounce kills a little of the spin, so a curve is not forever.
     var lx = HW - ball.r, ly = HH - ball.r;
-    if (ball.x < -lx) { ball.x = -lx; ball.vx = Math.abs(ball.vx); ball.sx *= -0.55; state.hitFlash = 0.4; }
-    if (ball.x >  lx) { ball.x =  lx; ball.vx = -Math.abs(ball.vx); ball.sx *= -0.55; state.hitFlash = 0.4; }
-    if (ball.y < -ly) { ball.y = -ly; ball.vy = Math.abs(ball.vy); ball.sy *= -0.55; state.hitFlash = 0.4; }
-    if (ball.y >  ly) { ball.y =  ly; ball.vy = -Math.abs(ball.vy); ball.sy *= -0.55; state.hitFlash = 0.4; }
+    // The shaft answers when it is struck; without it the ball is silent
+    // between paddles and the rally has no rhythm at all.
+    function wallSay() { Snd.hit(0.05, { freq: 420, to: 200, q: 0.9, gain: 0.07 }); }
+    if (ball.x < -lx) { ball.x = -lx; ball.vx = Math.abs(ball.vx); ball.sx *= -0.55; state.hitFlash = 0.4; wallSay(); }
+    if (ball.x >  lx) { ball.x =  lx; ball.vx = -Math.abs(ball.vx); ball.sx *= -0.55; state.hitFlash = 0.4; wallSay(); }
+    if (ball.y < -ly) { ball.y = -ly; ball.vy = Math.abs(ball.vy); ball.sy *= -0.55; state.hitFlash = 0.4; wallSay(); }
+    if (ball.y >  ly) { ball.y =  ly; ball.vy = -Math.abs(ball.vy); ball.sy *= -0.55; state.hitFlash = 0.4; wallSay(); }
 
     if (settings.trail) {
       trail.push(ball.x, ball.y, ball.z);
@@ -647,6 +662,7 @@
         state.rally++;
         state.hitFlash = 1;
         buzz(8);
+        Snd.hit(0.055, { freq: 1200 + Math.min(900, state.rally*45), to: 500, q: 1.6, gain: 0.15 });
         paintHud(); paintSpin();
       } else if (ball.z < -0.7) {
         point(false);
@@ -833,7 +849,176 @@
 
   var introEl = document.getElementById('intro'), setEl = document.getElementById('settings');
   var swFs = document.getElementById('swFs'), swHaptic = document.getElementById('swHaptic'),
+      swSound = document.getElementById('swSound'),
       swTrail = document.getElementById('swTrail'), segDiff = document.getElementById('segDiff');
+
+
+  /* ---------------- sound ----------------
+
+     Procedural only: the offline build inlines every game into a single page,
+     so anything fetched breaks it. Every sound here is an oscillator or a burst
+     of filtered noise. That suits the register anyway — this wants a struck
+     bell and the hum of a stone room, not a soundtrack.
+
+     iOS will not start an AudioContext outside a user gesture, and one created
+     too early lands 'suspended' and stays there without ever throwing. So the
+     context is built on the first touch and nowhere else. */
+  var Snd = (function () {
+    var AC = window.AudioContext || window.webkitAudioContext;
+    var ctx = null, master = null, bedGain = null, bedNodes = [], curBed = null;
+    var want = true, noiseBuf = null;
+
+    function ensure() {
+      if (ctx || !AC) return ctx;
+      try { ctx = new AC(); } catch (e) { return null; }
+      master = ctx.createGain();
+      master.gain.value = want ? 1 : 0.0001;
+      master.connect(ctx.destination);
+      bedGain = ctx.createGain();
+      bedGain.gain.value = 0.0001;
+      bedGain.connect(master);
+      return ctx;
+    }
+    function unlock() {
+      var c = ensure();
+      if (c && c.state === 'suspended') c.resume();
+    }
+    ['touchstart', 'mousedown', 'keydown'].forEach(function (ev) {
+      window.addEventListener(ev, unlock, { passive: true });
+    });
+
+    // One shared noise buffer. Building a fresh one per hit is the classic way
+    // to make a phone stutter on the frame that matters most.
+    function noise_() {
+      if (noiseBuf) return noiseBuf;
+      var n = Math.floor(ctx.sampleRate * 0.6);
+      noiseBuf = ctx.createBuffer(1, n, ctx.sampleRate);
+      var d = noiseBuf.getChannelData(0);
+      for (var i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+      return noiseBuf;
+    }
+
+    function tone(freq, dur, o) {
+      var c = ensure(); if (!c || !want) return;
+      o = o || {};
+      var t = c.currentTime, osc = c.createOscillator(), g = c.createGain();
+      osc.type = o.type || 'sine';
+      osc.frequency.setValueAtTime(freq, t);
+      if (o.to) osc.frequency.exponentialRampToValueAtTime(Math.max(20, o.to), t + dur);
+      var peak = o.gain == null ? 0.20 : o.gain;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(peak, t + (o.attack || 0.006));
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      osc.connect(g); g.connect(master);
+      osc.start(t); osc.stop(t + dur + 0.03);
+    }
+
+    function hit(dur, o) {
+      var c = ensure(); if (!c || !want) return;
+      o = o || {};
+      var t = c.currentTime, src = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain();
+      src.buffer = noise_();
+      src.playbackRate.value = o.rate || 1;
+      f.type = o.type || 'bandpass';
+      f.frequency.setValueAtTime(o.freq || 900, t);
+      if (o.to) f.frequency.exponentialRampToValueAtTime(Math.max(40, o.to), t + dur);
+      f.Q.value = o.q == null ? 1.1 : o.q;
+      var peak = o.gain == null ? 0.18 : o.gain;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(peak, t + (o.attack || 0.004));
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      src.connect(f); f.connect(g); g.connect(master);
+      src.start(t); src.stop(t + dur + 0.03);
+    }
+
+    // Two struck partials, slightly out of tune with each other. A single sine
+    // reads as a beep; the detune is what makes it a bell.
+    function bell(freq, dur, gain) {
+      tone(freq, dur, { type: 'sine', gain: gain == null ? 0.16 : gain });
+      tone(freq * 2.02, dur * 0.6, { type: 'sine', gain: (gain == null ? 0.16 : gain) * 0.45 });
+    }
+
+    /* A room, not a tune: detuned oscillators under a slowly breathing filter,
+       with an optional breath of air over the top. */
+    function bed(profile) {
+      var c = ensure(); if (!c) return;
+      stopBed();
+      if (!profile) return;
+      curBed = profile;
+      var t = c.currentTime;
+      var f = c.createBiquadFilter();
+      f.type = 'lowpass';
+      f.frequency.value = profile.cut || 320;
+      f.Q.value = 0.7;
+      f.connect(bedGain);
+      (profile.freqs || [55, 82.5]).forEach(function (hz, i) {
+        var o = c.createOscillator(), g = c.createGain();
+        o.type = i ? 'triangle' : 'sine';
+        o.frequency.value = hz;
+        g.gain.value = i ? 0.30 : 0.55;
+        o.connect(g); g.connect(f);
+        o.start(t); bedNodes.push(o);
+      });
+      if (profile.air) {
+        var src = c.createBufferSource(), nf = c.createBiquadFilter(), ng = c.createGain();
+        src.buffer = noise_(); src.loop = true;
+        nf.type = 'bandpass'; nf.frequency.value = profile.airFreq || 600; nf.Q.value = 0.5;
+        ng.gain.value = profile.air;
+        src.connect(nf); nf.connect(ng); ng.connect(bedGain);
+        src.start(t); bedNodes.push(src);
+      }
+      var lfo = c.createOscillator(), la = c.createGain();
+      lfo.frequency.value = profile.wob || 0.07;
+      la.gain.value = (profile.cut || 320) * 0.35;
+      lfo.connect(la); la.connect(f.frequency);
+      lfo.start(t); bedNodes.push(lfo);
+      ramp(bedGain.gain, profile.level == null ? 0.15 : profile.level, 1.6);
+    }
+    function stopBed() {
+      if (!ctx) return;
+      if (bedGain) ramp(bedGain.gain, 0.0001, 0.45);
+      var dying = bedNodes; bedNodes = []; curBed = null;
+      setTimeout(function () {
+        for (var i = 0; i < dying.length; i++) { try { dying[i].stop(); } catch (e) {} }
+      }, 700);
+    }
+    function bedLevel(v) {
+      if (!ctx || !bedGain || !curBed) return;
+      ramp(bedGain.gain, Math.max(0.0001, v), 0.8);
+    }
+    function ramp(param, to, secs) {
+      var t = ctx.currentTime;
+      param.cancelScheduledValues(t);
+      param.setValueAtTime(param.value, t);
+      param.linearRampToValueAtTime(to, t + secs);
+    }
+    function enable(on) {
+      want = !!on;
+      // Deliberately does NOT create the context. Called at boot from
+      // applySettings, it would build one outside a user gesture — which on
+      // iOS lands 'suspended' forever and never throws. ensure() sets the
+      // master gain from `want`, so the first real touch picks this up.
+      if (!ctx) return;
+      ramp(master.gain, want ? 1 : 0.0001, 0.12);
+      if (want && ctx.state === 'suspended') ctx.resume();
+    }
+    return { tone: tone, hit: hit, bell: bell, bed: bed, stopBed: stopBed,
+             bedLevel: bedLevel, enable: enable, unlock: unlock, on: function () { return want; },
+             state: function () { return ctx ? ctx.state : 'none'; } };
+  }());
+
+  // The room starts breathing on the first touch — which is also the only
+  // moment iOS will let audio begin at all — so the atmosphere is already
+  // there on the menu rather than snapping in at kick-off.
+  var BED = { freqs: [58.3, 87.3], cut: 300, air: 0.040, airFreq: 900, wob: 0.09, level: 0.11 };
+  var bedStarted = false;
+  ['touchstart', 'mousedown', 'keydown'].forEach(function (ev) {
+    window.addEventListener(ev, function () {
+      if (bedStarted) return;
+      bedStarted = true;
+      Snd.bed(BED);
+    }, { passive: true });
+  });
 
   function setSwitch(el, on) { el.setAttribute('aria-checked', on ? 'true' : 'false'); }
 
@@ -845,6 +1030,8 @@
   function applySettings() {
     setSwitch(swFs, settings.fullscreen);
     setSwitch(swHaptic, settings.haptics);
+    setSwitch(swSound, settings.sound);
+    Snd.enable(settings.sound);
     setSwitch(swTrail, settings.trail);
     var bs = segDiff.querySelectorAll('button');
     for (var i = 0; i < bs.length; i++)
@@ -863,6 +1050,11 @@
     var hapRow = swHaptic.closest && swHaptic.closest('.row, .opt');
     if (hapRow) hapRow.style.display = 'none';
   }
+  swSound.addEventListener('click', function () {
+    settings.sound = !settings.sound;
+    applySettings();
+    if (settings.sound) Snd.bell(659.25, 0.26, 0.13);
+  });
   swHaptic.addEventListener('click', function () { settings.haptics = !settings.haptics; applySettings(); buzz(10); });
   swTrail.addEventListener('click', function () { settings.trail = !settings.trail; applySettings(); });
   segDiff.addEventListener('click', function (e) {
