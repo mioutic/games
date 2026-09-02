@@ -255,6 +255,22 @@
   .tierlab { grid-column: 1 / -1; margin-top: 4px; }
   .bigstat { font: 500 40px/1 var(--font-mono); color: var(--accent); text-align: center; font-variant-numeric: tabular-nums; }
   .bigstat small { display: block; font: 500 9px/1 var(--font-ui); letter-spacing: .18em; text-transform: uppercase; color: var(--t-2); margin-top: 8px; }
+  .slotrow { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--line-0); }
+  .slotrow .sl { width: 54px; flex: none; }
+  .slotrow .opts { flex: 1; display: flex; flex-wrap: wrap; gap: 4px; }
+  .slotrow .opts button { appearance: none; border: 1px solid var(--line-2); border-radius: var(--radius); background: var(--s-1); color: var(--t-1);
+                          padding: 6px 8px; font-size: 11px; display: flex; align-items: center; gap: 5px; }
+  .slotrow .opts button svg { width: 13px; height: 13px; }
+  .slotrow .opts button.on { border-color: var(--accent); color: var(--t-0); box-shadow: var(--bloom); }
+  .slotrow .none { font: 500 10px/1 var(--font-mono); color: var(--t-3); }
+  .loadout .w.relic { border-color: var(--warning); }
+  .flask { position: absolute; left: calc(var(--safe-l) + 10px); top: calc(var(--safe-t) + 104px); font: 500 8px/1 var(--font-ui); letter-spacing: .18em;
+           text-transform: uppercase; color: var(--t-3); display: none; }
+  .flask.on { display: block; }
+  .agony { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px; margin: 0 0 10px; border: 1px solid var(--line-2);
+           border-radius: var(--radius); background: rgba(184,29,58,.06); }
+  .agony .k { font: 400 13px/1.2 var(--font-display); color: var(--t-0); }
+  .agony .d { font-size: 10.5px; color: var(--t-3); margin-top: 2px; }
   .goldline { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
   .goldline b { font: 500 16px/1 var(--font-mono); color: var(--warning); }
   .toast { position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(var(--safe-b) + 150px); z-index: 6; padding: 8px 13px;
@@ -281,6 +297,7 @@
   </div>
   <div class="hpwrap" id="hpWrap"><i id="hpFill" style="width:100%"></i><b id="hpNum">100</b></div>
   <div class="loadout" id="loadout"></div>
+  <div class="flask" id="flaskLab"></div>
   <div class="combo" id="combo"><div class="n" id="comboN">×12</div><div class="k">feast</div></div>
   <div class="nextev" id="nextEv"></div>
   <div class="boss" id="bossBar"><div class="nm" id="bossName">—</div><div class="bar"><i id="bossFill"></i></div></div>
@@ -369,6 +386,7 @@
     <div class="tabs">
       <button class="on" data-tab="play">Hunt</button>
       <button data-tab="shop">Bloodwork</button>
+      <button data-tab="well">Well</button>
       <button data-tab="tree">Hunters</button>
       <button data-tab="quest">Quests<span class="dot" id="qDot" style="display:none"></span></button>
       <button data-tab="coll">Reliquary</button>
@@ -376,6 +394,8 @@
     <div class="tab on" id="tabPlay">
       <div class="micro" style="margin-bottom:6px">Ground</div>
       <div class="maps" id="mapList"></div>
+      <div class="agony" id="agonyRow" style="display:none"><div><div class="k">Agony</div><div class="d" id="agonyD">Everything harder. Half again the gold and blood.</div></div>
+        <button class="sw" id="swAgony" role="switch" aria-checked="false"><span></span></button></div>
       <div class="micro" style="margin-bottom:6px">Hunter</div>
       <div id="charList"></div>
       <div class="kv"><span>Tonight’s seed</span><b id="dailyLab">—</b></div>
@@ -386,6 +406,15 @@
     <div class="tab" id="tabShop">
       <p class="lede" style="text-align:left;margin:0 0 10px">Blessings. Permanent, and every night starts with all of them.</p>
       <div id="shopList"></div>
+    </div>
+    <div class="tab" id="tabWell">
+      <p class="lede" style="text-align:left;margin:0 0 10px">Relics fall from champions and lords. Without a vial in your pocket they stay in the city when the night ends.</p>
+      <div id="wellShop"></div>
+      <div class="micro" style="margin:12px 0 4px">Wear</div>
+      <div id="wellSlots"></div>
+      <div class="rule"></div>
+      <button class="go ghost wide small" id="bRefund">Refund all blessings</button>
+      <p class="optd" style="margin:6px 0 0" id="refundD"></p>
     </div>
     <div class="tab" id="tabTree">
       <p class="lede" style="text-align:left;margin:0 0 10px" id="treeLede">Each hunter has their own attunements. Tiers open in order.</p>
@@ -467,8 +496,9 @@
   function freshMeta() {
     return { v: 2, gold: 0, bless: {}, unlocked: { novice: 1 }, maps: { street: 1 },
              weapons: { fang: 1, needle: 1, halo: 1, bolt: 1, pool: 1, bats: 1 }, trees: {}, quests: {}, seen: {}, evos: {},
+             relics: {}, wear: {}, vials: 0, flasks: 0, agony: {}, spent: 0,
              stats: { runs: 0, kills: 0, bestAny: 0, best: {}, dawns: {}, evolved: 0, bosses: 0, minis: 0, levels: 0, chests: 0, goldAll: 0,
-                      elites: 0, bestCombo: 0, bestLv: 0, charRuns: {}, charKills: {}, charBest: {}, dailies: 0, lordKills: {} },
+                      elites: 0, bestCombo: 0, bestLv: 0, charRuns: {}, charKills: {}, charBest: {}, dailies: 0, lordKills: {}, agonyDawns: {}, bestAgony: {} },
              dailyDone: '', savedAt: 0 };
   }
   var meta = freshMeta();
@@ -839,6 +869,30 @@
               unlock:'navedawn' }
   };
   var MAP_IDS = Object.keys(MAPS);
+
+  // Relics: worn in six slots, found in the night, kept only if a vial brings them home.
+  var SLOTS = ['head', 'body', 'hands', 'feet', 'ring', 'charm'];
+  var RELICS = {
+    cap:     { n:'Iron Cap',            slot:'head',  g:'skin',     eff:{armor:2},                    d:'+2 armour' },
+    hood:    { n:'Mourner’s Hood',      slot:'head',  g:'lantern',  eff:{light:.3, luck:.05},         d:'+30% light, +5% luck' },
+    circlet: { n:'Thorned Circlet',     slot:'head',  g:'thorns',   eff:{thorns:5, crit:.04},         d:'5 damage back, +4% crit' },
+    vest:    { n:'Ferrite Vest',        slot:'body',  g:'heart',    eff:{hp:35},                      d:'+35 max HP' },
+    shroud:  { n:'Shroud',              slot:'body',  g:'veil',     eff:{speed:.08, area:.05},        d:'+8% speed, +5% area' },
+    mail:    { n:'Bloodmail',           slot:'body',  g:'leech',    eff:{leech:.02, hpmul:-.05},      d:'2% of damage healed, -5% max HP' },
+    gloves:  { n:'Gilded Gloves',       slot:'hands', g:'greed',    eff:{greed:.2},                   d:'+20% gold' },
+    gauntlet:{ n:'Splitting Gauntlet',  slot:'hands', g:'multi',    eff:{amt:1, cd:-.06},             d:'+1 projectile, +6% cooldown' },
+    wraps:   { n:'Surgeon’s Wraps',     slot:'hands', g:'keen',     eff:{crit:.08, critdmg:.25},      d:'+8% crit, +25% crit damage' },
+    boots:   { n:'Runner’s Boots',      slot:'feet',  g:'boots',    eff:{speed:.12},                  d:'+12% speed' },
+    greaves: { n:'Lead Greaves',        slot:'feet',  g:'heft',     eff:{kb:.4, armor:1, speed:-.04}, d:'+40% knockback, +1 armour, -4% speed' },
+    ring:    { n:'Bloodstone Ring',     slot:'ring',  g:'bloodlust',eff:{lust:.02, might:.05},        d:'+2% damage per kill, +5% damage' },
+    band:    { n:'Hourglass Band',      slot:'ring',  g:'clock',    eff:{cd:.08, dur:.15},            d:'-8% cooldown, +15% duration' },
+    signet:  { n:'Magnet Signet',       slot:'ring',  g:'magnet',   eff:{magnet:.4, growth:.05},      d:'+40% pull, +5% experience' },
+    charm:   { n:'Ash Charm',           slot:'charm', g:'regen',    eff:{regen:.6},                   d:'+0.6 HP/s' },
+    tooth:   { n:'Lord’s Tooth',        slot:'charm', g:'fang',     eff:{might:.12, hpmul:-.08},      d:'+12% damage, -8% max HP' },
+    eye:     { n:'Warden’s Eye',        slot:'charm', g:'sight',    eff:{area:.12, pspd:.12},         d:'+12% area, +12% shot speed' }
+  };
+  var RELIC_IDS = Object.keys(RELICS);
+  var VIAL_COST = 150, FLASK_COST = 60, CARRY_MAX = 3;
   var EVENT_TEXT = { wall:'They come as a wall', ring:'They close from every side', elites:'Champions walk', swarm:'The sky fills', bloodmoon:'Blood moon: everything is worth double',
                      fog:'The fog comes in', mini:'', lord:'' };
 
@@ -935,7 +989,12 @@
     Q('navedawn', 'm', 'Vespers',           'Survive the Cathedral until dawn.',          function (m) { return !!m.stats.dawns.nave; }, { gold:500, map:'undercity' }),
     Q('hunger',   'm', 'Fasting',           'Put down the Lord of Hunger.',               function (m) { return !!m.stats.lordKills.hunger; }, { gold:300 }),
     Q('underdawn','m', 'Sunrise Below',     'Survive the Undercity until dawn.',          function (m) { return !!m.stats.dawns.undercity; }, { gold:800 }),
-    Q('mother',   'm', 'Matricide',         'Put down the Mother of Leeches.',            function (m) { return !!m.stats.lordKills.mother; }, { gold:1000 })
+    Q('mother',   'm', 'Matricide',         'Put down the Mother of Leeches.',            function (m) { return !!m.stats.lordKills.mother; }, { gold:1000 }),
+    Q('relic1',   'm', 'Brought Home',      'Retrieve a relic with a vial.',              function (m) { for (var k in m.relics) return true; return false; }, { gold:100 }),
+    Q('relics6',  'm', 'Dressed',           'Wear six relics at once in a night.',        function (m, r) { return r && r.worn >= 6; }, { gold:200 }),
+    Q('wardrobe', 'm', 'Collector',         'Retrieve ten relics, all time.',             function (m) { var n = 0; for (var k in m.relics) n++; return n >= 10; }, { gold:300 }, function (m) { var n = 0; for (var k in m.relics) n++; return n/10; }),
+    Q('agonyDawn','m', 'Agony',             'Survive any ground in Agony until dawn.',    function (m) { for (var k in m.stats.agonyDawns) return true; return false; }, { gold:1000 }),
+    Q('lords2',   'm', 'Two in a Night',    'Put down two lords in one night.',           function (m, r) { return r && r.lords >= 2; }, { gold:400 })
   ];
   CHARS.forEach(function (c) {
     QUESTS.push(Q(c.id + '1', c.id, c.n + ', fed', 'Feed on 200 as ' + c.n + '.', function (m) { return (m.stats.charKills[c.id] || 0) >= 200; }, { gold:100 }, function (m) { return (m.stats.charKills[c.id] || 0)/200; }));
@@ -968,7 +1027,8 @@
             daily: !!daily, chestN: 0, spawnT: 0, tli: 0, warned: false, bosses: [], moonT: 0, fogT: 0, warnT: 0, slowT: 0, lust: 0, lustT: 0,
             combo: 0, comboT: 0, best: 0, rerolls: Math.round(metaStat('reroll') + (te.reroll || 0)), banishes: Math.round(metaStat('banish')), banned: {},
             met: {}, maxW: 1, dawnSeen: false, evolved: 0, minis: 0, lords: 0, elites: 0, chests: 0, firstHit: -1, dmgTaken: 0, maxed: 0,
-            revived: false, sched: [], finalDown: false, lordKills: {}, banner: 0, nextEv: null };
+            revived: false, sched: [], finalDown: false, lordKills: {}, banner: 0, nextEv: null, agony: !!meta.agony[mapId] && !!meta.stats.dawns[mapId],
+            found: [], lost: [], flasks: meta.flasks || 0, worn: 0 };
     function b(k) { return metaStat(k) + (ch.bonus[k] || 0) + (te[k] || 0); }
     P = { x: 0, y: 0, r: 11, fx: 1, fy: 0, ax: 1, ay: 0, manualAim: 0, vx: 0, vy: 0, hp: 100, maxHp: 100, hurtT: 0, inv: 0, bob: 0,
           base: { hp: 100 + b('hp'), cd: b('cd'), armor: b('armor'), area: b('area'), regen: b('regen'), amt: 0, luck: b('luck'), speed: b('speed'),
@@ -976,8 +1036,9 @@
                   critdmg: b('critdmg'), thorns: b('thorns'), leech: b('leech'), kb: 0, dur: 0, pspd: 0, light: 0, lust: 0, spawn: 0, hpmul: 0 },
           wmods: { dmg: te.wdmg || {}, area: te.warea || {}, amt: te.wamt || {}, r: te.wr || {}, pierce: te.wpierce || {} },
           flags: { fangHeal: te.fangHeal || 0, poolHeal: te.poolHeal || 0 },
-          weapons: [], traits: {}, cds: {} };
-    P.maxHp = P.base.hp; P.hp = P.maxHp;
+          weapons: [], traits: {}, cds: {}, wear: {} };
+    SLOTS.forEach(function (sl) { var id = meta.wear[sl]; if (id && meta.relics[id] && RELICS[id]) P.wear[sl] = id; });
+    recomputeHp(); P.hp = P.maxHp;
     foes.length = 0; shots.length = 0; motes.length = 0; parts.length = 0; nums.length = 0; zones.length = 0; hazards.length = 0; decals.length = 0;
     camX = 0; camY = 0; shake = 0; hitStop = 0; flash = 0; pendingLevels = 0;
     addWeapon(ch.weapon); bossBar(); bannerEl.classList.remove('on'); lastHudT = -1;
@@ -989,7 +1050,23 @@
   function stat(k) {
     var v = P.base[k] || 0;
     for (var id in P.traits) { var td = TRAITS[id], n = P.traits[id]; if (td.stat === k) v += td.per * n; if (td.bad && td.bad.stat === k) v += td.bad.per * n; }
+    for (var sl in P.wear) { var re = RELICS[P.wear[sl]]; if (re && re.eff[k]) v += re.eff[k]; }
     return v;
+  }
+  function wornCount() { var n = 0; for (var sl in P.wear) n++; return n; }
+  function giveRelic(id) {
+    var re = RELICS[id], old = P.wear[re.slot];
+    P.wear[re.slot] = id; recomputeHp(); run.worn = Math.max(run.worn, wornCount());
+    if (run.found.indexOf(id) < 0) run.found.push(id);
+    if (old && old !== id && run.found.indexOf(old) >= 0) { run.found.splice(run.found.indexOf(old), 1); run.lost.push(old); }
+    banner(re.n, (old && old !== id ? 'replaces ' + RELICS[old].n + ' · ' : '') + re.d); Snd.evo(); buzz([8, 20, 8]); flash = 0.3; flashCol = INK.gold;
+    burst(P.x, P.y, 26, INK.gold, 200); paintLoadout();
+  }
+  function dropRelic(x, y) {
+    var worn = {}; for (var sl in P.wear) worn[P.wear[sl]] = 1;
+    var pool = RELIC_IDS.filter(function (id) { return !worn[id] && run.found.indexOf(id) < 0; });
+    if (!pool.length) pool = RELIC_IDS;
+    motes.push({ x:x, y:y, kind:'relic', id: rpick(pool), t:0 });
   }
   function areaMul() { return Math.max(0.5, 1 + stat('area')); }
   function cdMul() { return Math.max(0.3, 1 - stat('cd')); }
@@ -1021,9 +1098,10 @@
     return v;
   }
   function recomputeHp() {
-    var mh = Math.round((P.base.hp + (P.traits.vigour || 0)*TRAITS.vigour.per) * (1 + stat('hpmul')));
+    var mh = Math.round((P.base.hp + (P.traits.vigour || 0)*TRAITS.vigour.per + wearStat('hp')) * (1 + stat('hpmul')));
     var d = mh - P.maxHp; P.maxHp = Math.max(20, mh); if (d > 0) P.hp += d; P.hp = Math.min(P.hp, P.maxHp);
   }
+  function wearStat(k) { var v = 0; for (var sl in P.wear) { var re = RELICS[P.wear[sl]]; if (re && re.eff[k]) v += re.eff[k]; } return v; }
   function later(delay, fn) { run.sched.push({ t: run.t + delay, fn: fn }); }
 
   /* ---------------- spatial hash ---------------- */
@@ -1044,8 +1122,9 @@
 
   /* ---------------- spawning ---------------- */
   function foeCount() { var n = 0; for (var i = 0; i < foes.length; i++) if (!foes[i].dead) n++; return n; }
-  function hpMul() { var m = run.t/60; return 1 + m*0.33 + m*m*0.018; }
-  function dmgMul() { return 1 + (run.t/60)*0.09; }
+  function hpMul() { var m = run.t/60; return (1 + m*0.33 + m*m*0.018) * (run.agony ? 1.6 : 1); }
+  function dmgMul() { return (1 + (run.t/60)*0.09) * (run.agony ? 1.3 : 1); }
+  function agonyMul() { return run.agony ? 1.5 : 1; }
   function rosterNow() { var list = [], r = run.map.roster; for (var k in r) if (run.min >= +k) list = list.concat(r[k]); return list; }
   function makeFoe(kind, def, x, y) {
     var f = { k: kind, def: def, x: x, y: y, hp: def.hp*hpMul(), maxHp: 0, r: def.r, spd: def.spd*rr(0.9, 1.1), dmg: def.dmg*dmgMul(), dead: false, flash: 0, kx: 0, ky: 0,
@@ -1065,7 +1144,7 @@
     var def = kind === 'lord' ? LORDS[id] : MINIS[id];
     var a = rr(0, Math.PI*2), R0 = Math.max(cssW, cssH)*0.55;
     var f = makeFoe(id, def, P.x + Math.cos(a)*R0, P.y + Math.sin(a)*R0);
-    f.hp = def.hp * (1 + run.t/60*0.06); f.maxHp = f.hp; f.boss = kind; f.spd = def.spd; f.dmg = def.dmg*dmgMul();
+    f.hp = def.hp * (1 + run.t/60*0.06) * (run.agony ? 1.5 : 1); f.maxHp = f.hp; f.boss = kind; f.spd = def.spd; f.dmg = def.dmg*dmgMul(); f.baseSpd = f.spd; f.baseDmg = f.dmg; f.age = 0;
     foes.push(f); run.bosses.push(f);
     banner(def.n, kind === 'lord' ? def.sub : 'Champion'); bossBar(); Snd.boss(); shake = kind === 'lord' ? 26 : 16; flash = 0.5; flashCol = INK.blood;
     burst(f.x, f.y, 40, def.eye, 260);
@@ -1091,7 +1170,7 @@
     if (EVENT_TEXT[ev.ev]) toast(EVENT_TEXT[ev.ev]);
   }
   function updateSpawns(dt) {
-    var m = run.min, cap = Math.round((30 + m*9) * (1 + stat('spawn'))), every = Math.max(0.14, 0.42 - m*0.025) / (1 + stat('spawn'));
+    var m = run.min, sp = 1 + stat('spawn') + (run.agony ? 0.3 : 0), cap = Math.round((30 + m*9) * sp), every = Math.max(0.14, 0.42 - m*0.025) / sp;
     if (run.moonT > 0) every *= 0.6;
     run.spawnT -= dt;
     if (run.spawnT <= 0 && foeCount() < cap) { run.spawnT = every; spawnFoe(rpick(rosterNow())); }
@@ -1193,9 +1272,9 @@
     f.dead = true; run.kills++; meta.stats.kills++; meta.stats.charKills[run.char.id] = (meta.stats.charKills[run.char.id] || 0) + 1;
     run.combo++; run.comboT = 2.2;
     if (stat('lust') > 0) { run.lust = Math.min(10, run.lust + 1); run.lustT = 3; }
-    var xp = f.def.xp * (f.elite ? 3 : 1) * (1 + run.min*0.08) * (run.moonT > 0 ? 2 : 1);
+    var xp = f.def.xp * (f.elite ? 3 : 1) * (1 + run.min*0.08) * (run.moonT > 0 ? 2 : 1) * agonyMul();
     dropMotes(f.x, f.y, Math.round(xp));
-    if (f.elite || f.boss) { motes.push({ x:f.x, y:f.y, kind:'chest', t:0 }); if (f.elite) { run.elites++; meta.stats.elites++; } }
+    if (f.elite || f.boss) { motes.push({ x:f.x, y:f.y, kind:'chest', t:0 }); if (f.elite) { run.elites++; meta.stats.elites++; if (R() < 0.04 + stat('luck')*0.04) dropRelic(f.x, f.y); } }
     else if (R() < 0.012 + stat('luck')*0.02) motes.push({ x:f.x, y:f.y, kind:'gold', v: 3 + rri(5), t:0 });
     else if (R() < 0.004) motes.push({ x:f.x, y:f.y, kind:'vial', t:0 });
     burst(f.x, f.y, f.boss ? 70 : (f.elite ? 22 : 7), f.def.col, f.boss ? 240 : 120);
@@ -1208,6 +1287,7 @@
       else { run.lords++; meta.stats.bosses++; run.lordKills[f.k] = 1; meta.stats.lordKills[f.k] = 1; if (LORDS[f.k] && run.map.timeline.some(function (e) { return e.id === f.k && e.final; })) run.finalDown = true; }
       bossBar(); shake = 30; hitStop = 0.3; flash = 0.6; flashCol = INK.bone; toast(f.def.n + ' is put down'); Snd.kill(true); Snd.boss();
       for (var g = 0; g < (f.boss === 'lord' ? 6 : 3); g++) motes.push({ x:f.x + rr(-30, 30), y:f.y + rr(-30, 30), kind:'gold', v: 8 + rri(8), t:0 });
+      dropRelic(f.x + rr(-20, 20), f.y + rr(-20, 20));
     } else Snd.kill(f.elite || f.def.hp > 60);
   }
   function explodeAt(x, y, r, dmg, col) {
@@ -1231,11 +1311,17 @@
     Snd.hurt(); buzz(20);
     if (src && stat('thorns') > 0) hurtFoe(src, stat('thorns'), null, 0.6, true);
     if (src && src.def.heal) src.hp = Math.min(src.maxHp, src.hp + dmg*2);
+    useFlask();
     if (P.hp <= 0) {
       if (stat('revive') > 0 && !run.revived) { run.revived = true; P.hp = Math.round(P.maxHp*0.5); P.inv = 2.5; toast('Second night'); burst(P.x, P.y, 40, INK.bone, 260); Snd.evo(); flash = 0.7; flashCol = INK.bone;
         nearFoes(P.x, P.y, 160, function (f) { var dx = f.x-P.x, dy = f.y-P.y, l = Math.hypot(dx, dy) || 1; f.kx += dx/l*600; f.ky += dy/l*600; }); return; }
       P.hp = 0; endRun(false);
     }
+  }
+  function useFlask() {
+    if (!(P.hp > 0 && P.hp < P.maxHp*0.25 && run.flasks > 0)) return;
+    run.flasks--; meta.flasks = Math.max(0, (meta.flasks || 0) - 1); saveMeta(); heal(Math.round(P.maxHp*0.45));
+    toast('Flask · ' + run.flasks + ' left'); Snd.vial(); burst(P.x, P.y, 18, INK.green, 140); paintFlask();
   }
   function gainXp(v) {
     run.xp += v * (1 + stat('growth'));
@@ -1269,6 +1355,8 @@
     for (var q = 0; q < n; q++) { var aq = a0 + q/n*6.283; shots.push({ kind:'foe', x:f.x, y:f.y, vx:Math.cos(aq)*spd, vy:Math.sin(aq)*spd, r:5, t:0, life:3.6, dmg:dmg, ink:'violet' }); }
   }
   function bossAI(f, dt, dx, dy, dl) {
+    // Lords get worse the longer they stand: Halls of Torment's rule, kept.
+    f.age += dt; if (f.boss === 'lord') { var en = 1 + Math.floor(f.age/60)*0.15; f.dmg = f.baseDmg*en; if (!f.enr || f.enr < en) { if (f.enr) { toast(f.def.n + ' grows stronger'); flash = 0.3; flashCol = INK.blood; } f.enr = en; f.spd = f.baseSpd*(f.phase2 ? 1.25 : 1)*(1 + (en-1)*0.5); } }
     if (!f.phase2 && f.hp < f.maxHp*0.5) { f.phase2 = true; f.spd *= 1.25; toast(f.def.n + ' is bleeding'); flash = 0.4; flashCol = INK.blood; burst(f.x, f.y, 40, f.def.eye, 240); Snd.warn(); }
     if (f.act) return;
     f.mvT -= dt; if (f.mvT > 0) return;
@@ -1297,6 +1385,7 @@
     updateAim(dt);
     P.inv = Math.max(0, P.inv - dt); P.hurtT = Math.max(0, P.hurtT - dt*2.2);
     if (stat('regen') > 0) heal(stat('regen')*dt);
+    useFlask();
     run.moonT = Math.max(0, run.moonT - dt); run.fogT = Math.max(0, run.fogT - dt); run.warnT = Math.max(0, run.warnT - dt); run.slowT = Math.max(0, run.slowT - dt);
     if (run.lustT > 0) { run.lustT -= dt; if (run.lustT <= 0) run.lust = 0; }
     run.banner = Math.max(0, run.banner - dt); if (run.banner <= 0) bannerEl.classList.remove('on');
@@ -1415,12 +1504,13 @@
     for (i = motes.length-1; i >= 0; i--) {
       var m = motes[i]; m.t += dt;
       var mdx = P.x-m.x, mdy = P.y-m.y, md = Math.hypot(mdx, mdy);
-      var pull = m.kind === 'chest' || m.kind === 'vial' ? 30 : mr;
+      var pull = m.kind === 'chest' || m.kind === 'vial' || m.kind === 'relic' ? 30 : mr;
       if (md < pull || m.pulled) { m.pulled = true; var step = Math.min(md, (380 + m.t*900)*dt); if (md > 0.01) { m.x += mdx/md*step; m.y += mdy/md*step; } }
       if (md < P.r + 8) {
         motes.splice(i, 1);
         if (m.kind === 'xp') { gainXp(m.v); Snd.pickup(m.v); }
-        else if (m.kind === 'gold') { var gv = Math.round(m.v*(1+stat('greed'))); run.gold += gv; Snd.gold(); }
+        else if (m.kind === 'gold') { var gv = Math.round(m.v*(1+stat('greed'))*agonyMul()); run.gold += gv; Snd.gold(); }
+        else if (m.kind === 'relic') { giveRelic(m.id); }
         else if (m.kind === 'vial') { heal(Math.round(P.maxHp*0.3)); toast('Vial'); Snd.vial(); burst(P.x, P.y, 14, INK.green, 120); }
         else if (m.kind === 'chest') { openChest(); }
       }
@@ -1483,7 +1573,10 @@
   }
   function moteSprite(kind, v) {
     var tier = v >= 25 ? 25 : v >= 5 ? 5 : 1;
-    return sprite('m' + kind + tier, kind === 'chest' ? 12 : (tier === 25 ? 7 : tier === 5 ? 5 : 3.5), function (g, r) {
+    return sprite('m' + kind + tier, kind === 'chest' ? 12 : kind === 'relic' ? 11 : (tier === 25 ? 7 : tier === 5 ? 5 : 3.5), function (g, r) {
+      if (kind === 'relic') { g.fillStyle = '#241119'; g.strokeStyle = INK.gold; g.lineWidth = 1.5; g.shadowColor = INK.gold; g.shadowBlur = 12;
+        g.beginPath(); g.moveTo(0, -r); g.lineTo(r*0.8, 0); g.lineTo(0, r); g.lineTo(-r*0.8, 0); g.closePath(); g.fill(); g.stroke();
+        g.fillStyle = INK.gold; g.beginPath(); g.arc(0, 0, r*0.25, 0, 6.283); g.fill(); return; }
       if (kind === 'chest') { g.fillStyle = '#3d1f28'; g.strokeStyle = INK.gold; g.lineWidth = 1.5; g.shadowColor = INK.gold; g.shadowBlur = 10; g.fillRect(-r, -r*0.7, r*2, r*1.4); g.strokeRect(-r, -r*0.7, r*2, r*1.4); g.strokeRect(-r, -r*0.7, r*2, r*0.5); return; }
       if (kind === 'gold') { g.fillStyle = INK.gold; g.shadowColor = INK.gold; g.shadowBlur = 8; g.beginPath(); g.arc(0,0,r,0,6.283); g.fill(); return; }
       if (kind === 'vial') { g.fillStyle = INK.green; g.shadowColor = INK.green; g.shadowBlur = 8; g.fillRect(-r*0.5, -r, r, r*2); return; }
@@ -1618,7 +1711,7 @@
 
     var vx0 = camX - cssW/2 - 30, vx1 = camX + cssW/2 + 30, vy0 = camY - cssH/2 - 30, vy1 = camY + cssH/2 + 30;
     for (i = 0; i < motes.length; i++) { var m = motes[i]; if (m.x < vx0 || m.x > vx1 || m.y < vy0 || m.y > vy1) continue;
-      var ms = moteSprite(m.kind, m.v || 0); g.drawImage(ms.c, m.x - ms.s/2, m.y - ms.s/2 + (m.kind === 'chest' ? Math.sin(m.t*4)*3 : 0), ms.s, ms.s); }
+      var ms = moteSprite(m.kind, m.v || 0); g.drawImage(ms.c, m.x - ms.s/2, m.y - ms.s/2 + (m.kind === 'chest' || m.kind === 'relic' ? Math.sin(m.t*4)*3 : 0), ms.s, ms.s); }
 
     // Foes, sorted nowhere: the shadow is baked into the sprite so overlap reads.
     for (i = 0; i < foes.length; i++) { var f = foes[i]; if (f.dead || f.x < vx0-60 || f.x > vx1+60 || f.y < vy0-60 || f.y > vy1+60) continue;
@@ -1666,6 +1759,13 @@
     g.globalAlpha = 1;
     g.restore();
 
+    // Off-screen champions and lords: a gold tick at the edge, pointing at them.
+    for (i = 0; i < run.bosses.length; i++) { var bz = run.bosses[i]; if (bz.dead) continue; var bx = bz.x - camX, by = bz.y - camY;
+      if (Math.abs(bx) < cssW/2 - 30 && Math.abs(by) < cssH/2 - 30) continue;
+      var ang = Math.atan2(by, bx), ex = cssW/2 + Math.cos(ang)*Math.min(cssW/2 - 26, Math.abs((cssW/2 - 26)/Math.max(0.01, Math.cos(ang)))), ey = cssH/2 + Math.sin(ang)*Math.min(cssH/2 - 26, Math.abs((cssH/2 - 26)/Math.max(0.01, Math.sin(ang))));
+      var k = Math.min((cssW/2 - 26)/Math.abs(Math.cos(ang) || 0.01), (cssH/2 - 26)/Math.abs(Math.sin(ang) || 0.01)); ex = cssW/2 + Math.cos(ang)*k; ey = cssH/2 + Math.sin(ang)*k;
+      g.save(); g.translate(ex, ey); g.rotate(ang); g.fillStyle = INK.gold; g.globalAlpha = 0.7 + 0.3*Math.sin(t*6); g.beginPath(); g.moveTo(10, 0); g.lineTo(-6, -7); g.lineTo(-6, 7); g.closePath(); g.fill();
+      g.globalAlpha = 1; g.restore(); }
     if (settings.weather) drawWeather(g, map, t);
     vignette(g, run.fogT > 0 ? Math.min(1, run.fogT/4) : 0);
     if (run.moonT > 0) { var mk = Math.min(1, run.moonT/3); var mg = g.createLinearGradient(0, 0, 0, cssH); mg.addColorStop(0, 'rgba(184,29,58,' + (0.22*mk).toFixed(3) + ')'); mg.addColorStop(1, 'rgba(184,29,58,' + (0.06*mk).toFixed(3) + ')'); g.fillStyle = mg; g.fillRect(0, 0, cssW, cssH); }
@@ -1714,8 +1814,10 @@
     P.weapons.forEach(function (w) { var d = w.evo ? w.def.evo : w.def;
       h += '<div class="w' + (w.evo ? ' evo' : '') + (w.lv >= WMAX ? ' max' : '') + '" style="color:' + INK[w.def.ink] + '">' + svg(d.g) + '<i>' + (w.evo ? '★' : w.lv) + '</i></div>'; });
     for (var id in P.traits) h += '<div class="w" style="color:#8f6f76">' + svg(TRAITS[id].g) + '<i>' + P.traits[id] + '</i></div>';
-    loadoutEl.innerHTML = h;
+    for (var sl in P.wear) h += '<div class="w relic" style="color:#d9a441">' + svg(RELICS[P.wear[sl]].g) + '</div>';
+    loadoutEl.innerHTML = h; paintFlask();
   }
+  function paintFlask() { var el = $('flaskLab'); if (!run) return; el.textContent = (run.flasks ? 'flasks ' + run.flasks : '') + (run.flasks && meta.vials ? ' · ' : '') + (meta.vials ? 'vial ' + meta.vials : ''); el.classList.toggle('on', !!(run.flasks || meta.vials)); }
 
   /* ---------------- level up ---------------- */
   var luList = $('luList'), luTitle = $('luTitle'), bReroll = $('bReroll'), rerollN = $('rerollN'), bBanish = $('bBanish'), banishN = $('banishN'), bSkip = $('bSkip'), luHint = $('luHint'), luTier = $('luTier');
@@ -1861,6 +1963,21 @@
   function paintHub() {
     $('hubGold').textContent = meta.gold + ' gold';
     if (!meta.maps[selMap]) selMap = 'street'; if (!charOpen(charById(selChar))) selChar = 'novice';
+    var canAgony = !!meta.stats.dawns[selMap]; $('agonyRow').style.display = canAgony ? '' : 'none'; setSwitch($('swAgony'), !!meta.agony[selMap]);
+    $('agonyD').textContent = 'Everything harder. Half again the gold and blood.' + (meta.stats.bestAgony[selMap] ? ' Best ' + fmtTime(meta.stats.bestAgony[selMap]) + '.' : '');
+    // The Well.
+    var vials = meta.vials || 0, flasks = meta.flasks || 0;
+    $('wellShop').innerHTML = '<button class="shopi" id="bVial"' + (vials >= CARRY_MAX || meta.gold < VIAL_COST ? ' disabled' : '') + '><span style="color:#c3a9ad;width:20px">' + svg('font') + '</span><span class="n">Vial of Retrieval<small>Drunk as the night ends. Everything you wear comes home. Carry ' + vials + ' / ' + CARRY_MAX + '.</small></span><span class="cost">' + VIAL_COST + '</span></button>'
+      + '<button class="shopi" id="bFlask"' + (flasks >= CARRY_MAX || meta.gold < FLASK_COST ? ' disabled' : '') + '><span style="color:#c3a9ad;width:20px">' + svg('regen') + '</span><span class="n">Flask<small>Drunk on its own when you drop under a quarter. Heals 45%. Carry ' + flasks + ' / ' + CARRY_MAX + '.</small></span><span class="cost">' + FLASK_COST + '</span></button>';
+    $('bVial').onclick = function () { if (meta.gold < VIAL_COST || vials >= CARRY_MAX) return; meta.gold -= VIAL_COST; meta.vials = vials + 1; saveMeta(); paintHub(); Snd.gold(); };
+    $('bFlask').onclick = function () { if (meta.gold < FLASK_COST || flasks >= CARRY_MAX) return; meta.gold -= FLASK_COST; meta.flasks = flasks + 1; saveMeta(); paintHub(); Snd.vial(); };
+    var wh = '';
+    SLOTS.forEach(function (sl) { var have = RELIC_IDS.filter(function (id) { return RELICS[id].slot === sl && meta.relics[id]; });
+      wh += '<div class="slotrow"><span class="micro sl">' + sl + '</span><span class="opts">' + (have.length ? have.map(function (id) { return '<button data-slot="' + sl + '" data-id="' + id + '" class="' + (meta.wear[sl] === id ? 'on' : '') + '" title="' + esc(RELICS[id].d) + '">' + svg(RELICS[id].g) + esc(RELICS[id].n) + '</button>'; }).join('') + '<button data-slot="' + sl + '" data-id="" class="' + (meta.wear[sl] ? '' : 'on') + '">none</button>' : '<span class="none">nothing retrieved</span>') + '</span></div>'; });
+    var wornD = SLOTS.filter(function (sl) { return meta.wear[sl] && meta.relics[meta.wear[sl]]; }).map(function (sl) { return RELICS[meta.wear[sl]].d; });
+    $('wellSlots').innerHTML = wh + (wornD.length ? '<p class="optd" style="margin:8px 0 0">Wearing: ' + esc(wornD.join(' · ')) + '</p>' : '');
+    var wb = $('wellSlots').querySelectorAll('button'); for (var wi = 0; wi < wb.length; wi++) (function (b) { b.onclick = function () { if (b.dataset.id) meta.wear[b.dataset.slot] = b.dataset.id; else delete meta.wear[b.dataset.slot]; saveMeta(); paintHub(); Snd.tick(); }; })(wb[wi]);
+    var spent = meta.spent || 0; $('bRefund').disabled = spent <= 0; $('refundD').textContent = spent > 0 ? 'Returns ' + Math.round(spent*0.8) + ' of the ' + spent + ' gold spent, and clears every rank.' : 'Nothing spent yet.';
     $('mapList').innerHTML = MAP_IDS.map(function (id) { var mp = MAPS[id], ok = !!meta.maps[id], best = meta.stats.best[id];
       return '<button class="map' + (id === selMap ? ' sel' : '') + (ok ? '' : ' lock') + '" data-id="' + id + '" style="--ink:' + INK[mp.ink] + '"' + (ok ? '' : ' disabled') + '><div class="n">' + esc(mp.n) + '</div><div class="d">' + (ok ? mp.sub + (best ? ' · ' + fmtTime(best) : '') + (meta.stats.dawns[id] ? ' · dawn' : '') : 'Locked — ' + (questById(mp.unlock) || {}).n) + '</div></button>'; }).join('');
     var mb = $('mapList').querySelectorAll('.map'); for (var i = 0; i < mb.length; i++) (function (b) { b.onclick = function () { selMap = b.dataset.id; paintHub(); Snd.tick(); }; })(mb[i]);
@@ -1871,7 +1988,7 @@
     // Blessings.
     $('shopList').innerHTML = BLESS.map(function (s) { var r = meta.bless[s.id] || 0, full = r >= s.ranks, cost = blessCost(s, r), locked = s.quest && !questDone(s.quest); var pips = ''; for (var k = 0; k < s.ranks; k++) pips += '<i class="' + (k < r ? 'on' : '') + '"></i>';
       return '<button class="shopi" data-id="' + s.id + '"' + (full || locked || meta.gold < cost ? ' disabled' : '') + '><span style="color:#c3a9ad;width:20px">' + svg(s.g) + '</span><span class="n">' + esc(s.n) + '<small>' + (locked ? 'Locked — ' + esc(questById(s.quest).n) : esc(s.d)) + '</small></span><span class="pips">' + pips + '</span><span class="cost">' + (full ? 'MAX' : locked ? '—' : cost) + '</span></button>'; }).join('');
-    var sb = $('shopList').querySelectorAll('.shopi'); for (i = 0; i < sb.length; i++) (function (b) { b.onclick = function () { var s = BLESS.filter(function (x) { return x.id === b.dataset.id; })[0]; var r = meta.bless[s.id] || 0, cost = blessCost(s, r); if (r >= s.ranks || meta.gold < cost) return; meta.gold -= cost; meta.bless[s.id] = r+1; saveMeta(); paintHub(); Snd.gold(); buzz(8); }; })(sb[i]);
+    var sb = $('shopList').querySelectorAll('.shopi'); for (i = 0; i < sb.length; i++) (function (b) { b.onclick = function () { var s = BLESS.filter(function (x) { return x.id === b.dataset.id; })[0]; var r = meta.bless[s.id] || 0, cost = blessCost(s, r); if (r >= s.ranks || meta.gold < cost) return; meta.gold -= cost; meta.spent = (meta.spent || 0) + cost; meta.bless[s.id] = r+1; saveMeta(); paintHub(); Snd.gold(); buzz(8); }; })(sb[i]);
     // Attunements.
     if (!charOpen(charById(treeChar))) treeChar = 'novice';
     $('treeChars').innerHTML = CHARS.filter(charOpen).map(function (c) { return '<button class="map' + (c.id === treeChar ? ' sel' : '') + '" data-id="' + c.id + '" style="--ink:' + INK[WEAPONS[c.weapon].ink] + ';padding:7px 6px"><div class="n">' + esc(c.n) + '</div></button>'; }).join('');
@@ -1901,13 +2018,15 @@
     bindColl(cw, false); bindColl(ce, true);
     $('statList').innerHTML = '<div class="kv"><span>Nights</span><b>' + meta.stats.runs + '</b></div><div class="kv"><span>Fed, all time</span><b>' + meta.stats.kills + '</b></div><div class="kv"><span>Longest night</span><b>' + fmtTime(meta.stats.bestAny) + '</b></div><div class="kv"><span>Evolutions</span><b>' + meta.stats.evolved + '</b></div><div class="kv"><span>Champions · Lords</span><b>' + meta.stats.minis + ' · ' + meta.stats.bosses + '</b></div><div class="kv"><span>Gold, all time</span><b>' + meta.stats.goldAll + '</b></div>';
   }
+  $('bRefund').addEventListener('click', function () { var spent = meta.spent || 0; if (spent <= 0) return; meta.gold += Math.round(spent*0.8); meta.spent = 0; meta.bless = {}; saveMeta(); paintHub(); toast('Blessings refunded'); Snd.quest(); });
+  $('swAgony').addEventListener('click', function () { meta.agony[selMap] = !meta.agony[selMap]; saveMeta(); paintHub(); Snd.tick(); });
   var tabs = mainEl.querySelectorAll('.tabs button');
   for (var ti = 0; ti < tabs.length; ti++) (function (b) { b.onclick = function () { for (var k = 0; k < tabs.length; k++) tabs[k].classList.toggle('on', tabs[k] === b);
-    ['play','shop','tree','quest','coll'].forEach(function (t) { $('tab' + t.charAt(0).toUpperCase() + t.slice(1)).classList.toggle('on', b.dataset.tab === t); });
+    ['play','shop','well','tree','quest','coll'].forEach(function (t) { $('tab' + t.charAt(0).toUpperCase() + t.slice(1)).classList.toggle('on', b.dataset.tab === t); });
     if (b.dataset.tab === 'quest') { hubNew = 0; $('qDot').style.display = 'none'; } Snd.tick(); }; })(tabs[ti]);
   function startRun(daily) {
     mainEl.classList.remove('on'); overEl.classList.remove('on'); pauseEl.classList.remove('on'); hudEl.classList.remove('off');
-    newRun(selChar, selMap, daily); syncPause(); Snd.ambient(true); banner(run.map.n, run.char.n + ' · ' + fmtTime(run.dur));
+    newRun(selChar, selMap, daily); syncPause(); Snd.ambient(true); banner(run.map.n + (run.agony ? ' · Agony' : ''), run.char.n + ' · ' + fmtTime(run.dur) + (meta.vials ? ' · vial in pocket' : ''));
     if (meta.stats.runs <= 2) later(2.8, function () { toast('Left thumb moves. Right thumb aims, or let auto-aim do it.'); });
   }
   $('bHunt').addEventListener('click', function () { startRun(false); });
@@ -1916,27 +2035,34 @@
   $('bAgain').addEventListener('click', function () { startRun(run && run.daily); });
   $('bMenu').addEventListener('click', function () { overEl.classList.remove('on'); hudEl.classList.add('off'); run = null; P = null; paintHub(); mainEl.classList.add('on'); });
 
-  function runSummary() { return { kills:run.kills, t:run.t, lv:run.lv, best:run.best, maxW:run.maxW, dawnSeen:run.dawnSeen, char:run.char.id, map:run.mapId, minis:run.minis, lords:run.lords, elites:run.elites, evolved:run.evolved, firstHit: run.firstHit < 0 ? run.t : run.firstHit, maxed:run.maxed, daily:run.daily }; }
+  function runSummary() { return { kills:run.kills, t:run.t, lv:run.lv, best:run.best, maxW:run.maxW, dawnSeen:run.dawnSeen, char:run.char.id, map:run.mapId, minis:run.minis, lords:run.lords, elites:run.elites, evolved:run.evolved, firstHit: run.firstHit < 0 ? run.t : run.firstHit, maxed:run.maxed, daily:run.daily, worn:run.worn, agony:run.agony }; }
   function endRun(dawn) {
     if (!run || run.over) return;
     run.over = true; run.paused = true; run.dawnSeen = !!dawn;
     Snd.ambient(false);
     if (!dawn) { Snd.death(); shake = 26; burst(P.x, P.y, 60, INK.blood, 240); flash = 0.6; flashCol = INK.blood; } else { Snd.dawn(); flash = 1; flashCol = INK.bone; }
-    var gold = run.gold + Math.round(run.t/60*10*(1+stat('greed'))) + Math.round(run.kills*0.05) + (dawn ? 100 : 0) + (run.finalDown ? 150 : 0);
+    var gold = Math.round((run.gold + Math.round(run.t/60*10*(1+stat('greed'))) + Math.round(run.kills*0.05) + (dawn ? 100 : 0) + (run.finalDown ? 150 : 0)) * (run.agony ? 1.25 : 1));
+    // The vial: drunk now, if there is one. Everything worn comes home.
+    var kept = [], lost = run.lost.slice();
+    if (run.found.length) { if ((meta.vials || 0) > 0) { meta.vials--; run.found.forEach(function (id) { meta.relics[id] = 1; kept.push(id); }); } else lost = lost.concat(run.found); }
     meta.gold += gold; meta.stats.goldAll += gold;
     var st = meta.stats, sec = Math.floor(run.t);
     st.bestAny = Math.max(st.bestAny, sec); st.best[run.mapId] = Math.max(st.best[run.mapId] || 0, sec); st.charBest[run.char.id] = Math.max(st.charBest[run.char.id] || 0, sec);
     st.bestCombo = Math.max(st.bestCombo, run.best); st.bestLv = Math.max(st.bestLv, run.lv);
-    if (dawn) st.dawns[run.mapId] = (st.dawns[run.mapId] || 0) + 1;
+    if (dawn) { st.dawns[run.mapId] = (st.dawns[run.mapId] || 0) + 1; if (run.agony) st.agonyDawns[run.mapId] = 1; }
+    if (run.agony) st.bestAgony[run.mapId] = Math.max(st.bestAgony[run.mapId] || 0, sec);
     if (run.daily) { meta.dailyDone = dailyKey(); st.dailies++; }
     try { localStorage.setItem(BKEY, String(st.bestAny)); } catch (e) {}
     var got = checkQuests(runSummary()); hubNew += got.length; saveMeta();
     if (got.length) setTimeout(function () { Snd.quest(); }, 500);
     setTimeout(function () {
-      $('overTitle').textContent = dawn ? 'Dawn' : 'Taken';
+      $('overTitle').textContent = (dawn ? 'Dawn' : 'Taken') + (run.agony ? ' · Agony' : '');
       $('overTime').innerHTML = fmtTime(run.t) + '<small>' + (dawn ? 'you saw the sun' : 'survived') + '</small>';
-      $('overStats').innerHTML = '<div class="kv"><span>Fed</span><b>' + run.kills + '</b></div><div class="kv"><span>Level</span><b>' + run.lv + '</b></div><div class="kv"><span>Best feast</span><b>×' + run.best + '</b></div><div class="kv"><span>Champions · Lords</span><b>' + run.minis + ' · ' + run.lords + '</b></div><div class="kv"><span>Evolutions</span><b>' + run.evolved + '</b></div><div class="kv"><span>Gold banked</span><b>+' + gold + '</b></div>';
-      $('overUnlock').innerHTML = got.length ? '<div class="rule"></div>' + got.map(function (q) { return '<div class="quest on"><span class="dot"></span><span>' + esc(q.n) + '<small>' + esc(q.d) + '</small></span><span class="rw">' + esc(rewardText(q.reward)) + '</span></div>'; }).join('') : '';
+      $('overStats').innerHTML = '<div class="kv"><span>Ground</span><b>' + esc(run.map.n) + (run.agony ? ' · Agony' : '') + '</b></div><div class="kv"><span>Fed</span><b>' + run.kills + '</b></div><div class="kv"><span>Level</span><b>' + run.lv + '</b></div><div class="kv"><span>Best feast</span><b>×' + run.best + '</b></div><div class="kv"><span>Champions · Lords</span><b>' + run.minis + ' · ' + run.lords + '</b></div><div class="kv"><span>Evolutions</span><b>' + run.evolved + '</b></div><div class="kv"><span>Gold banked</span><b>+' + gold + '</b></div>';
+      var rel = '';
+      if (kept.length) rel += '<div class="quest on"><span class="dot"></span><span>Retrieved<small>' + esc(kept.map(function (id) { return RELICS[id].n; }).join(', ')) + '</small></span><span class="rw">vial</span></div>';
+      if (lost.length) rel += '<div class="quest"><span class="dot"></span><span>Left in the city<small>' + esc(lost.map(function (id) { return RELICS[id].n; }).join(', ')) + '</small></span><span class="rw">' + (kept.length ? 'replaced' : 'no vial') + '</span></div>';
+      $('overUnlock').innerHTML = (rel || got.length ? '<div class="rule"></div>' + rel : '') + got.map(function (q) { return '<div class="quest on"><span class="dot"></span><span>' + esc(q.n) + '<small>' + esc(q.d) + '</small></span><span class="rw">' + esc(rewardText(q.reward)) + '</span></div>'; }).join('');
       hudEl.classList.add('off'); overEl.classList.add('on'); syncPause();
     }, dawn ? 900 : 1100);
   }
