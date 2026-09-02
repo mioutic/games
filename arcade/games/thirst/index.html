@@ -40,7 +40,11 @@
   .hud.off { display: none; }
   .xpbar { position: absolute; left: calc(var(--safe-l) + 10px); right: calc(var(--safe-r) + 10px); top: calc(var(--safe-t) + 8px);
            height: 7px; background: rgba(233,216,197,.08); border: 1px solid var(--line-1); overflow: hidden; }
-  .xpbar i { position: absolute; inset: 0 auto 0 0; background: linear-gradient(90deg, #b81d3a, #ff5470); box-shadow: 0 0 10px rgba(216,58,88,.55); }
+  .xpbar i { position: absolute; inset: 0 auto 0 0; background: linear-gradient(90deg, #b81d3a, #ff5470); box-shadow: 0 0 10px rgba(216,58,88,.55); overflow: hidden; }
+  .xpbar i::after { content: ""; position: absolute; top: 0; bottom: 0; width: 60px; left: -60px; background: linear-gradient(90deg, transparent, rgba(255,255,255,.28), transparent); animation: shimmer 2.8s linear infinite; }
+  @keyframes shimmer { to { left: 100%; } }
+  .clock.last { animation: lastten 1s ease-in-out infinite; }
+  @keyframes lastten { 50% { color: var(--accent); text-shadow: 0 0 12px rgba(255,84,112,.7); } }
   .xpbar::after { content: ""; position: absolute; inset: 0; background: repeating-linear-gradient(90deg, transparent 0 24px, rgba(11,6,9,.85) 24px 25px); }
   .toprow { position: absolute; left: calc(var(--safe-l) + 10px); right: calc(var(--safe-r) + 10px); top: calc(var(--safe-t) + 22px);
             display: flex; align-items: flex-start; gap: 8px; }
@@ -1364,7 +1368,7 @@
     if (parts.length < 330) { var sc = w ? INK[w.def.ink] : INK.bone, sdx = f.x - P.x, sdy = f.y - P.y, sl = Math.hypot(sdx, sdy) || 1;
       for (var sp = 0; sp < 2; sp++) { var sa = Math.atan2(sdy, sdx) + Math.PI + rr(-0.9, 0.9), ss = rr(60, 160); parts.push({ x:f.x - sdx/sl*f.r*0.6, y:f.y - sdy/sl*f.r*0.6, vx:Math.cos(sa)*ss, vy:Math.sin(sa)*ss, t:0, life:rr(0.12, 0.25), col:sc, r:rr(0.8, 1.6) }); } }
     if (kb && !f.boss) { var dx = f.x-P.x, dy = f.y-P.y, l = Math.hypot(dx,dy)||1; var kk = kb*140*(1 + stat('kb')); f.kx += dx/l*kk; f.ky += dy/l*kk; }
-    if (settings.nums) addNum(f.x, f.y - f.r, dmg, crit);
+    if (settings.nums) addNum(f.x, f.y - f.r, dmg, crit, false, w ? INK[w.def.ink] : INK.bone);
     if (stat('leech') > 0) heal(dmg * stat('leech'));
     if (w && w.id === 'fang' && P.flags.fangHeal) heal(P.flags.fangHeal);
     if (!silent) { if (crit) Snd.crit(); else Snd.hit(dmg > 40); }
@@ -1394,6 +1398,8 @@
       if (f.boss === 'mini') { run.minis++; meta.stats.minis++; }
       else { run.lords++; meta.stats.bosses++; run.lordKills[f.k] = 1; meta.stats.lordKills[f.k] = 1; if (LORDS[f.k] && run.map.timeline.some(function (e) { return e.id === f.k && e.final; })) run.finalDown = true; }
       bossBar(); shake = 30; hitStop = 0.3; flash = 0.6; flashCol = INK.bone; toast(f.def.n + ' is put down'); Snd.kill(true); Snd.boss();
+      hazards.push({ kind:'blast', x:f.x, y:f.y, r: f.boss === 'lord' ? 340 : 200, t:0, life:0.9, ink:INK.bone });
+      nearFoes(f.x, f.y, 300, function (o) { if (o === f || o.boss) return; var odx = o.x-f.x, ody = o.y-f.y, ol = Math.hypot(odx, ody) || 1; o.kx += odx/ol*520; o.ky += ody/ol*520; });
       for (var g = 0; g < (f.boss === 'lord' ? 6 : 3); g++) motes.push({ x:f.x + rr(-30, 30), y:f.y + rr(-30, 30), kind:'gold', v: 8 + rri(8), t:0 });
       dropRelic(f.x + rr(-20, 20), f.y + rr(-20, 20));
     } else Snd.kill(f.elite || f.def.hp > 60);
@@ -1491,6 +1497,7 @@
     if (ml > 0.08) { if (ml > 1) { mx /= ml; my /= ml; ml = 1; } P.vx = mx*speed(); P.vy = my*speed(); P.fx = mx/ml; P.fy = my/ml; P.bob += dt*9; }
     else { P.vx *= Math.max(0, 1-dt*14); P.vy *= Math.max(0, 1-dt*14); }
     P.x += P.vx*dt; P.y += P.vy*dt;
+    if (!P.hist) P.hist = []; P.histT = (P.histT || 0) + dt; if (P.histT > 0.04) { P.histT = 0; P.hist.unshift({ x:P.x, y:P.y, fx:P.fx, fy:P.fy }); if (P.hist.length > 4) P.hist.length = 4; }
     updateAim(dt);
     P.inv = Math.max(0, P.inv - dt); P.hurtT = Math.max(0, P.hurtT - dt*2.2);
     if (stat('regen') > 0) heal(stat('regen')*dt);
@@ -1594,7 +1601,7 @@
           if (self.hit[f.id] || f.phased) return;
           var ex=f.x-self.x, ey=f.y-self.y; if (ex*ex+ey*ey >= (self.r+f.r)*(self.r+f.r)) return;
           self.hit[f.id] = 1; hurtFoe(f, self.dmg, self.w, self.kb);
-          if (self.bounces > 0) { self.bounces--; var nx = nearest(self.x, self.y, 300, true); if (nx && nx !== f) { var ba = Math.atan2(nx.y-self.y, nx.x-self.x), bv = Math.hypot(self.vx, self.vy); self.vx = Math.cos(ba)*bv; self.vy = Math.sin(ba)*bv; self.hit = {}; self.hit[f.id] = 1; } return; }
+          if (self.bounces > 0) { self.bounces--; hazards.push({ kind:'blast', x:self.x, y:self.y, r:18, t:0, life:0.22, ink:INK[self.ink] || INK.moon }); var nx = nearest(self.x, self.y, 300, true); if (nx && nx !== f) { var ba = Math.atan2(nx.y-self.y, nx.x-self.x), bv = Math.hypot(self.vx, self.vy); self.vx = Math.cos(ba)*bv; self.vy = Math.sin(ba)*bv; self.hit = {}; self.hit[f.id] = 1; } return; }
           if (self.pierce > 0) { self.pierce--; return; }
           died = true; return false;
         });
@@ -1647,7 +1654,7 @@
     for (var i = 0; i < n && parts.length < 360; i++) { var a = rr(0, 6.28), s = rr(spd*0.2, spd);
       parts.push({ x:x, y:y, vx:Math.cos(a)*s, vy:Math.sin(a)*s, t:0, life:rr(0.25, 0.6), col:col, r:rr(1.2, 3) }); }
   }
-  function addNum(x, y, v, crit, big) { if (nums.length > 48) nums.shift(); nums.push({ x:x, y:y, v:v, crit:crit, t:0, big:big }); }
+  function addNum(x, y, v, crit, big, col) { if (nums.length > 48) nums.shift(); nums.push({ x:x, y:y, v:v, crit:crit, t:0, big:big, col:col }); }
 
   /* ---------------- render ----------------
      Sprites are drawn once to offscreen canvases and blitted: paths per enemy
@@ -1705,7 +1712,7 @@
   // A light: white-hot centre, coloured edge, added into the light map.
   function lightSprite(col) {
     return sprite('L' + col, 96, function (g, R0) {
-      var grd = g.createRadialGradient(0, 0, 0, 0, 0, R0); grd.addColorStop(0, 'rgba(255,250,244,.95)'); grd.addColorStop(0.25, col + 'b0'); grd.addColorStop(0.6, col + '40'); grd.addColorStop(1, col + '00');
+      var grd = g.createRadialGradient(0, 0, 0, 0, 0, R0); grd.addColorStop(0, 'rgba(255,250,244,.8)'); grd.addColorStop(0.18, col + 'd0'); grd.addColorStop(0.35, col + '90'); grd.addColorStop(0.6, col + '40'); grd.addColorStop(1, col + '00');
       g.fillStyle = grd; g.fillRect(-R0, -R0, R0*2, R0*2);
     });
   }
@@ -1853,9 +1860,14 @@
   }
 
   var lightCv = document.createElement('canvas'), lctx = lightCv.getContext('2d'), LS = 0.5;
+  var bloomCv = document.createElement('canvas'), bctx = bloomCv.getContext('2d'), BS = 0.25;
   function drawLights(g, map, t, ox, oy) {
     var lw = Math.ceil(cssW*LS), lh = Math.ceil(cssH*LS);
     if (lightCv.width !== lw || lightCv.height !== lh) { lightCv.width = lw; lightCv.height = lh; }
+    var bw = Math.ceil(cssW*BS), bh = Math.ceil(cssH*BS);
+    if (bloomCv.width !== bw || bloomCv.height !== bh) { bloomCv.width = bw; bloomCv.height = bh; }
+    var B = bctx; B.setTransform(1, 0, 0, 1, 0, 0); B.globalCompositeOperation = 'source-over'; B.clearRect(0, 0, bw, bh);
+    B.setTransform(BS, 0, 0, BS, 0, 0); worldXf(B, ox, oy); B.globalCompositeOperation = 'lighter';
     var L = lctx, amb = map.amb.slice(), k;
     if (run) {
       if (run.fogT > 0) { k = Math.min(1, run.fogT/4); amb = amb.map(function (v) { return v*(1 - 0.45*k); }); }
@@ -1866,12 +1878,13 @@
     L.setTransform(1, 0, 0, 1, 0, 0); L.globalCompositeOperation = 'source-over';
     L.fillStyle = 'rgb(' + (amb[0]|0) + ',' + (amb[1]|0) + ',' + (amb[2]|0) + ')'; L.fillRect(0, 0, lw, lh);
     L.setTransform(LS, 0, 0, LS, 0, 0); worldXf(L, ox, oy); L.globalCompositeOperation = 'lighter';
-    function lamp(x, y, col, r, a) { var sp = lightSprite(col); if (a !== undefined) L.globalAlpha = a; L.drawImage(sp.c, x - r, y - r, r*2, r*2); L.globalAlpha = 1; }
+    function lamp(x, y, col, r, a) { var sp = lightSprite(col); if (a !== undefined) { L.globalAlpha = a; B.globalAlpha = a*0.5; } L.drawImage(sp.c, x - r, y - r, r*2, r*2); B.drawImage(sp.c, x - r*0.75, y - r*0.75, r*1.5, r*1.5); L.globalAlpha = 1; B.globalAlpha = 1; }
     var vx0 = camX - VW/2 - 200, vx1 = camX + VW/2 + 200, vy0 = camY - VH/2 - 200, vy1 = camY + VH/2 + 200, i;
     if (run && run.boltFlash > 0) { run.boltFlash -= 0.033; L.globalCompositeOperation = 'source-over'; L.fillStyle = 'rgba(233,216,197,' + (0.35*Math.max(0, run.boltFlash)).toFixed(2) + ')'; L.setTransform(1, 0, 0, 1, 0, 0); L.fillRect(0, 0, lw, lh); L.setTransform(LS, 0, 0, LS, 0, 0); worldXf(L, ox, oy); L.globalCompositeOperation = 'lighter'; }
     for (i = 0; i < lights.length; i++) { var l = lights[i]; if (l.x < vx0 || l.x > vx1 || l.y < vy0 || l.y > vy1) continue; lamp(l.x, l.y, l.col, l.r, 0.8); }
     if (!run) return;
-    lamp(P.x, P.y, INK.bone, 250*(1 + stat('light')*0.6 - (run.fogT > 0 ? 0.35*Math.min(1, run.fogT/4) : 0)), 1);
+    lamp(P.x, P.y, INK.bone, 250*(1 + stat('light')*0.6 - (run.fogT > 0 ? 0.35*Math.min(1, run.fogT/4) : 0))*(1 + 0.03*Math.sin(t*23) + 0.02*Math.sin(t*7.3)), 1);
+    var gm = 0; for (i = 0; i < motes.length && gm < 30; i++) { var gmo = motes[i]; if (gmo.kind === 'xp' && gmo.v >= 25) { gm++; lamp(gmo.x, gmo.y, INK.rose, 34, 0.5); } }
     for (i = 0; i < run.bosses.length; i++) { var bz = run.bosses[i]; if (!bz.dead) lamp(bz.x, bz.y, bz.def.eye, bz.r*4 + 60, 0.9); }
     var n = 0;
     for (i = 0; i < shots.length && n < 90; i++) { var s = shots[i]; if (s.kind === 'mine') continue; if (s.x < vx0 || s.x > vx1 || s.y < vy0 || s.y > vy1) continue; n++;
@@ -1924,7 +1937,7 @@
 
     // Foes, sorted nowhere: the shadow is baked into the sprite so overlap reads.
     for (i = 0; i < foes.length; i++) { var f = foes[i]; if (f.dead || f.x < vx0-60 || f.x > vx1+60 || f.y < vy0-60 || f.y > vy1+60) continue;
-      var fs = foeSprite(f), fw = fs.s, bob = Math.sin(t*7 + f.wob)*1.2, sq = 1 + 0.07*Math.sin(t*9 + f.wob), dw = fw*sq, dh = fw/sq;
+      var fs = foeSprite(f), fw = fs.s, bob = Math.sin(t*7 + f.wob)*1.2, sq = 1 + 0.07*Math.sin(t*9 + f.wob) + f.flash*0.14, dw = fw*sq, dh = fw*(2 - sq);
       if (f.born > 0) { var bk = 1 - f.born/(f.boss ? 0.9 : 0.4); dw *= bk; dh *= bk*bk; g.fillStyle = 'rgba(5,2,3,.6)'; g.beginPath(); g.ellipse(f.x, f.y + f.r*0.6, f.r*1.3*(1 - bk*0.5), f.r*0.5, 0, 0, 6.283); g.fill(); }
       if (f.alpha < 1) g.globalAlpha = f.alpha;
       if (f.act && f.act.k === 'dash') { g.strokeStyle = f.def.eye; g.lineWidth = f.r; g.globalAlpha = 0.25; g.beginPath(); g.moveTo(f.x, f.y); g.lineTo(f.x - f.act.dx*40, f.y - f.act.dy*40); g.stroke(); g.globalAlpha = f.alpha; }
@@ -1937,6 +1950,16 @@
         g.globalAlpha = 0.35 + 0.2*Math.sin(t*5 + f.wob); g.beginPath(); g.arc(f.x, f.y, f.r + 5, 0, 6.283); g.stroke(); g.globalAlpha = 1; }
     }
 
+    // A resting drone still shows where it will rise: the ring, a hollow ghost, and the recharge arc.
+    for (i = 0; i < P.weapons.length; i++) { var hw = P.weapons[i]; if (hw.def.kind !== 'orbit' || hw.evo) continue; var live = false; for (var q = 0; q < shots.length; q++) if (shots[q].kind === 'orbit' && shots[q].w === hw) { live = true; break; } if (live) continue;
+      var hR = wstat(hw, 'r'), hn = Math.round(wstat(hw, 'amt')), hcd = wstat(hw, 'cd'), hk = clamp(1 - P.cds[hw.id]/hcd, 0, 1), hcol = INK[hw.def.ink];
+      g.strokeStyle = hcol; g.lineWidth = 1; g.globalAlpha = 0.12; g.beginPath(); g.arc(P.x, P.y, hR, 0, 6.283); g.stroke();
+      g.globalAlpha = 0.45; g.lineWidth = 1.5; g.beginPath(); g.arc(P.x, P.y, hR, -1.571, -1.571 + hk*6.283); g.stroke();
+      g.globalAlpha = 0.3; for (q = 0; q < hn; q++) { var ga = q/hn*6.283 + t*0.6; g.beginPath(); g.arc(P.x + Math.cos(ga)*hR, P.y + Math.sin(ga)*hR, 5, 0, 6.283); g.stroke(); }
+      g.globalAlpha = 1; }
+    // Afterimages when the hunter is moving fast.
+    if (P.hist && Math.hypot(P.vx, P.vy) > 190) { for (i = P.hist.length-1; i >= 1; i--) { var ph = P.hist[i]; g.globalAlpha = 0.1*(P.hist.length - i); g.fillStyle = run.char.look ? run.char.look.cloak : '#5a1d2a';
+      g.beginPath(); g.arc(ph.x, ph.y, P.r*0.8, 0, 6.283); g.fill(); } g.globalAlpha = 1; }
     // Shots, additive so they glow without a bloom pass.
     g.globalCompositeOperation = 'lighter';
     for (i = 0; i < shots.length; i++) { var s = shots[i]; var col = INK[s.ink] || INK.bone;
@@ -1966,12 +1989,21 @@
 
     drawPlayer(g, t);
     g.strokeStyle = 'rgba(233,216,197,.07)'; g.lineWidth = 1; g.beginPath(); g.arc(P.x, P.y, magnetR(), 0, 6.283); g.stroke();
+    // Weather on the ground: rain rings on the Street, fog drifting where it is thick.
+    if (settings.weather && map.weather === 'rain') { g.strokeStyle = 'rgba(233,216,197,.16)'; g.lineWidth = 1;
+      for (i = 0; i < 14; i++) { var rk = (t*1.6 + i*0.37) % 1, rh = hash2(i*131 + Math.floor((t + i*0.37)/0.625)*7, i*17), rx = camX - VW/2 + (rh % 1000)/1000*VW, ry = camY - VH/2 + ((rh>>>10) % 1000)/1000*VH;
+        g.globalAlpha = (1 - rk)*0.5; g.beginPath(); g.ellipse(rx, ry, 2 + rk*14, 1 + rk*6, 0, 0, 6.283); g.stroke(); } g.globalAlpha = 1; }
+    if (settings.weather && (run.fogT > 0 || map.weather === 'drips')) { var fa = run.fogT > 0 ? Math.min(1, run.fogT/4)*0.5 : 0.16, fsp = glowSprite('#8f6f76', 120, false);
+      for (i = 0; i < 9; i++) { var fx = camX - VW/2 + (((i*397 + t*18*(1 + i%3)) % (VW + 300)) - 150), fy = camY - VH/2 + (((i*211 + Math.sin(t*0.3 + i)*40 + 5000) % (VH + 200)) - 100);
+        g.globalAlpha = fa*(0.6 + 0.4*Math.sin(t*0.7 + i)); g.drawImage(fsp.c, fx - fsp.s, fy - fsp.s*0.6, fsp.s*2, fsp.s*1.2); } g.globalAlpha = 1; }
     // Auto-aim's pick gets brackets, so the choice is visible before the shot.
     if (P.target && !P.target.dead && P.manualAim <= 0) { var tg = P.target, tr = tg.r + 6, tl = 5; g.strokeStyle = 'rgba(233,216,197,.55)'; g.lineWidth = 1; g.beginPath();
       [[-1,-1],[1,-1],[1,1],[-1,1]].forEach(function (q) { g.moveTo(tg.x + q[0]*tr, tg.y + q[1]*(tr - tl)); g.lineTo(tg.x + q[0]*tr, tg.y + q[1]*tr); g.lineTo(tg.x + q[0]*(tr - tl), tg.y + q[1]*tr); }); g.stroke(); }
     // The light: ambient dark, then everything that burns, multiplied over the world.
     g.restore();
-    if (settings.lighting) { drawLights(g, map, t, ox, oy); g.globalCompositeOperation = 'multiply'; g.drawImage(lightCv, 0, 0, cssW, cssH); g.globalCompositeOperation = 'source-over'; }
+    if (settings.lighting) { drawLights(g, map, t, ox, oy); g.globalCompositeOperation = 'multiply'; g.drawImage(lightCv, 0, 0, cssW, cssH);
+      // Bloom: the same lights, quarter size and smeared by the upscale, added back on top.
+      g.globalCompositeOperation = 'lighter'; g.globalAlpha = 0.2; g.drawImage(bloomCv, 0, 0, cssW, cssH); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over'; }
     else { g.fillStyle = 'rgba(5,2,3,.38)'; g.fillRect(0, 0, cssW, cssH); }
     g.save(); worldXf(g, ox, oy);
     // Eyes again, unlit, so the dark is full of them.
@@ -1981,7 +2013,7 @@
     for (i = 0; i < nums.length; i++) { var n = nums[i]; var nk = 1 - n.t/0.7, pop = 1 + 0.7*Math.max(0, 1 - n.t/0.12); g.globalAlpha = nk;
       if (n.big) { g.font = '400 ' + Math.round(20*pop) + 'px Georgia, serif'; g.fillStyle = INK.gold; g.shadowColor = INK.gold; g.shadowBlur = 12; g.fillText(String(n.v), n.x, n.y); g.shadowBlur = 0; continue; }
       g.font = '500 ' + Math.round((n.crit ? 15 : n.v >= 100 ? 13 : 11)*pop) + 'px ui-monospace, Menlo, monospace';
-      g.fillStyle = n.crit ? INK.gold : INK.bone; g.fillText(String(n.v), n.x, n.y); }
+      g.fillStyle = n.crit ? INK.gold : (n.col || INK.bone); g.fillText(String(n.v), n.x, n.y); }
     g.globalAlpha = 1;
     g.restore();
 
