@@ -402,6 +402,8 @@
       <button class="sw" id="swShake" role="switch" aria-checked="true"><span></span></button></div>
     <div class="opt"><div><div class="optk">Lighting</div><div class="optd">Lamps, candles and shots light the dark. Off is flat and cheaper.</div></div>
       <button class="sw" id="swLight" role="switch" aria-checked="true"><span></span></button></div>
+    <div class="opt"><div><div class="optk">Pixel</div><div class="optd">The night at a third of the resolution, with hard pixels.</div></div>
+      <button class="sw" id="swPixel" role="switch" aria-checked="false"><span></span></button></div>
     <div class="opt"><div><div class="optk">Weather</div><div class="optd">Rain, embers, drips. Off if the phone runs warm.</div></div>
       <button class="sw" id="swWeather" role="switch" aria-checked="true"><span></span></button></div>
     <div class="opt"><div><div class="optk">Diagnostics</div></div>
@@ -536,7 +538,7 @@
 
   /* ---------------- settings ---------------- */
   var settings = { rev: 2, fullscreen: true, sound: true, ambience: true, haptics: true, nums: true, shake: true, weather: true,
-                   diag: false, stickAlpha: 50, stickShape: 'circle', autoAim: true, sticks: true, lighting: true, music: true };
+                   diag: false, stickAlpha: 50, stickShape: 'circle', autoAim: true, sticks: true, lighting: true, music: true, pixel: false };
   try { var sv = JSON.parse(localStorage.getItem(SKEY) || 'null');
         if (sv) for (var sk in settings) if (sv[sk] !== undefined) settings[sk] = sv[sk]; } catch (e) {}
   function saveSettings() { try { localStorage.setItem(SKEY, JSON.stringify(settings)); } catch (e) {} mirrorSave(); }
@@ -759,8 +761,9 @@
   function resize() {
     var m = measure(); cssW = m.w; cssH = m.h;
     stageEl.style.width = cssW + 'px'; stageEl.style.height = cssH + 'px';
-    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    dpr = settings.pixel ? 1/3 : Math.min(window.devicePixelRatio || 1, 2);
     cv.width = Math.round(cssW*dpr); cv.height = Math.round(cssH*dpr);
+    cv.style.imageRendering = settings.pixel ? 'pixelated' : 'auto'; ctx.imageSmoothingEnabled = !settings.pixel;
     INS = insets(); var root = document.documentElement.style;
     root.setProperty('--safe-t', ((framed() && !settings.fullscreen) ? 0 : INS.t) + 'px');
     root.setProperty('--safe-r', INS.r + 'px'); root.setProperty('--safe-b', INS.b + 'px'); root.setProperty('--safe-l', INS.l + 'px');
@@ -904,7 +907,8 @@
     choir:   { n:'Choir',     hp:24,  spd:34,  dmg:7,  r:10, xp:5,  col:'#4a4060', eye:'#a884c9', shape:'spire', ranged:1, burst:3 },
     gargoyle:{ n:'Gargoyle',  hp:120, spd:74,  dmg:18, r:15, xp:12, col:'#3a3a3a', eye:'#d9a441', shape:'wing' },
     mare:    { n:'Nightmare', hp:70,  spd:78,  dmg:16, r:14, xp:8,  col:'#3a2a3f', eye:'#a884c9', shape:'tri' },
-    hulk:    { n:'Bulwark',   hp:180, spd:30,  dmg:22, r:20, xp:14, col:'#3f3236', eye:'#d9a441', shape:'box' }
+    hulk:    { n:'Bulwark',   hp:180, spd:30,  dmg:22, r:20, xp:14, col:'#3f3236', eye:'#d9a441', shape:'box' },
+    courier: { n:'Courier',   hp:60,  spd:150, dmg:0,  r:10, xp:6,  col:'#5a4a2a', eye:'#d9a441', shape:'diamond', flee:1 }
   };
   var LORE = { thrall:'What is left of someone who was fed on too long. They come in numbers because that is all they have.', wretch:'Thralls that starved. Smaller, faster, and there are always more.',
     drone:'Security that outlived the company. Still patrolling a lease that expired years ago.', bat:'They nest in the wiring. Nothing about their flight is straight.',
@@ -916,10 +920,15 @@
     banshee:'The scream is a weight. You will feel it in your legs before you see her.', effigy:'Bolted to the floor and still dangerous. Walk out of its reach; it cannot follow.',
     choir:'They sing in threes and shoot in threes.', gargoyle:'Old stone with old hunger. Fast for its weight, and its weight is considerable.',
     mare:'The one that gives the others their name. If it reaches you, you will know.', hulk:'It does not stop. It has never needed to.',
+    courier:'Runs the night with a bag of someone else’s gold. It will not fight you; it will simply leave.',
     gaoler:'Keeper of the cells under the precinct. Still calling for prisoners.', butcher:'The abattoir closed. He did not.', cantor:'Leader of the choir, and it answers when he calls.',
     hexer:'Never where you looked last. The fan of bolts is his signature.', reaper:'Fast, heavy, and the ground breaks where it lands.',
     prime:'The last commander of the watch. The wardens still answer to it.', dawn:'The sun, walking. There is nowhere to stand.', magnus:'Every voice in the cathedral, in one throat.',
     hunger:'It ate the choir, and then the cathedral. It is not finished.', butcherKing:'The Butcher was the apprentice.', mother:'Everything drains to her. Everything.' };
+  // Elite affixes: one word over the head, one rule to learn.
+  var AFFIXES = { swift:{ n:'Swift', col:'#6fb3ab', spd:1.45 }, armoured:{ n:'Armoured', col:'#8a8fc9', armor:6 }, venomous:{ n:'Venomous', col:'#5fa777' },
+                  shielded:{ n:'Shielded', col:'#d9a441', shield:6 }, vampiric:{ n:'Vampiric', col:'#c96a8e' } };
+  var AFFIX_IDS = Object.keys(AFFIXES);
   var INTRO = { drone:'Drones. Fast, brittle.', bat:'Bats. They do not fly straight.', ghoul:'Ghouls. They take a few bites.', warden:'Wardens keep their distance and shoot.',
                 spitter:'Spitters. Watch the ground where it lands.', hound:'Hounds. They wind up, then they come.', crawler:'Crawlers. Sideways, fast.',
                 leech:'Leeches. Every bite feeds them.', husk:'Husks. Do not stand near one when it goes.', shade:'Shades. Hit them while they are solid.',
@@ -996,7 +1005,11 @@
   var RELIC_IDS = Object.keys(RELICS);
   var VIAL_COST = 150, FLASK_COST = 60, CARRY_MAX = 3;
   var EVENT_TEXT = { wall:'They come as a wall', ring:'They close from every side', elites:'Champions walk', swarm:'The sky fills', bloodmoon:'Blood moon: everything is worth double',
-                     fog:'The fog comes in', mini:'', lord:'' };
+                     fog:'The fog comes in', mini:'', lord:'', courier:'A courier runs. Catch it before it leaves.', harvest:'Harvest: the city pays', eclipse:'Eclipse. Stay close to the light.' };
+  MAPS.street.timeline.push({ t:240, ev:'courier' }, { t:450, ev:'harvest' }, { t:600, ev:'eclipse' });
+  MAPS.nave.timeline.push({ t:250, ev:'courier' }, { t:660, ev:'harvest' }, { t:800, ev:'eclipse' }, { t:1000, ev:'courier' });
+  MAPS.undercity.timeline.push({ t:240, ev:'courier' }, { t:520, ev:'harvest' }, { t:700, ev:'eclipse' }, { t:980, ev:'courier' }, { t:1200, ev:'harvest' });
+  MAP_IDS.forEach(function (id) { MAPS[id].timeline.sort(function (a, b) { return a.t - b.t; }); });
 
   var CHARS = [
     { id:'novice',   n:'Ilse',    g:'fang',   weapon:'fang',   desc:'A bite, a cloak, no plan.', bonus:{}, quest:null, look:{ cloak:'#5a1d2a', trim:'#7a2436', hood:1 } },
@@ -1130,7 +1143,7 @@
             combo: 0, comboT: 0, best: 0, rerolls: Math.round(metaStat('reroll') + (te.reroll || 0)), banishes: Math.round(metaStat('banish')), banned: {},
             met: {}, maxW: 1, dawnSeen: false, evolved: 0, minis: 0, lords: 0, elites: 0, chests: 0, firstHit: -1, dmgTaken: 0, maxed: 0,
             revived: false, sched: [], finalDown: false, lordKills: {}, banner: 0, nextEv: null, agony: !!meta.agony[mapId] && !!meta.stats.dawns[mapId],
-            found: [], lost: [], flasks: meta.flasks || 0, worn: 0, kpm: [], killedBy: '', zoomK: 0, boltT: rr(18, 40), streakT: 0 };
+            found: [], lost: [], flasks: meta.flasks || 0, worn: 0, kpm: [], killedBy: '', zoomK: 0, boltT: rr(18, 40), streakT: 0, dashCd: 0, eclipseT: 0 };
     function b(k) { return metaStat(k) + (ch.bonus[k] || 0) + (te[k] || 0); }
     P = { x: 0, y: 0, r: 11, fx: 1, fy: 0, ax: 1, ay: 0, manualAim: 0, vx: 0, vy: 0, hp: 100, maxHp: 100, hurtT: 0, inv: 0, bob: 0,
           base: { hp: 100 + b('hp'), cd: b('cd'), armor: b('armor'), area: b('area'), regen: b('regen'), amt: 0, luck: b('luck'), speed: b('speed'),
@@ -1238,7 +1251,8 @@
     opts = opts || {};
     var def = ENEMIES[kind], a = rr(0, Math.PI*2), R0 = Math.max(cssW, cssH)*0.62 + 40;
     var f = makeFoe(kind, def, opts.x !== undefined ? opts.x : P.x + Math.cos(a)*R0, opts.y !== undefined ? opts.y : P.y + Math.sin(a)*R0);
-    if (opts.elite || (!opts.plain && R() < 0.03 + run.min*0.004)) { f.elite = true; f.hp *= 6; f.maxHp = f.hp; f.r *= 1.5; f.dmg *= 1.4; f.spd *= 0.92; }
+    if (opts.elite || (!opts.plain && R() < 0.03 + run.min*0.004)) { f.elite = true; f.hp *= 6; f.maxHp = f.hp; f.r *= 1.5; f.dmg *= 1.4; f.spd *= 0.92;
+      f.affix = rpick(AFFIX_IDS); var ax = AFFIXES[f.affix]; if (ax.spd) f.spd *= ax.spd; if (ax.armor) f.armor += ax.armor; if (ax.shield) f.shield = ax.shield; }
     if (!run.met[kind]) { run.met[kind] = 1; meta.met[kind] = 1; if (INTRO[kind] && run.t > 2) toast(INTRO[kind]); }
     if (opts.plain) f.born = 0.25; Snd.spawn();
     foes.push(f); return f;
@@ -1271,6 +1285,9 @@
     if (ev.ev === 'wall') spawnWall(ev.kind); else if (ev.ev === 'ring') spawnRing(); else if (ev.ev === 'elites') spawnElites();
     else if (ev.ev === 'swarm') spawnSwarm(ev.kind || 'bat'); else if (ev.ev === 'bloodmoon') { run.moonT = 30; Snd.banner(); }
     else if (ev.ev === 'fog') { run.fogT = 25; } else if (ev.ev === 'mini') spawnBoss(ev.id, 'mini'); else if (ev.ev === 'lord') spawnBoss(ev.id, 'lord');
+    else if (ev.ev === 'courier') { var ca = rr(0, 6.283), cf = spawnFoe('courier', { x:P.x + Math.cos(ca)*260, y:P.y + Math.sin(ca)*260, plain:1 }); cf.life = 20; cf.elite = false; }
+    else if (ev.ev === 'harvest') { for (var hv = 0; hv < 40; hv++) later(hv*0.3, function () { var ha = rr(0, 6.283), hd = rr(60, 260); motes.push({ x:P.x + Math.cos(ha)*hd, y:P.y + Math.sin(ha)*hd, kind:'gold', v: 2 + rri(4), t:0 }); }); Snd.gold(); }
+    else if (ev.ev === 'eclipse') { run.eclipseT = 20; Snd.warn(); }
     if (EVENT_TEXT[ev.ev]) toast(EVENT_TEXT[ev.ev]);
   }
   function updateSpawns(dt) {
@@ -1321,7 +1338,7 @@
     } else if (k === 'orbit') {
       // Whole circles only: the spin is fitted to the life so a drone lands where it rose.
       var n = amt, dur = wstat(w, 'dur') + (w.evo ? 999 : 0), rad = wstat(w, 'r'), turns = Math.max(1, Math.round(dur*3.2/6.283)), spin = w.evo ? 3.2 : turns*6.283/dur;
-      for (var o = 0; o < n; o++) shots.push({ kind:'orbit', a:o/n*Math.PI*2, R:rad, r:9*areaMul(), t:0, life:dur, dmg:dmg, w:w, ink:ink, spin:spin, kb:0.5, fade:0.3 });
+      for (var o = 0; o < n; o++) shots.push({ kind:'orbit', a:o/n*Math.PI*2, R:rad, r:9*areaMul(), t:0, life:dur, dmg:dmg, w:w, ink:ink, spin:spin, kb:0.5, fade:0.45 });
       if (w.evo) P.cds[w.id] = 999;
     } else if (k === 'volley') {
       for (var v = 0; v < amt; v++) pushBolt(w, P.x, P.y, rr(0, 6.283), spd, { r:5*areaMul(), dmg:dmg, pierce: w.evo ? 2 : 0, bat:1, life:1.3*durMul() });
@@ -1359,8 +1376,15 @@
 
   /* ---------------- damage ---------------- */
   function heal(v) { P.hp = Math.min(P.maxHp, P.hp + v); }
+  function dash() {
+    if (!run || run.over || run.paused || run.dashCd > 0 || P.dashT > 0) return;
+    P.dashT = 0.16; P.dx = P.fx; P.dy = P.fy; P.inv = Math.max(P.inv, 0.32); run.dashCd = 3.2;
+    burst(P.x, P.y, 12, INK.bone, 160); Snd.charge(); buzz(8);
+    nearFoes(P.x, P.y, 60, function (f) { var dx = f.x-P.x, dy = f.y-P.y, l = Math.hypot(dx, dy) || 1; f.kx += dx/l*260; f.ky += dy/l*260; });
+  }
   function hurtFoe(f, dmg, w, kb, silent) {
     if (f.dead || f.phased) return 0;
+    if (f.shield > 0) { f.shield--; f.flash = 1; burst(f.x, f.y, 4, INK.gold, 120); if (!silent) Snd.hit(); if (f.shield === 0) { toast('Shield broken'); hazards.push({ kind:'blast', x:f.x, y:f.y, r:f.r + 14, t:0, life:0.3, ink:INK.gold }); } return 0; }
     var crit = R() < critChance();
     if (crit) dmg *= 1.8 + stat('critdmg');
     dmg = Math.max(1, Math.round(dmg * rr(0.92, 1.08)) - f.armor);
@@ -1382,7 +1406,7 @@
     var STREAKS = { 10:'Feast', 25:'Gorge', 50:'Massacre', 100:'Exsanguination', 200:'Abattoir' };
     if (STREAKS[run.combo]) { addNum(P.x, P.y - 34, STREAKS[run.combo], false, true); Snd.streak(Object.keys(STREAKS).indexOf(String(run.combo))); flash = Math.max(flash, 0.2); flashCol = INK.gold; }
     if (stat('lust') > 0) { run.lust = Math.min(10, run.lust + 1); run.lustT = 3; }
-    var xp = f.def.xp * (f.elite ? 3 : 1) * (1 + run.min*0.08) * (run.moonT > 0 ? 2 : 1) * agonyMul();
+    var xp = f.def.xp * (f.elite ? 3 : 1) * (1 + run.min*0.08) * (run.moonT > 0 || run.eclipseT > 0 ? 2 : 1) * agonyMul();
     dropMotes(f.x, f.y, Math.round(xp));
     if (f.elite || f.boss) { motes.push({ x:f.x, y:f.y, kind:'chest', t:0 }); if (f.elite) { run.elites++; meta.stats.elites++; if (R() < 0.04 + stat('luck')*0.04) dropRelic(f.x, f.y); } }
     else if (R() < 0.012 + stat('luck')*0.02) motes.push({ x:f.x, y:f.y, kind:'gold', v: 3 + rri(5), t:0 });
@@ -1393,6 +1417,8 @@
       for (var bi = 0; bi < (f.boss ? 5 : 2); bi++) { if (decals.length >= 160) decals.shift(); var bd = bi*f.r*0.9; decals.push({ x:f.x + Math.cos(ba)*bd + rr(-4, 4), y:f.y + Math.sin(ba)*bd + rr(-4, 4), r:f.r*rr(0.7, 1.4)*(1 + bi*0.2), a:ba + rr(-0.3, 0.3), e: bi ? 0.45 : 0.7 }); } }
     if (w && w.evo && w.id === 'fang') heal(2);
     if (f.def.explode) explodeAt(f.x, f.y, 74, f.dmg*1.4, INK.gold);
+    if (f.affix === 'venomous') hazards.push({ kind:'acid', x:f.x, y:f.y, r:56, t:0, life:4, dmg:f.dmg*0.5, ink:INK.green, tick:0 });
+    if (f.def.flee) { for (var cg = 0; cg < 8; cg++) motes.push({ x:f.x + rr(-30, 30), y:f.y + rr(-30, 30), kind:'gold', v: 6 + rri(8), t:0 }); if (R() < 0.5) dropRelic(f.x, f.y); toast('The courier is caught'); }
     if (f.boss) {
       run.bosses = run.bosses.filter(function (b) { return b !== f; });
       if (f.boss === 'mini') { run.minis++; meta.stats.minis++; }
@@ -1420,11 +1446,12 @@
     if (P.inv > 0 || run.over) return;
     dmg = Math.max(1, Math.round(dmg - stat('armor')));
     P.hp -= dmg; P.hurtT = 1; P.inv = 0.42; shake = Math.min(20, shake + 9); run.dmgTaken += dmg;
+    if (src) { var kdx = P.x - src.x, kdy = P.y - src.y, kl = Math.hypot(kdx, kdy) || 1; P.x += kdx/kl*10; P.vx += kdx/kl*160; P.vy += kdy/kl*160; }
     if (run.firstHit < 0) run.firstHit = run.t;
     run.combo = 0;
     Snd.hurt(); buzz(20);
     if (src && stat('thorns') > 0) hurtFoe(src, stat('thorns'), null, 0.6, true);
-    if (src && src.def.heal) src.hp = Math.min(src.maxHp, src.hp + dmg*2);
+    if (src && (src.def.heal || src.affix === 'vampiric')) src.hp = Math.min(src.maxHp, src.hp + dmg*2);
     useFlask();
     if (P.hp <= 0) {
       run.killedBy = src ? src.def.n : 'a shot from the dark';
@@ -1494,7 +1521,9 @@
 
     // Movement: left stick or WASD. Facing follows movement; aim is its own thing.
     var mx = sticks.L.x + (keys.d?1:0) - (keys.a?1:0), my = sticks.L.y + (keys.s?1:0) - (keys.w?1:0), ml = Math.hypot(mx, my);
-    if (ml > 0.08) { if (ml > 1) { mx /= ml; my /= ml; ml = 1; } P.vx = mx*speed(); P.vy = my*speed(); P.fx = mx/ml; P.fy = my/ml; P.bob += dt*9; }
+    run.dashCd = Math.max(0, run.dashCd - dt);
+    if (P.dashT > 0) { P.dashT -= dt; P.vx = P.dx*880; P.vy = P.dy*880; P.bob += dt*18; }
+    else if (ml > 0.08) { if (ml > 1) { mx /= ml; my /= ml; ml = 1; } P.vx = mx*speed(); P.vy = my*speed(); P.fx = mx/ml; P.fy = my/ml; P.bob += dt*9; }
     else { P.vx *= Math.max(0, 1-dt*14); P.vy *= Math.max(0, 1-dt*14); }
     P.x += P.vx*dt; P.y += P.vy*dt;
     if (!P.hist) P.hist = []; P.histT = (P.histT || 0) + dt; if (P.histT > 0.04) { P.histT = 0; P.hist.unshift({ x:P.x, y:P.y, fx:P.fx, fy:P.fy }); if (P.hist.length > 4) P.hist.length = 4; }
@@ -1502,7 +1531,7 @@
     P.inv = Math.max(0, P.inv - dt); P.hurtT = Math.max(0, P.hurtT - dt*2.2);
     if (stat('regen') > 0) heal(stat('regen')*dt);
     useFlask();
-    run.moonT = Math.max(0, run.moonT - dt); run.fogT = Math.max(0, run.fogT - dt); run.warnT = Math.max(0, run.warnT - dt); run.slowT = Math.max(0, run.slowT - dt);
+    run.moonT = Math.max(0, run.moonT - dt); run.fogT = Math.max(0, run.fogT - dt); run.eclipseT = Math.max(0, run.eclipseT - dt); run.warnT = Math.max(0, run.warnT - dt); run.slowT = Math.max(0, run.slowT - dt);
     if (run.lustT > 0) { run.lustT -= dt; if (run.lustT <= 0) run.lust = 0; }
     run.banner = Math.max(0, run.banner - dt); if (run.banner <= 0) bannerEl.classList.remove('on');
     flash = Math.max(0, flash - dt*1.6);
@@ -1521,7 +1550,8 @@
       else if (f.def.charge) { f.mvT -= dt; if (!f.act && f.mvT <= 0 && dl < 280) { startCharge(f, dx, dy, dl, 4.5); f.mvT = 3.5; } }
       else if (f.def.phase) { f.phaseT -= dt; if (f.phaseT <= 0) { f.phased = !f.phased; f.phaseT = f.phased ? 1.0 : 2.2; } }
       f.alpha = f.phased ? 0.3 : 1;
-      var sp = f.spd * (f.phased ? 1.5 : 1);
+      var sp = f.spd * (f.phased ? 1.5 : 1) * (run.eclipseT > 0 && !f.boss ? 1.3 : 1);
+      if (f.def.flee) { f.life -= dt; if (f.life <= 0) { f.dead = true; toast('The courier got away'); continue; } if (dl < 420) { ux = -dx/dl; uy = -dy/dl; f.x += ux*sp*dt + f.kx*dt; f.y += uy*sp*dt + f.ky*dt; f.kx *= Math.max(0, 1-dt*9); f.ky *= Math.max(0, 1-dt*9); } continue; }
       if (f.def.turret) sp = 0;
       else if (f.def.ranged && dl < 260) sp *= 0.35;
       if (f.act) {
@@ -1637,7 +1667,7 @@
     for (i = parts.length-1; i >= 0; i--) { var pp = parts[i]; pp.t += dt; pp.x += pp.vx*dt; pp.y += pp.vy*dt; pp.vx *= 0.9; pp.vy *= 0.9; if (pp.tri) pp.rot += pp.spin*dt; if (pp.t > pp.life) parts.splice(i, 1); }
     for (i = nums.length-1; i >= 0; i--) { var nn = nums[i]; nn.t += dt; nn.y -= 34*dt; if (nn.t > 0.7) nums.splice(i, 1); }
     shake = Math.max(0, shake - dt*40); run.zoomK = Math.max(0, run.zoomK - dt/1.6);
-    var lead = 26, tx = P.x + P.ax*lead + P.vx*0.1, ty = P.y + P.ay*lead + P.vy*0.1;
+    var lead = P.manualAim > 0 ? 26 : 0, tx = P.x + P.ax*lead + P.vx*0.12, ty = P.y + P.ay*lead + P.vy*0.12;
     camX += (tx - camX)*Math.min(1, dt*6); camY += (ty - camY)*Math.min(1, dt*6);
     for (i = 0; i < foes.length; i++) if (foes[i].born > 0) foes[i].born -= dt;
     if (run.map.weather === 'rain') { run.boltT -= dt; if (run.boltT <= 0) { run.boltT = rr(16, 44); flash = 0.45; flashCol = INK.bone; run.boltFlash = 2; Snd.thunder(); } }
@@ -1677,8 +1707,8 @@
     else if (shape === 'spire') { g.moveTo(0, -r*1.1); g.lineTo(r*0.55, r*0.2); g.lineTo(r*0.8, r*0.9); g.lineTo(-r*0.8, r*0.9); g.lineTo(-r*0.55, r*0.2); g.closePath(); }
     else { g.rect(-r*0.85, -r*0.85, r*1.7, r*1.7); }
   }
-  function foeSprite(f) {
-    var d = f.def, key = 'f' + f.k + (f.elite ? 'E' : '') + (f.boss ? 'B' : '');
+  function foeSprite(f, fr) {
+    var d = f.def, key = 'f' + f.k + (f.elite ? 'E' : '') + (f.boss ? 'B' : '') + (fr ? '1' : '0'), ph = fr ? 1 : -1;
     return sprite(key, f.r*1.35, function (g, R0) {
       var r = f.r;
       g.fillStyle = 'rgba(0,0,0,.42)'; g.beginPath(); g.ellipse(0, r*0.95, r*0.9, r*0.32, 0, 0, 6.283); g.fill();
@@ -1689,12 +1719,12 @@
       g.fillStyle = sh; shapePath(g, d.shape, r); g.fill(); g.stroke();
       // Surface detail per silhouette.
       g.strokeStyle = 'rgba(11,6,9,.5)'; g.lineWidth = 1; g.beginPath();
-      if (d.shape === 'blob') { g.moveTo(-r*0.5, r*0.2); g.lineTo(-r*0.9, r*0.6); g.moveTo(-r*0.2, r*0.5); g.lineTo(-r*0.3, r*0.95); g.moveTo(-r*0.6, -r*0.3); g.lineTo(-r*0.95, -r*0.5); }
-      else if (d.shape === 'tri') { g.moveTo(-r*0.2, -r*0.35); g.lineTo(r*0.5, 0); g.lineTo(-r*0.2, r*0.35); }
+      if (d.shape === 'blob') { g.moveTo(-r*0.5, r*0.2); g.lineTo(-r*0.9, r*(0.6 + 0.15*ph)); g.moveTo(-r*0.2, r*0.5); g.lineTo(-r*(0.3 + 0.15*ph), r*0.95); g.moveTo(-r*0.6, -r*0.3); g.lineTo(-r*0.95, -r*(0.5 - 0.15*ph)); }
+      else if (d.shape === 'tri') { g.moveTo(-r*0.2, -r*0.35); g.lineTo(r*0.5, 0); g.lineTo(-r*0.2, r*0.35); g.moveTo(-r*0.8, -r*0.75); g.lineTo(-r*(0.95 + 0.1*ph), -r*(0.5 - 0.2*ph)); g.moveTo(-r*0.8, r*0.75); g.lineTo(-r*(0.95 + 0.1*ph), r*(0.5 - 0.2*ph)); }
       else if (d.shape === 'box') { g.moveTo(-r*0.6, -r*0.6); g.lineTo(r*0.6, -r*0.6); g.moveTo(-r*0.6, r*0.6); g.lineTo(r*0.6, r*0.6); }
-      else if (d.shape === 'wing') { g.moveTo(0, -r*0.4); g.lineTo(r*0.7, -r*0.75); g.moveTo(0, -r*0.4); g.lineTo(-r*0.7, -r*0.75); g.moveTo(0, -r*0.4); g.lineTo(0, r*0.5); }
-      else if (d.shape === 'diamond') { g.moveTo(0, -r*0.55); g.lineTo(r*0.4, 0); g.lineTo(0, r*0.55); g.lineTo(-r*0.4, 0); g.closePath(); }
-      else if (d.shape === 'cross') { g.moveTo(-r*0.35, 0); g.lineTo(r*0.35, 0); g.moveTo(0, -r*0.35); g.lineTo(0, r*0.35); }
+      else if (d.shape === 'wing') { g.moveTo(0, -r*0.4); g.lineTo(r*0.7, -r*(0.75 + 0.25*ph)); g.moveTo(0, -r*0.4); g.lineTo(-r*0.7, -r*(0.75 + 0.25*ph)); g.moveTo(0, -r*0.4); g.lineTo(0, r*0.5); }
+      else if (d.shape === 'diamond') { g.moveTo(0, -r*(0.55 + 0.1*ph)); g.lineTo(r*(0.4 - 0.1*ph), 0); g.lineTo(0, r*(0.55 + 0.1*ph)); g.lineTo(-r*(0.4 - 0.1*ph), 0); g.closePath(); }
+      else if (d.shape === 'cross') { var lg = r*0.35, lo = 0.25*ph; g.moveTo(-lg, lo*r); g.lineTo(lg, -lo*r); g.moveTo(lo*r, -lg); g.lineTo(-lo*r, lg); }
       else if (d.shape === 'spire') { g.moveTo(-r*0.4, r*0.2); g.lineTo(r*0.4, r*0.2); g.moveTo(-r*0.6, r*0.6); g.lineTo(r*0.6, r*0.6); }
       g.stroke();
       if (d.shape === 'box') { g.fillStyle = 'rgba(233,216,197,.3)'; [[-1,-1],[1,-1],[-1,1],[1,1]].forEach(function (q) { g.beginPath(); g.arc(q[0]*r*0.62, q[1]*r*0.62, 1.2, 0, 6.283); g.fill(); }); }
@@ -1872,6 +1902,7 @@
     if (run) {
       if (run.fogT > 0) { k = Math.min(1, run.fogT/4); amb = amb.map(function (v) { return v*(1 - 0.45*k); }); }
       if (run.moonT > 0) { k = Math.min(1, run.moonT/3); amb = [lerp(amb[0], 120, k), lerp(amb[1], 40, k), lerp(amb[2], 52, k)]; }
+      if (run.eclipseT > 0) { k = Math.min(1, run.eclipseT/2); amb = amb.map(function (v) { return v*(1 - 0.75*k); }); }
       var left = run.dur - run.t; if (left < 60) { k = clamp(1 - left/60, 0, 1); amb = [lerp(amb[0], 236, k), lerp(amb[1], 222, k), lerp(amb[2], 208, k)]; }
       if (run.banner > 0 && run.bosses.some(function (b) { return b.boss === 'lord'; })) { var bk = clamp((run.banner - 0.8)/0.6, 0, 1); amb = amb.map(function (v) { return v*(1 - 0.5*bk); }); }
     }
@@ -1883,7 +1914,7 @@
     if (run && run.boltFlash > 0) { run.boltFlash -= 0.033; L.globalCompositeOperation = 'source-over'; L.fillStyle = 'rgba(233,216,197,' + (0.35*Math.max(0, run.boltFlash)).toFixed(2) + ')'; L.setTransform(1, 0, 0, 1, 0, 0); L.fillRect(0, 0, lw, lh); L.setTransform(LS, 0, 0, LS, 0, 0); worldXf(L, ox, oy); L.globalCompositeOperation = 'lighter'; }
     for (i = 0; i < lights.length; i++) { var l = lights[i]; if (l.x < vx0 || l.x > vx1 || l.y < vy0 || l.y > vy1) continue; lamp(l.x, l.y, l.col, l.r, 0.8); }
     if (!run) return;
-    lamp(P.x, P.y, INK.bone, 250*(1 + stat('light')*0.6 - (run.fogT > 0 ? 0.35*Math.min(1, run.fogT/4) : 0))*(1 + 0.03*Math.sin(t*23) + 0.02*Math.sin(t*7.3)), 1);
+    lamp(P.x, P.y, INK.bone, 250*(1 + stat('light')*0.6 - (run.fogT > 0 ? 0.35*Math.min(1, run.fogT/4) : 0) - (run.eclipseT > 0 ? 0.4*Math.min(1, run.eclipseT/2) : 0))*(1 + 0.03*Math.sin(t*23) + 0.02*Math.sin(t*7.3)), 1);
     var gm = 0; for (i = 0; i < motes.length && gm < 30; i++) { var gmo = motes[i]; if (gmo.kind === 'xp' && gmo.v >= 25) { gm++; lamp(gmo.x, gmo.y, INK.rose, 34, 0.5); } }
     for (i = 0; i < run.bosses.length; i++) { var bz = run.bosses[i]; if (!bz.dead) lamp(bz.x, bz.y, bz.def.eye, bz.r*4 + 60, 0.9); }
     var n = 0;
@@ -1932,12 +1963,13 @@
 
     var vx0 = camX - VW/2 - 30, vx1 = camX + VW/2 + 30, vy0 = camY - VH/2 - 30, vy1 = camY + VH/2 + 30;
     for (i = 0; i < motes.length; i++) { var m = motes[i]; if (m.x < vx0 || m.x > vx1 || m.y < vy0 || m.y > vy1) continue;
+      if (m.kind === 'relic' || m.kind === 'chest') { var bg = g.createLinearGradient(0, m.y - 110, 0, m.y); bg.addColorStop(0, 'rgba(217,164,65,0)'); bg.addColorStop(1, 'rgba(217,164,65,' + (m.kind === 'relic' ? 0.35 : 0.2) + ')'); g.fillStyle = bg; g.fillRect(m.x - 4, m.y - 110, 8, 110); }
       var ms = moteSprite(m.kind, m.v || 0); if (m.kind === 'xp') g.globalAlpha = 0.7 + 0.3*Math.sin(t*6 + m.x*0.1);
       g.drawImage(ms.c, m.x - ms.s/2, m.y - ms.s/2 + (m.kind === 'chest' || m.kind === 'relic' ? Math.sin(m.t*4)*3 : 0), ms.s, ms.s); g.globalAlpha = 1; }
 
     // Foes, sorted nowhere: the shadow is baked into the sprite so overlap reads.
     for (i = 0; i < foes.length; i++) { var f = foes[i]; if (f.dead || f.x < vx0-60 || f.x > vx1+60 || f.y < vy0-60 || f.y > vy1+60) continue;
-      var fs = foeSprite(f), fw = fs.s, bob = Math.sin(t*7 + f.wob)*1.2, sq = 1 + 0.07*Math.sin(t*9 + f.wob) + f.flash*0.14, dw = fw*sq, dh = fw*(2 - sq);
+      var fs = foeSprite(f, Math.floor(t*7 + f.wob) % 2), fw = fs.s, bob = Math.sin(t*7 + f.wob)*1.2, sq = 1 + 0.07*Math.sin(t*9 + f.wob) + f.flash*0.14, dw = fw*sq, dh = fw*(2 - sq);
       if (f.born > 0) { var bk = 1 - f.born/(f.boss ? 0.9 : 0.4); dw *= bk; dh *= bk*bk; g.fillStyle = 'rgba(5,2,3,.6)'; g.beginPath(); g.ellipse(f.x, f.y + f.r*0.6, f.r*1.3*(1 - bk*0.5), f.r*0.5, 0, 0, 6.283); g.fill(); }
       if (f.alpha < 1) g.globalAlpha = f.alpha;
       if (f.act && f.act.k === 'dash') { g.strokeStyle = f.def.eye; g.lineWidth = f.r; g.globalAlpha = 0.25; g.beginPath(); g.moveTo(f.x, f.y); g.lineTo(f.x - f.act.dx*40, f.y - f.act.dy*40); g.stroke(); g.globalAlpha = f.alpha; }
@@ -1947,7 +1979,11 @@
       if (f.act && f.act.k === 'windup') { g.strokeStyle = f.def.eye; g.lineWidth = 1.5; g.globalAlpha = 0.4 + 0.5*Math.abs(Math.sin(t*18)); g.beginPath(); g.arc(f.x, f.y, f.r + 6, 0, 6.283); g.stroke(); g.globalAlpha = 1; }
       if (f.scream) { g.strokeStyle = 'rgba(126,156,196,.35)'; g.lineWidth = 1; for (var sc = 0; sc < 2; sc++) { var sk = (t*2 + sc*0.5) % 1; g.globalAlpha = (1-sk)*0.4; g.beginPath(); g.arc(f.x, f.y, f.r + sk*170, 0, 6.283); g.stroke(); } g.globalAlpha = 1; }
       if (f.boss || f.elite) { g.strokeStyle = INK.gold; g.lineWidth = 1; g.strokeRect(f.x - f.r, f.y + f.r + 5, f.r*2, 3); g.fillStyle = INK.gold; g.fillRect(f.x - f.r, f.y + f.r + 5, f.r*2*Math.max(0, f.hp/f.maxHp), 3);
-        g.globalAlpha = 0.35 + 0.2*Math.sin(t*5 + f.wob); g.beginPath(); g.arc(f.x, f.y, f.r + 5, 0, 6.283); g.stroke(); g.globalAlpha = 1; }
+        var ac = f.affix ? AFFIXES[f.affix].col : INK.gold; g.strokeStyle = ac; g.globalAlpha = 0.35 + 0.2*Math.sin(t*5 + f.wob); g.beginPath(); g.arc(f.x, f.y, f.r + 5, 0, 6.283); g.stroke(); g.globalAlpha = 1;
+        if (f.shield > 0) { g.strokeStyle = INK.gold; g.lineWidth = 2; g.globalAlpha = 0.6; g.beginPath(); g.arc(f.x, f.y, f.r + 9, t*2, t*2 + 4.4); g.stroke(); g.globalAlpha = 1; g.lineWidth = 1; }
+        if (f.affix) { g.font = '500 7px -apple-system, system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = ac; g.fillText(AFFIXES[f.affix].n.toUpperCase(), f.x, f.y - f.r - 9); } }
+      if (f.def.flee) { g.strokeStyle = INK.gold; g.globalAlpha = 0.5 + 0.3*Math.sin(t*8); g.beginPath(); g.arc(f.x, f.y, f.r + 6, 0, 6.283); g.stroke(); g.globalAlpha = 1;
+        g.font = '500 7px -apple-system, system-ui, sans-serif'; g.textAlign = 'center'; g.fillStyle = INK.gold; g.fillText('COURIER · ' + Math.ceil(f.life), f.x, f.y - f.r - 10); }
     }
 
     // A resting drone still shows where it will rise: the ring, a hollow ghost, and the recharge arc.
@@ -1955,7 +1991,7 @@
       var hR = wstat(hw, 'r'), hn = Math.round(wstat(hw, 'amt')), hcd = wstat(hw, 'cd'), hk = clamp(1 - P.cds[hw.id]/hcd, 0, 1), hcol = INK[hw.def.ink];
       g.strokeStyle = hcol; g.lineWidth = 1; g.globalAlpha = 0.12; g.beginPath(); g.arc(P.x, P.y, hR, 0, 6.283); g.stroke();
       g.globalAlpha = 0.45; g.lineWidth = 1.5; g.beginPath(); g.arc(P.x, P.y, hR, -1.571, -1.571 + hk*6.283); g.stroke();
-      g.globalAlpha = 0.3; for (q = 0; q < hn; q++) { var ga = q/hn*6.283 + t*0.6; g.beginPath(); g.arc(P.x + Math.cos(ga)*hR, P.y + Math.sin(ga)*hR, 5, 0, 6.283); g.stroke(); }
+      g.globalAlpha = 0.25 + 0.25*hk; for (q = 0; q < hn; q++) { var ga = q/hn*6.283; g.beginPath(); g.arc(P.x + Math.cos(ga)*hR, P.y + Math.sin(ga)*hR, 3 + 4*hk, 0, 6.283); g.stroke(); }
       g.globalAlpha = 1; }
     // Afterimages when the hunter is moving fast.
     if (P.hist && Math.hypot(P.vx, P.vy) > 190) { for (i = P.hist.length-1; i >= 1; i--) { var ph = P.hist[i]; g.globalAlpha = 0.1*(P.hist.length - i); g.fillStyle = run.char.look ? run.char.look.cloak : '#5a1d2a';
@@ -1966,7 +2002,8 @@
       if (s.kind === 'arc') { var k = 1 - s.t/s.life; var a0 = Math.atan2(s.dy, s.dx); g.strokeStyle = col; g.globalAlpha = 0.85*k; g.lineWidth = 5*k + 1;
         g.beginPath(); g.arc(s.x, s.y, s.r*(0.7 + 0.3*(1-k)), a0 - 1.1, a0 + 1.1); g.stroke(); g.lineWidth = 1.5; g.globalAlpha = 0.5*k; g.beginPath(); g.arc(s.x, s.y, s.r*(0.5 + 0.5*(1-k)), a0 - 0.8, a0 + 0.8); g.stroke(); g.globalAlpha = 1; }
       else if (s.kind === 'orbit') { var oa = s.fade ? Math.min(1, s.t/s.fade, (s.life - s.t)/s.fade) : 1; g.globalAlpha = Math.max(0, oa);
-        g.fillStyle = col; g.shadowColor = col; g.shadowBlur = 10; g.beginPath(); g.arc(s.x, s.y, s.r*(0.6 + 0.4*oa), 0, 6.283); g.fill(); g.shadowBlur = 0;
+        if (oa < 1 && s.t > s.fade) { g.strokeStyle = col; g.lineWidth = 1; g.globalAlpha = (1 - oa)*0.6; g.beginPath(); g.arc(s.x, s.y, s.r*(1 + (1 - oa)*1.6), 0, 6.283); g.stroke(); g.globalAlpha = Math.max(0, oa); }
+        g.fillStyle = col; g.shadowColor = col; g.shadowBlur = 10; g.beginPath(); g.arc(s.x, s.y, s.r*(0.4 + 0.6*oa), 0, 6.283); g.fill(); g.shadowBlur = 0;
         g.strokeStyle = col; g.globalAlpha = 0.18*oa; g.lineWidth = 1; g.beginPath(); g.arc(P.x, P.y, s.R, 0, 6.283); g.stroke(); g.globalAlpha = 1; }
       else if (s.kind === 'strike') { var kk = 1 - s.t/s.life; g.strokeStyle = col; g.globalAlpha = kk; g.lineWidth = 2.5;
         g.beginPath(); g.moveTo(s.x + rr(-6,6), s.y - 300); g.lineTo(s.x + rr(-8,8), s.y - 120); g.lineTo(s.x + rr(-4,4), s.y - 30); g.lineTo(s.x, s.y); g.stroke();
@@ -2071,8 +2108,8 @@
     var sec = Math.floor(run.t);
     if (sec !== lastHudT || force) { lastHudT = sec; var left = run.dur - run.t; clockEl.textContent = fmtTime(left); clockEl.classList.toggle('late', left <= 60); clockEl.classList.toggle('last', left <= 10);
       lvNum.textContent = run.lv; killNum.textContent = run.kills; goldNum.textContent = run.gold;
-      var ne = run.nextEv; nextEvEl.innerHTML = ne ? '<b>' + (ne.ev === 'lord' ? 'Lord' : ne.ev === 'mini' ? 'Champion' : { wall:'Wall', ring:'Ring', elites:'Champions', swarm:'Swarm', bloodmoon:'Blood moon', fog:'Fog' }[ne.ev]) + '</b> ' + fmtTime(ne.t - run.t) : ''; }
-    comboEl.classList.toggle('on', run.combo >= 8); comboN.textContent = '×' + run.combo; comboN.classList.toggle('hot', run.combo >= 40);
+      var ne = run.nextEv; nextEvEl.innerHTML = ne ? '<b>' + (ne.ev === 'lord' ? 'Lord' : ne.ev === 'mini' ? 'Champion' : { wall:'Wall', ring:'Ring', elites:'Champions', swarm:'Swarm', bloodmoon:'Blood moon', fog:'Fog', courier:'Courier', harvest:'Harvest', eclipse:'Eclipse' }[ne.ev]) + '</b> ' + fmtTime(ne.t - run.t) : ''; }
+    paintFlask(); comboEl.classList.toggle('on', run.combo >= 8); comboN.textContent = '×' + run.combo; comboN.classList.toggle('hot', run.combo >= 40);
     var hk = Math.max(0, P.hp/P.maxHp); hpFill.style.width = (hk*100) + '%'; hpNum.textContent = Math.ceil(P.hp); hpWrap.classList.toggle('low', hk < 0.3);
     hurtEl.style.opacity = Math.max(P.hurtT*0.9, hk < 0.3 ? 0.35 : 0); hurtEl.classList.toggle('low', hk < 0.3);
   }
@@ -2091,7 +2128,9 @@
     $('tlbar').innerHTML = h;
   }
   function fadeTo(fn) { var f = $('fade'); f.classList.add('on'); setTimeout(function () { fn(); setTimeout(function () { f.classList.remove('on'); }, 60); }, 330); }
-  function paintFlask() { var el = $('flaskLab'); if (!run) return; el.textContent = (run.flasks ? 'flasks ' + run.flasks : '') + (run.flasks && meta.vials ? ' · ' : '') + (meta.vials ? 'vial ' + meta.vials : ''); el.classList.toggle('on', !!(run.flasks || meta.vials)); }
+  var flaskTxt = '';
+  function paintFlask() { var el = $('flaskLab'); if (!run) return; var tx = 'dash ' + (run.dashCd > 0 ? Math.ceil(run.dashCd) + 's' : 'ready') + (run.flasks ? ' · flasks ' + run.flasks : '') + (meta.vials ? ' · vial ' + meta.vials : '');
+    if (tx !== flaskTxt) { flaskTxt = tx; el.textContent = tx; } el.classList.add('on'); }
 
   /* ---------------- level up ---------------- */
   var luList = $('luList'), luTitle = $('luTitle'), bReroll = $('bReroll'), rerollN = $('rerollN'), bBanish = $('bBanish'), banishN = $('banishN'), bSkip = $('bSkip'), luHint = $('luHint'), luTier = $('luTier');
@@ -2189,7 +2228,7 @@
 
   /* ---------------- pause / settings ---------------- */
   var alphaEl = $('stickAlpha'), alphaVal = $('alphaVal'), shapeEl = $('stickShape');
-  var SW = { swFs:'fullscreen', swSound:'sound', swAmb:'ambience', swHaptic:'haptics', swNums:'nums', swShake:'shake', swWeather:'weather', swDiag:'diag', swAim:'autoAim', swSticks:'sticks', swLight:'lighting', swMusic:'music' };
+  var SW = { swFs:'fullscreen', swSound:'sound', swAmb:'ambience', swHaptic:'haptics', swNums:'nums', swShake:'shake', swWeather:'weather', swDiag:'diag', swAim:'autoAim', swSticks:'sticks', swLight:'lighting', swMusic:'music', swPixel:'pixel' };
   function setSwitch(el, on) { el.setAttribute('aria-checked', on ? 'true' : 'false'); }
   function applySettings() {
     for (var id in SW) setSwitch($(id), settings[SW[id]]);
@@ -2312,7 +2351,7 @@
   function startRunNow(daily) {
     mainEl.classList.remove('on'); overEl.classList.remove('on'); pauseEl.classList.remove('on'); hudEl.classList.remove('off');
     newRun(selChar, selMap, daily); syncPause(); Snd.ambient(true); Snd.music(true); banner(run.map.n + (run.agony ? ' · Agony' : ''), run.char.n + ' · ' + fmtTime(run.dur) + (meta.vials ? ' · vial in pocket' : ''));
-    if (meta.stats.runs <= 2) later(2.8, function () { toast('Left thumb moves. Right thumb aims, or let auto-aim do it.'); });
+    if (meta.stats.runs <= 2) { later(2.8, function () { toast('Left thumb moves. Right thumb aims, or let auto-aim do it.'); }); later(7, function () { toast('Double-tap the move side to dash.'); }); }
   }
   $('bHunt').addEventListener('click', function () { startRun(false); });
   $('bDaily').addEventListener('click', function () { startRun(true); });
@@ -2372,7 +2411,9 @@
     function from(cx, cy) { var r = stageEl.getBoundingClientRect(); var dx = (cx - r.left) - ox, dy = (cy - r.top) - oy, d = Math.hypot(dx, dy);
       if (d > STICK_R) { dx = dx/d*STICK_R; dy = dy/d*STICK_R; } S.x = dx/STICK_R; S.y = dy/STICK_R;
       knob.style.transform = 'translate(' + (S.x*KNOB_MAX).toFixed(1) + 'px,' + (S.y*KNOB_MAX).toFixed(1) + 'px)'; }
-    function grab(cx, cy, tid) { var r = stageEl.getBoundingClientRect(); ox = cx - r.left; oy = cy - r.top; id = tid; el.classList.add('active'); S.active = true; S.x = 0; S.y = 0; knob.style.transform = ''; }
+    var lastGrab = 0;
+    function grab(cx, cy, tid) { var r = stageEl.getBoundingClientRect(); ox = cx - r.left; oy = cy - r.top; id = tid; el.classList.add('active'); S.active = true; S.x = 0; S.y = 0; knob.style.transform = '';
+      var now = performance.now(); if (side === 'left' && now - lastGrab < 300) dash(); lastGrab = now; }
     function release() { id = null; S.x = 0; S.y = 0; S.active = false; knob.style.transform = ''; el.classList.remove('active'); }
     zone.addEventListener('touchstart', function (e) { if (id !== null) return; e.preventDefault(); var t = e.changedTouches[0]; grab(t.clientX, t.clientY, t.identifier); }, { passive: false });
     window.addEventListener('touchmove', function (e) { if (id === null) return; for (var i = 0; i < e.changedTouches.length; i++) if (e.changedTouches[i].identifier === id) { e.preventDefault(); from(e.changedTouches[i].clientX, e.changedTouches[i].clientY); } }, { passive: false });
@@ -2385,7 +2426,7 @@
   }
   var sL = makeStick($('zoneL'), stickL, 'left', sticks.L), sR = makeStick($('zoneR'), stickR, 'right', sticks.R);
   function homeSticks() { sL.home(); sR.home(); }
-  window.addEventListener('keydown', function (e) { var k = e.key.toLowerCase(); keys[k] = true; if (e.key.indexOf('Arrow') === 0) e.preventDefault(); });
+  window.addEventListener('keydown', function (e) { var k = e.key.toLowerCase(); keys[k] = true; if (e.key.indexOf('Arrow') === 0) e.preventDefault(); if (e.key === ' ') { dash(); e.preventDefault(); } });
   window.addEventListener('keyup', function (e) { keys[e.key.toLowerCase()] = false; });
   document.addEventListener('visibilitychange', function () { if (document.hidden && run && !run.over && !pauseEl.classList.contains('on')) openPause(); });
 
