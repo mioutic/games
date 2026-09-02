@@ -1,0 +1,7 @@
+{
+  "name": "Thirst",
+  "glyph": "fang",
+  "description": "Survive until dawn. Move; the killing is done for you.",
+  "ink": "#c96a8e",
+  "stat": { "key": "thirst.best", "label": "Best night", "format": "sec" }
+}
