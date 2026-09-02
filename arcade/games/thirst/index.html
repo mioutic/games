@@ -97,15 +97,16 @@
   .zone { position: absolute; bottom: 0; height: 58%; pointer-events: auto; touch-action: none; z-index: 1; }
   .zone.left  { left: 0; right: 50%; }
   .zone.right { left: 50%; right: 0; }
-  .stick { position: absolute; width: 118px; height: 118px; margin: -59px 0 0 -59px; z-index: 2; border: 1px solid var(--line-1); border-radius: 50%;
+  .stick { position: absolute; width: 84px; height: 84px; margin: -42px 0 0 -42px; z-index: 2; border: 1px solid var(--line-1); border-radius: 50%;
            background: rgba(233,216,197,.03); pointer-events: none; opacity: var(--stick-a, .5); transition: opacity 140ms var(--ease); }
   .stick.square, .stick.square .knob { border-radius: var(--radius); }
   .stick::before, .stick::after { content: ""; position: absolute; background: var(--line-1); }
-  .stick::before { left: 12px; right: 12px; top: 50%; height: 1px; }
-  .stick::after { top: 12px; bottom: 12px; left: 50%; width: 1px; }
-  .stick .knob { position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; margin: -22px 0 0 -22px; border-radius: 50%;
+  .stick::before { left: 9px; right: 9px; top: 50%; height: 1px; }
+  .stick::after { top: 9px; bottom: 9px; left: 50%; width: 1px; }
+  .stick.hidden { display: none; }
+  .stick .knob { position: absolute; left: 50%; top: 50%; width: 32px; height: 32px; margin: -16px 0 0 -16px; border-radius: 50%;
                  background: rgba(233,216,197,.16); border: 1px solid var(--line-2); }
-  .stick .lab { position: absolute; left: 0; right: 0; bottom: -16px; text-align: center; font: 500 7px/1 var(--font-ui); letter-spacing: .24em;
+  .stick .lab { position: absolute; left: 0; right: 0; bottom: -14px; text-align: center; font: 500 6.5px/1 var(--font-ui); letter-spacing: .24em;
                 text-transform: uppercase; color: var(--t-3); }
   .stick.aim { border-color: var(--line-2); }
   .stick.aim .knob { border-color: var(--accent-2); background: rgba(184,29,58,.14); }
@@ -345,6 +346,8 @@
     <div class="rule"></div>
     <div class="opt"><div><div class="optk">Auto-aim</div><div class="optd">Attacks face the nearest thing. The aim stick still overrides it.</div></div>
       <button class="sw" id="swAim" role="switch" aria-checked="true"><span></span></button></div>
+    <div class="opt"><div><div class="optk">Show sticks</div><div class="optd">Off hides the rings. The bottom corners still move and aim.</div></div>
+      <button class="sw" id="swSticks" role="switch" aria-checked="true"><span></span></button></div>
     <div class="opt"><div><div class="optk">Stick visibility</div><div class="optd" id="alphaVal">50%</div></div>
       <input class="rng" id="stickAlpha" type="range" min="0" max="100" step="5" value="50"></div>
     <div class="opt"><div><div class="optk">Stick shape</div></div>
@@ -483,7 +486,7 @@
 
   /* ---------------- settings ---------------- */
   var settings = { rev: 2, fullscreen: true, sound: true, ambience: true, haptics: true, nums: true, shake: true, weather: true,
-                   diag: false, stickAlpha: 50, stickShape: 'circle', autoAim: true };
+                   diag: false, stickAlpha: 50, stickShape: 'circle', autoAim: true, sticks: true };
   try { var sv = JSON.parse(localStorage.getItem(SKEY) || 'null');
         if (sv) for (var sk in settings) if (sv[sk] !== undefined) settings[sk] = sv[sk]; } catch (e) {}
   function saveSettings() { try { localStorage.setItem(SKEY, JSON.stringify(settings)); } catch (e) {} mirrorSave(); }
@@ -1915,14 +1918,14 @@
 
   /* ---------------- pause / settings ---------------- */
   var alphaEl = $('stickAlpha'), alphaVal = $('alphaVal'), shapeEl = $('stickShape');
-  var SW = { swFs:'fullscreen', swSound:'sound', swAmb:'ambience', swHaptic:'haptics', swNums:'nums', swShake:'shake', swWeather:'weather', swDiag:'diag', swAim:'autoAim' };
+  var SW = { swFs:'fullscreen', swSound:'sound', swAmb:'ambience', swHaptic:'haptics', swNums:'nums', swShake:'shake', swWeather:'weather', swDiag:'diag', swAim:'autoAim', swSticks:'sticks' };
   function setSwitch(el, on) { el.setAttribute('aria-checked', on ? 'true' : 'false'); }
   function applySettings() {
     for (var id in SW) setSwitch($(id), settings[SW[id]]);
     Snd.enable(settings.sound); if (!settings.ambience) Snd.ambient(false); else if (run && !run.over) Snd.ambient(true);
     document.documentElement.style.setProperty('--stick-a', (settings.stickAlpha/100).toFixed(2));
     alphaEl.value = settings.stickAlpha; alphaVal.textContent = settings.stickAlpha === 0 ? 'Invisible — the bottom corners still steer.' : settings.stickAlpha + '%';
-    [stickL, stickR].forEach(function (s) { s.classList.toggle('square', settings.stickShape === 'square'); });
+    [stickL, stickR].forEach(function (s) { s.classList.toggle('square', settings.stickShape === 'square'); s.classList.toggle('hidden', !settings.sticks); });
     var sb = shapeEl.querySelectorAll('button'); for (var i = 0; i < sb.length; i++) sb[i].classList.toggle('on', sb[i].dataset.s === settings.stickShape);
     $('rowFs').style.display = framed() ? '' : 'none';
     $('diag').style.display = settings.diag ? 'block' : 'none';
@@ -2072,10 +2075,10 @@
      input origin moves to where the thumb landed. */
   var sticks = { L: { x: 0, y: 0, active: false }, R: { x: 0, y: 0, active: false } }, keys = {};
   var stickL = $('stickL'), stickR = $('stickR');
-  var STICK_R = 50, KNOB_MAX = 30;
+  var STICK_R = 50, KNOB_MAX = 22;
   function makeStick(zone, el, side, S) {
     var id = null, ox = 0, oy = 0, knob = el.querySelector('.knob');
-    function home() { var y = cssH - INS.b - 84; var x = side === 'left' ? INS.l + 80 : cssW - INS.r - 80; el.style.left = x + 'px'; el.style.top = y + 'px'; }
+    function home() { var y = cssH - INS.b - 70; var x = side === 'left' ? INS.l + 66 : cssW - INS.r - 66; el.style.left = x + 'px'; el.style.top = y + 'px'; }
     function from(cx, cy) { var r = stageEl.getBoundingClientRect(); var dx = (cx - r.left) - ox, dy = (cy - r.top) - oy, d = Math.hypot(dx, dy);
       if (d > STICK_R) { dx = dx/d*STICK_R; dy = dy/d*STICK_R; } S.x = dx/STICK_R; S.y = dy/STICK_R;
       knob.style.transform = 'translate(' + (S.x*KNOB_MAX).toFixed(1) + 'px,' + (S.y*KNOB_MAX).toFixed(1) + 'px)'; }
