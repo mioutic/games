@@ -177,6 +177,17 @@ dust motes cost 24k triangles on its own. Keep a separate cheap mesh (a
 
 ---
 
+## Saves on iPhone
+
+Safari and the home-screen app are **two different storage worlds**: `localStorage`,
+IndexedDB and cookies are not shared between them, so a save made in one is
+invisible in the other. **Cache Storage is shared.** Thirst keeps its save in
+both — `localStorage` as the primary, a `caches.open('thirst-save')` entry as
+the mirror — and on load takes whichever carries the newer `savedAt`. It also
+exports the whole save as a text "sigil" from its settings sheet, which is the
+only route between two phones. Any game with progress worth keeping should do
+the same; the mirror is twenty lines.
+
 ## Shipping
 
 - `arcade/VERSION` is the single source for the on-screen build stamp *and* the

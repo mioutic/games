@@ -62,10 +62,16 @@ def main():
         }
         if meta.get("stat"):
             entry_meta["stat"] = meta["stat"]
+        # Optional. Lower comes first; unset sorts after everything that set one.
+        entry_meta["_order"] = meta.get("order", 100)
         if meta.get("emoji"):
             print("warning: %s sets 'emoji' — Sanguine forbids emoji, use 'glyph' (see DESIGN.md)"
                   % slug, file=sys.stderr)
         entries.append(entry_meta)
+
+    entries.sort(key=lambda e: (e["_order"], e["slug"]))
+    for e in entries:
+        del e["_order"]
 
     with open(OUT, "w", encoding="utf-8", newline="\n") as f:
         json.dump({"games": entries}, f, indent=2, ensure_ascii=False)

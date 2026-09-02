@@ -1,6 +1,19 @@
 {
   "games": [
     {
+      "slug": "thirst",
+      "name": "Thirst",
+      "glyph": "fang",
+      "description": "Survive the night. Left thumb moves, right thumb aims. Lords on a timer, a Sanctum between nights.",
+      "ink": "#c96a8e",
+      "entry": "index.html",
+      "stat": {
+        "key": "thirst.best",
+        "label": "Best night",
+        "format": "sec"
+      }
+    },
+    {
       "slug": "barrow",
       "name": "Barrow",
       "glyph": "blade",
@@ -102,19 +115,6 @@
         "key": "snake.best",
         "label": "Best",
         "format": "int"
-      }
-    },
-    {
-      "slug": "thirst",
-      "name": "Thirst",
-      "glyph": "fang",
-      "description": "Survive until dawn. Move; the killing is done for you.",
-      "ink": "#c96a8e",
-      "entry": "index.html",
-      "stat": {
-        "key": "thirst.best",
-        "label": "Best night",
-        "format": "sec"
       }
     }
   ]
