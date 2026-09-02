@@ -814,7 +814,7 @@
     needle: { n:'Needle', g:'needle', ink:'teal', kind:'bolt', cd:1.05, dmg:11, spd:520, amt:1, pierce:0, desc:'A dart along the aim.',
               lv:{ 2:{amt:1}, 3:{dmg:5}, 4:{cd:-.1}, 5:{amt:1}, 6:{dmg:6}, 7:{pierce:1}, 8:{amt:1}, 9:{dmg:8}, 10:{pierce:1} },
               evo:{ id:'stitch', n:'Stitcher', g:'stitch', need:'tempo', desc:'Needles that turn to find the next throat.' } },
-    halo:   { n:'Halo Drone', g:'halo', ink:'peri', kind:'orbit', cd:3.2, dmg:9, amt:1, dur:2.4, r:74, desc:'Drones that circle you and cut.',
+    halo:   { n:'Halo Drone', g:'halo', ink:'peri', kind:'orbit', cd:3.0, dmg:9, amt:1, dur:2.6, r:74, desc:'Drones that circle you and cut.',
               lv:{ 2:{amt:1}, 3:{dmg:4}, 4:{dur:.6}, 5:{amt:1}, 6:{r:14}, 7:{dmg:6}, 8:{dur:.8}, 9:{amt:1}, 10:{dmg:8} },
               evo:{ id:'crown', n:'Crown of Drones', g:'crown', need:'hide', desc:'They never land.' } },
     bolt:   { n:'Ichor Bolt', g:'bolt', ink:'rose', kind:'bolt', cd:1.6, dmg:22, spd:700, amt:1, pierce:99, desc:'A line through everything it meets.',
@@ -1315,8 +1315,9 @@
         var ang = Math.atan2(P.ay, P.ax) + (b - (amt-1)/2) * 0.12;
         pushBolt(w, P.x, P.y, ang, spd, { r: w.id === 'bolt' ? 5*areaMul()*(w.evo?1.5:1) : 4, dmg:dmg, pierce: wstat(w, 'pierce') + (w.evo && w.id === 'bolt' ? 99 : 0), home: w.evo && w.id === 'needle' ? 1 : 0, trail: w.id === 'bolt' ? 1 : 0, life: 1.6*durMul() }); }); })(b);
     } else if (k === 'orbit') {
-      var n = amt, dur = wstat(w, 'dur') + (w.evo ? 999 : 0), rad = wstat(w, 'r');
-      for (var o = 0; o < n; o++) shots.push({ kind:'orbit', a:o/n*Math.PI*2, R:rad, r:9*areaMul(), t:0, life:dur, dmg:dmg, w:w, ink:ink, spin:3.2, kb:0.5 });
+      // Whole circles only: the spin is fitted to the life so a drone lands where it rose.
+      var n = amt, dur = wstat(w, 'dur') + (w.evo ? 999 : 0), rad = wstat(w, 'r'), turns = Math.max(1, Math.round(dur*3.2/6.283)), spin = w.evo ? 3.2 : turns*6.283/dur;
+      for (var o = 0; o < n; o++) shots.push({ kind:'orbit', a:o/n*Math.PI*2, R:rad, r:9*areaMul(), t:0, life:dur, dmg:dmg, w:w, ink:ink, spin:spin, kb:0.5, fade:0.3 });
       if (w.evo) P.cds[w.id] = 999;
     } else if (k === 'volley') {
       for (var v = 0; v < amt; v++) pushBolt(w, P.x, P.y, rr(0, 6.283), spd, { r:5*areaMul(), dmg:dmg, pierce: w.evo ? 2 : 0, bat:1, life:1.3*durMul() });
@@ -1349,7 +1350,7 @@
   function familiarTick(w, dt) {
     var want = Math.round(wstat(w, 'amt')), have = 0;
     for (var i = 0; i < shots.length; i++) if (shots[i].kind === 'wisp' && shots[i].w === w) have++;
-    for (var k = have; k < want; k++) shots.push({ kind:'wisp', x:P.x, y:P.y, a:k*2.1, t:0, life:1e9, w:w, ink:w.def.ink, fireT:rr(0, 0.5), slot:k });
+    for (var k = have; k < want; k++) shots.push({ kind:'wisp', x:P.x, y:P.y, a:k*2.1 + rr(0, 1), t:0, life:1e9, w:w, ink:w.def.ink, fireT:rr(0, 0.5), slot:k });
   }
 
   /* ---------------- damage ---------------- */
@@ -1860,21 +1861,23 @@
       if (run.fogT > 0) { k = Math.min(1, run.fogT/4); amb = amb.map(function (v) { return v*(1 - 0.45*k); }); }
       if (run.moonT > 0) { k = Math.min(1, run.moonT/3); amb = [lerp(amb[0], 120, k), lerp(amb[1], 40, k), lerp(amb[2], 52, k)]; }
       var left = run.dur - run.t; if (left < 60) { k = clamp(1 - left/60, 0, 1); amb = [lerp(amb[0], 236, k), lerp(amb[1], 222, k), lerp(amb[2], 208, k)]; }
-      if (run.banner > 1.2 && run.bosses.some(function (b) { return b.boss === 'lord'; })) amb = amb.map(function (v) { return v*0.5; });
+      if (run.banner > 0 && run.bosses.some(function (b) { return b.boss === 'lord'; })) { var bk = clamp((run.banner - 0.8)/0.6, 0, 1); amb = amb.map(function (v) { return v*(1 - 0.5*bk); }); }
     }
     L.setTransform(1, 0, 0, 1, 0, 0); L.globalCompositeOperation = 'source-over';
     L.fillStyle = 'rgb(' + (amb[0]|0) + ',' + (amb[1]|0) + ',' + (amb[2]|0) + ')'; L.fillRect(0, 0, lw, lh);
     L.setTransform(LS, 0, 0, LS, 0, 0); worldXf(L, ox, oy); L.globalCompositeOperation = 'lighter';
     function lamp(x, y, col, r, a) { var sp = lightSprite(col); if (a !== undefined) L.globalAlpha = a; L.drawImage(sp.c, x - r, y - r, r*2, r*2); L.globalAlpha = 1; }
     var vx0 = camX - VW/2 - 200, vx1 = camX + VW/2 + 200, vy0 = camY - VH/2 - 200, vy1 = camY + VH/2 + 200, i;
-    if (run && run.boltFlash > 0) { run.boltFlash -= 0.05; L.globalCompositeOperation = 'source-over'; L.fillStyle = 'rgba(233,216,197,' + (0.35*Math.max(0, run.boltFlash)).toFixed(2) + ')'; L.setTransform(1, 0, 0, 1, 0, 0); L.fillRect(0, 0, lw, lh); L.setTransform(LS, 0, 0, LS, 0, 0); worldXf(L, ox, oy); L.globalCompositeOperation = 'lighter'; }
+    if (run && run.boltFlash > 0) { run.boltFlash -= 0.033; L.globalCompositeOperation = 'source-over'; L.fillStyle = 'rgba(233,216,197,' + (0.35*Math.max(0, run.boltFlash)).toFixed(2) + ')'; L.setTransform(1, 0, 0, 1, 0, 0); L.fillRect(0, 0, lw, lh); L.setTransform(LS, 0, 0, LS, 0, 0); worldXf(L, ox, oy); L.globalCompositeOperation = 'lighter'; }
     for (i = 0; i < lights.length; i++) { var l = lights[i]; if (l.x < vx0 || l.x > vx1 || l.y < vy0 || l.y > vy1) continue; lamp(l.x, l.y, l.col, l.r, 0.8); }
     if (!run) return;
     lamp(P.x, P.y, INK.bone, 250*(1 + stat('light')*0.6 - (run.fogT > 0 ? 0.35*Math.min(1, run.fogT/4) : 0)), 1);
     for (i = 0; i < run.bosses.length; i++) { var bz = run.bosses[i]; if (!bz.dead) lamp(bz.x, bz.y, bz.def.eye, bz.r*4 + 60, 0.9); }
     var n = 0;
-    for (i = 0; i < shots.length && n < 90; i++) { var s = shots[i]; if (s.kind === 'mine' || s.kind === 'arc') continue; if (s.x < vx0 || s.x > vx1 || s.y < vy0 || s.y > vy1) continue; n++;
-      lamp(s.x, s.y, INK[s.ink] || INK.bone, s.kind === 'orbit' || s.kind === 'wisp' || s.kind === 'boom' ? 48 : s.kind === 'strike' ? 110 : 30, 0.55); }
+    for (i = 0; i < shots.length && n < 90; i++) { var s = shots[i]; if (s.kind === 'mine') continue; if (s.x < vx0 || s.x > vx1 || s.y < vy0 || s.y > vy1) continue; n++;
+      if (s.kind === 'arc') { lamp(s.x + s.dx*s.r*0.6, s.y + s.dy*s.r*0.6, INK[s.ink] || INK.bone, s.r*1.4, (1 - s.t/s.life)*0.6); continue; }
+      var la = s.kind === 'orbit' && s.fade ? Math.max(0, Math.min(1, s.t/s.fade, (s.life - s.t)/s.fade)) : 1;
+      lamp(s.x, s.y, INK[s.ink] || INK.bone, s.kind === 'orbit' || s.kind === 'wisp' || s.kind === 'boom' ? 48 : s.kind === 'strike' ? 110 : 30, 0.55*la); }
     for (i = 0; i < hazards.length; i++) { var h = hazards[i]; if (h.kind === 'blast' || h.kind === 'tele') lamp(h.x, h.y, h.ink, h.r*1.3, h.kind === 'blast' ? 1 - h.t/h.life : 0.5); }
     for (i = 0; i < motes.length; i++) { var m = motes[i]; if (m.kind === 'chest' || m.kind === 'relic') lamp(m.x, m.y, INK.gold, 60, 0.7); }
     for (i = 0; i < parts.length; i += 3) { var pp = parts[i]; lamp(pp.x, pp.y, pp.col, 18, (1 - pp.t/pp.life)*0.5); }
@@ -1906,8 +1909,8 @@
       else if (h.kind === 'tele') { g.strokeStyle = 'rgba(217,164,65,.7)'; g.lineWidth = 1.5; g.beginPath(); g.arc(h.x, h.y, h.r, 0, 6.283); g.stroke(); g.fillStyle = 'rgba(217,164,65,.14)'; g.beginPath(); g.arc(h.x, h.y, h.r*hk, 0, 6.283); g.fill(); }
       else if (h.kind === 'blast') { g.strokeStyle = h.ink; g.lineWidth = 3*(1-hk) + 1; g.globalAlpha = 1 - hk; g.beginPath(); g.arc(h.x, h.y, h.r*(0.4 + 0.6*hk), 0, 6.283); g.stroke(); g.globalAlpha = 1; }
       else if (h.kind === 'pulse') { g.strokeStyle = h.ink; g.lineWidth = 1; g.globalAlpha = (1 - hk)*0.6; g.beginPath(); g.arc(h.x, h.y, h.r*hk, 0, 6.283); g.stroke(); g.globalAlpha = 1; } }
-    for (var z = 0; z < zones.length; z++) { var zn = zones[z]; g.fillStyle = zn.evo ? 'rgba(184,29,58,.22)' : 'rgba(184,29,58,.14)'; g.strokeStyle = 'rgba(255,84,112,.45)'; g.lineWidth = 1;
-      g.beginPath(); g.arc(zn.x, zn.y, zn.r, 0, 6.283); g.fill(); g.stroke(); }
+    for (var z = 0; z < zones.length; z++) { var zn = zones[z], zp = 0.5 + 0.5*Math.sin(t*4); g.fillStyle = zn.evo ? 'rgba(184,29,58,.22)' : 'rgba(184,29,58,.14)'; g.strokeStyle = 'rgba(255,84,112,' + (0.3 + 0.2*zp) + ')'; g.lineWidth = 1;
+      g.beginPath(); g.arc(P.x, P.y, zn.r, 0, 6.283); g.fill(); g.stroke(); g.globalAlpha = 0.25; g.beginPath(); g.arc(P.x, P.y, zn.r*(0.5 + 0.5*zp), 0, 6.283); g.stroke(); g.globalAlpha = 1; }
     // Mines and wisps sit on the floor layer.
     for (i = 0; i < shots.length; i++) { var mn = shots[i]; if (mn.kind !== 'mine') continue; var pul = 0.5 + 0.5*Math.sin(t*6);
       g.strokeStyle = mn.armed > 0.4 ? 'rgba(217,164,65,' + (0.35 + 0.35*pul) + ')' : 'rgba(217,164,65,.2)'; g.lineWidth = 1;
@@ -1939,8 +1942,9 @@
     for (i = 0; i < shots.length; i++) { var s = shots[i]; var col = INK[s.ink] || INK.bone;
       if (s.kind === 'arc') { var k = 1 - s.t/s.life; var a0 = Math.atan2(s.dy, s.dx); g.strokeStyle = col; g.globalAlpha = 0.85*k; g.lineWidth = 5*k + 1;
         g.beginPath(); g.arc(s.x, s.y, s.r*(0.7 + 0.3*(1-k)), a0 - 1.1, a0 + 1.1); g.stroke(); g.lineWidth = 1.5; g.globalAlpha = 0.5*k; g.beginPath(); g.arc(s.x, s.y, s.r*(0.5 + 0.5*(1-k)), a0 - 0.8, a0 + 0.8); g.stroke(); g.globalAlpha = 1; }
-      else if (s.kind === 'orbit') { g.fillStyle = col; g.shadowColor = col; g.shadowBlur = 10; g.beginPath(); g.arc(s.x, s.y, s.r, 0, 6.283); g.fill(); g.shadowBlur = 0;
-        g.strokeStyle = col; g.globalAlpha = 0.18; g.lineWidth = 1; g.beginPath(); g.arc(P.x, P.y, s.R, 0, 6.283); g.stroke(); g.globalAlpha = 1; }
+      else if (s.kind === 'orbit') { var oa = s.fade ? Math.min(1, s.t/s.fade, (s.life - s.t)/s.fade) : 1; g.globalAlpha = Math.max(0, oa);
+        g.fillStyle = col; g.shadowColor = col; g.shadowBlur = 10; g.beginPath(); g.arc(s.x, s.y, s.r*(0.6 + 0.4*oa), 0, 6.283); g.fill(); g.shadowBlur = 0;
+        g.strokeStyle = col; g.globalAlpha = 0.18*oa; g.lineWidth = 1; g.beginPath(); g.arc(P.x, P.y, s.R, 0, 6.283); g.stroke(); g.globalAlpha = 1; }
       else if (s.kind === 'strike') { var kk = 1 - s.t/s.life; g.strokeStyle = col; g.globalAlpha = kk; g.lineWidth = 2.5;
         g.beginPath(); g.moveTo(s.x + rr(-6,6), s.y - 300); g.lineTo(s.x + rr(-8,8), s.y - 120); g.lineTo(s.x + rr(-4,4), s.y - 30); g.lineTo(s.x, s.y); g.stroke();
         g.fillStyle = col; g.globalAlpha = kk*0.35; g.beginPath(); g.arc(s.x, s.y, s.r, 0, 6.283); g.fill(); g.globalAlpha = 1; }
