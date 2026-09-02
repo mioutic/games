@@ -219,12 +219,25 @@
   .coll .c svg { width: 22px; height: 22px; }
   .coll .c.locked { opacity: .22; }
   .coll .c.evo { border-color: var(--warning); }
+  .coll .c.sel { border-color: var(--accent); box-shadow: var(--bloom); }
+  .collinfo { margin-top: 8px; padding: 9px 10px; border: 1px solid var(--line-1); border-radius: var(--radius);
+              background: var(--s-1); font-size: 12px; color: var(--t-2); min-height: 56px; line-height: 1.45; }
+  .collinfo .n { font: 400 14px/1.2 var(--font-display); color: var(--t-0); }
+  .collinfo .r { font: 500 10px/1.5 var(--font-mono); color: var(--warning); margin-top: 3px; }
+  .mark { display: flex; align-items: center; gap: 9px; padding: 7px 0; border-bottom: 1px solid var(--line-0);
+          font-size: 12px; color: var(--t-3); }
+  .mark.on { color: var(--t-0); }
+  .mark .dot { width: 7px; height: 7px; border-radius: 50%; border: 1px solid var(--line-2); flex: none; }
+  .mark.on .dot { background: var(--warning); border-color: var(--warning); box-shadow: 0 0 8px rgba(217,164,65,.5); }
+  .mark small { display: block; font-size: 10.5px; color: var(--t-3); }
+  .mark b { margin-left: auto; font: 500 11px/1 var(--font-mono); color: var(--warning); flex: none; }
+  .sheet, .card { touch-action: pan-y; }
   .bigstat { font: 500 40px/1 var(--font-mono); color: var(--accent); text-align: center; font-variant-numeric: tabular-nums; }
   .bigstat small { display: block; font: 500 9px/1 var(--font-ui); letter-spacing: .18em; text-transform: uppercase;
                    color: var(--t-2); margin-top: 8px; }
   .toast { position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(var(--safe-b) + 150px); z-index: 6;
            padding: 8px 13px; font-size: 12.5px; color: var(--t-0); pointer-events: none; opacity: 0;
-           transition: opacity 200ms var(--ease); white-space: nowrap; max-width: 90%; }
+           transition: opacity 200ms var(--ease); text-align: center; max-width: min(90%, 340px); line-height: 1.4; }
   .toast.on { opacity: 1; }
   @media (max-height: 460px) { .card { padding: 12px 13px 10px; } h2 { font-size: 21px; } .loadout { max-width: 160px; } }
   @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition-duration: 1ms !important; } }
@@ -334,6 +347,9 @@
       <div class="coll" id="collW"></div>
       <div class="micro" style="margin:12px 0 6px">Evolutions</div>
       <div class="coll" id="collE"></div>
+      <div class="collinfo" id="collInfo">Tap a relic to read it.</div>
+      <div class="micro" style="margin:12px 0 6px">Marks</div>
+      <div id="markList"></div>
       <div class="rule"></div>
       <div id="statList"></div>
     </div>
@@ -390,7 +406,7 @@
   function buzz(p) { if (settings.haptics && navigator.vibrate) navigator.vibrate(p); }
 
   /* ---------------- meta (persistent) ---------------- */
-  var meta = { gold: 0, ranks: {}, unlocked: { novice: 1 }, seen: {}, evos: {},
+  var meta = { gold: 0, ranks: {}, unlocked: { novice: 1 }, seen: {}, evos: {}, marks: {},
                stats: { runs: 0, kills: 0, best: 0, bestDaily: 0, evolved: 0, bosses: 0 }, dailyDone: '' };
   try { var mv = JSON.parse(localStorage.getItem(MKEY) || 'null');
         if (mv) { for (var mk in meta) if (mv[mk] !== undefined) meta[mk] = mv[mk]; } } catch (e) {}
@@ -411,7 +427,23 @@
       var d = noiseBuf.getChannelData(0); for (var i = 0; i < d.length; i++) d[i] = Math.random()*2-1;
       return c;
     }
-    function unlock() { var x = ensure(); if (x && x.state === 'suspended') x.resume(); }
+    var ambOn = false, ambNodes = null;
+    function ambient(on) {
+      ambOn = on;
+      if (!c) return;
+      if (on && !ambNodes) {
+        var g = c.createGain(), lfo = c.createOscillator(), lg = c.createGain();
+        g.gain.value = 0.0001; g.gain.exponentialRampToValueAtTime(0.045, c.currentTime + 2.5);
+        var oscs = [55, 55.6, 110.3].map(function (f, i) { var o = c.createOscillator(); o.type = i === 2 ? 'triangle' : 'sine'; o.frequency.value = f; o.connect(g); o.start(); return o; });
+        lfo.frequency.value = 0.11; lg.gain.value = 0.02; lfo.connect(lg); lg.connect(g.gain); lfo.start();
+        g.connect(master); ambNodes = { g: g, oscs: oscs.concat([lfo]) };
+      } else if (!on && ambNodes) {
+        var n = ambNodes; ambNodes = null; n.g.gain.cancelScheduledValues(c.currentTime); n.g.gain.setValueAtTime(n.g.gain.value, c.currentTime);
+        n.g.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + 1.2);
+        setTimeout(function () { n.oscs.forEach(function (o) { try { o.stop(); } catch (e) {} }); }, 1400);
+      }
+    }
+    function unlock() { var x = ensure(); if (x && x.state === 'suspended') x.resume(); if (x && ambOn && !ambNodes) ambient(true); }
     ['touchstart','mousedown','keydown'].forEach(function (ev) { window.addEventListener(ev, unlock, { passive: true }); });
     function tone(f, dur, type, vol, slide, attack) {
       if (!c || !want) return;
@@ -434,6 +466,9 @@
     function gate(key, ms) { var n = performance.now(); if (last[key] && n - last[key] < ms) return false; last[key] = n; return true; }
     return {
       enable: function (on) { want = on; if (master) master.gain.value = on ? 0.8 : 0.0001; },
+      ambient: ambient,
+      warn: function () { tone(92, 0.9, 'sawtooth', 0.07, 60, 0.25); },
+      mark: function () { [784, 1046].forEach(function (f, i) { setTimeout(function () { tone(f, 0.22, 'triangle', 0.10); }, i*110); }); },
       hit: function () { if (gate('hit', 45)) noise(0.05, 0.10, 0, 900 + Math.random()*600); },
       kill: function () { if (gate('kill', 60)) { noise(0.09, 0.14, 0, 420); tone(180, 0.09, 'triangle', 0.08, 90); } },
       pickup: function (big) { if (gate('pick', big ? 0 : 35)) tone(big ? 660 : 880 + Math.random()*220, 0.07, 'sine', big ? 0.12 : 0.05, big ? 1320 : 0); },
@@ -579,6 +614,9 @@
     mare:    { n:'Nightmare', hp:70,  spd:78,  dmg:16, r:14, xp:8,  col:'#3a2a3f', eye:'#a884c9', shape:'tri' },
     hulk:    { n:'Bulwark',   hp:180, spd:30,  dmg:22, r:20, xp:14, col:'#3f3236', eye:'#d9a441', shape:'box' }
   };
+  // First sighting of each kind gets a line, so a new silhouette is never a mystery.
+  var INTRO = { drone:'Drones. Fast, brittle.', ghoul:'Ghouls. They take a few bites.', warden:'Wardens keep their distance and shoot.',
+                mare:'Nightmares. Do not let them close.', hulk:'Bulwarks. Slow, and they do not stop.' };
   var BOSSES = {
     prime: { n:'Warden Prime', hp:1400, spd:46, dmg:24, r:34, xp:120, col:'#4a4e6b', eye:'#8a8fc9', shape:'box', ranged:1, boss:1 },
     dawn:  { n:'The Dawn',     hp:4200, spd:58, dmg:40, r:46, xp:400, col:'#3a2a3f', eye:'#d9a441', shape:'tri', boss:1, ranged:1 }
@@ -622,6 +660,27 @@
   ];
   function shopCost(item, rank) { return Math.round(item.base * Math.pow(1.55, rank)); }
 
+  // Marks: one-time achievements that pay gold. Checked when a night ends.
+  var MARKS = [
+    { id:'first',  n:'First Night',     d:'Finish a night, however it ends.', gold:40,  test:function (m, r) { return !!r; } },
+    { id:'fed100', n:'A Hundred Mouths',d:'Feed on 100 in one night.',        gold:60,  test:function (m, r) { return r && r.kills >= 100; } },
+    { id:'feast',  n:'Feast',           d:'A twenty-five feast.',             gold:60,  test:function (m, r) { return r && r.best >= 25; } },
+    { id:'five',   n:'Past Midnight',   d:'Survive five minutes.',            gold:100, test:function (m, r) { return r && r.t >= 300; } },
+    { id:'six',    n:'Armoury',         d:'Hold six weapons at once.',        gold:100, test:function (m, r) { return r && r.maxW >= 6; } },
+    { id:'evo',    n:'Awakened',        d:'Evolve a weapon.',                 gold:120, test:function (m) { return m.stats.evolved >= 1; } },
+    { id:'prime',  n:'Warden Down',     d:'Put down Warden Prime.',           gold:150, test:function (m) { return m.stats.bosses >= 1; } },
+    { id:'lv20',   n:'Twentieth',       d:'Reach level 20.',                  gold:100, test:function (m, r) { return r && r.lv >= 20; } },
+    { id:'daily',  n:'Tonight',         d:'Finish the nightly hunt.',         gold:60,  test:function (m) { return !!m.dailyDone; } },
+    { id:'fed1k',  n:'Thousand',        d:'Feed on 1,000, all time.',         gold:80,  test:function (m) { return m.stats.kills >= 1000; } },
+    { id:'dawn',   n:'Saw the Sun',     d:'Survive until dawn.',              gold:300, test:function (m, r) { return r && r.dawnSeen; } }
+  ];
+  function checkMarks(r) {
+    var got = [];
+    MARKS.forEach(function (mk) { if (meta.marks[mk.id]) return; var ok = false; try { ok = mk.test(meta, r); } catch (e) {}
+      if (ok) { meta.marks[mk.id] = 1; meta.gold += mk.gold; got.push(mk); } });
+    return got;
+  }
+
   /* ---------------- run state ---------------- */
   var run = null;               // null when no run is live
   var P = null;                 // the player
@@ -641,7 +700,7 @@
     run = { t: 0, min: 0, kills: 0, gold: 0, xp: 0, lv: 1, next: 9, over: false, paused: false,
             daily: !!daily, chestN: 0, spawnT: 0, bossT: 0, boss: null, dawn: false,
             combo: 0, comboT: 0, best: 0, char: ch, rerolls: Math.round(metaStat('reroll')),
-            wallT: 45 + rr(0, 20), revived: false, evolved: 0, bossKills: 0 };
+            wallT: 45 + rr(0, 20), revived: false, evolved: 0, bossKills: 0, met: {}, warnT: 0, maxW: 1, dawnSeen: false };
     P = { x: 0, y: 0, r: 11, face: 1, fx: 1, fy: 0, vx: 0, vy: 0,
           hp: 100, maxHp: 100, hurtT: 0, inv: 0,
           base: { hp: 100 + metaStat('hp') + (ch.bonus.hp || 0), cd: metaStat('cd') + (ch.bonus.cd || 0),
@@ -675,7 +734,7 @@
   function addWeapon(id) {
     var w = { id: id, lv: 1, evo: false, t: 0, def: WEAPONS[id] };
     P.weapons.push(w); P.cds[id] = 0;
-    meta.seen[id] = 1;
+    meta.seen[id] = 1; if (run) run.maxW = Math.max(run.maxW, P.weapons.length);
     return w;
   }
   function weaponOf(id) { for (var i = 0; i < P.weapons.length; i++) if (P.weapons[i].id === id) return P.weapons[i]; return null; }
@@ -728,6 +787,7 @@
               elite: !boss && R() < 0.035 + run.min*0.006, shootT: rr(1, 3), wob: rr(0, 6.28) };
     if (f.elite) { f.hp *= 6; f.r *= 1.5; f.dmg *= 1.4; f.spd *= 0.9; }
     f.maxHp = f.hp;
+    if (!boss && !run.met[kind]) { run.met[kind] = 1; if (INTRO[kind]) toast(INTRO[kind]); }
     foes.push(f);
     return f;
   }
@@ -751,6 +811,8 @@
     if (run.spawnT <= 0 && alive < w.cap) { run.spawnT = w.every; spawnFoe(rpick(w.mix)); }
     run.wallT -= dt;
     if (run.wallT <= 0 && run.min >= 1) { run.wallT = 55 + rr(0, 25); spawnWall(); }
+    if (!run.w5 && run.t >= 292) { run.w5 = 1; run.warnT = 8; toast('Something is coming'); Snd.warn(); }
+    if (!run.wD && run.t >= RUN_LEN - 8) { run.wD = 1; run.warnT = 8; toast('The sky is turning'); Snd.warn(); }
     if (!run.boss && run.min === 5 && run.t >= 300 && !run.b5) { run.b5 = 1; run.boss = spawnFoe('prime', true); bossBar(true); Snd.boss(); shake = 18; toast('Warden Prime'); }
     if (!run.dawn && run.t >= RUN_LEN) { run.dawn = true; run.boss = spawnFoe('dawn', true); bossBar(true); Snd.boss(); shake = 24; toast('The Dawn'); }
   }
@@ -837,6 +899,8 @@
     Snd.kill();
   }
   function dropMotes(x, y, xp) {
+    // Past a few hundred on the floor, new blood pools into what is already there.
+    if (motes.length > 240) { for (var j = motes.length-1; j >= 0 && j > motes.length-60; j--) { var mm = motes[j]; if (mm.kind === 'xp' && !mm.pulled) { mm.v += xp; return; } } }
     // Denominations, so a screen of kills is a handful of gems, not a carpet.
     var n = xp;
     while (n >= 25) { motes.push({ x:x+rr(-8,8), y:y+rr(-8,8), kind:'xp', v:25, t:0 }); n -= 25; }
@@ -894,7 +958,7 @@
       if (f.def.ranged) { f.shootT -= dt; if (f.shootT <= 0 && dl < 420) { f.shootT = f.boss ? 1.1 : rr(2.2, 3.4);
         var a = Math.atan2(dy, dx); var nb = f.boss ? 5 : 1;
         for (var q = 0; q < nb; q++) { var aq = a + (q-(nb-1)/2)*0.22; shots.push({ kind:'foe', x:f.x, y:f.y, vx:Math.cos(aq)*220, vy:Math.sin(aq)*220, r:5, t:0, life:3, dmg:f.dmg*0.8, ink:'rose' }); } } }
-      if (dl < pr + f.r) hurtPlayer(f.dmg*dt*2.4 + (f.boss ? 4 : 1.5));
+      if (dl < pr + f.r) hurtPlayer(f.dmg*0.55 + (f.boss ? 6 : 0));
       if (dl > Math.max(cssW, cssH)*1.4 && !f.boss) { f.dead = true; }   // lost interest; free the slot
     }
     // Light separation so they don't stack into one pixel.
@@ -964,7 +1028,7 @@
     for (i = parts.length-1; i >= 0; i--) { var pp = parts[i]; pp.t += dt; pp.x += pp.vx*dt; pp.y += pp.vy*dt; pp.vx *= 0.9; pp.vy *= 0.9; if (pp.t > pp.life) parts.splice(i, 1); }
     for (i = nums.length-1; i >= 0; i--) { var nn = nums[i]; nn.t += dt; nn.y -= 34*dt; if (nn.t > 0.7) nums.splice(i, 1); }
 
-    shake = Math.max(0, shake - dt*40);
+    shake = Math.max(0, shake - dt*40); run.warnT = Math.max(0, run.warnT - dt);
     camX += (P.x - camX)*Math.min(1, dt*9); camY += (P.y - camY)*Math.min(1, dt*9);
 
     // Boss bar, dawn.
@@ -1006,7 +1070,8 @@
     });
   }
   function moteSprite(kind, v) {
-    return sprite('m' + kind + v, kind === 'chest' ? 12 : (v >= 25 ? 7 : v >= 5 ? 5 : 3.5), function (g, r) {
+    var tier = v >= 25 ? 25 : v >= 5 ? 5 : 1;
+    return sprite('m' + kind + tier, kind === 'chest' ? 12 : (tier === 25 ? 7 : tier === 5 ? 5 : 3.5), function (g, r) {
       if (kind === 'chest') { g.fillStyle = '#3d1f28'; g.strokeStyle = INK.gold; g.lineWidth = 1.5; g.fillRect(-r, -r*0.7, r*2, r*1.4); g.strokeRect(-r, -r*0.7, r*2, r*1.4); g.strokeRect(-r, -r*0.7, r*2, r*0.5); return; }
       if (kind === 'gold') { g.fillStyle = INK.gold; g.shadowColor = INK.gold; g.shadowBlur = 8; g.beginPath(); g.arc(0,0,r,0,6.283); g.fill(); return; }
       if (kind === 'vial') { g.fillStyle = INK.green; g.shadowColor = INK.green; g.shadowBlur = 8; g.fillRect(-r*0.5, -r, r, r*2); return; }
@@ -1014,7 +1079,14 @@
       g.beginPath(); g.moveTo(0, -r); g.lineTo(r*0.7, 0); g.lineTo(0, r); g.lineTo(-r*0.7, 0); g.closePath(); g.fill();
     });
   }
-  var playerSpr = null;
+  function lampSprite() {
+    return sprite('lamp', 34, function (g, r) {
+      var grd = g.createRadialGradient(0, 0, 1, 0, 0, r); grd.addColorStop(0, 'rgba(233,216,197,.16)'); grd.addColorStop(1, 'rgba(233,216,197,0)');
+      g.fillStyle = grd; g.fillRect(-r, -r, r*2, r*2);
+      g.fillStyle = INK.bone; g.beginPath(); g.arc(0, 0, 2.2, 0, 6.283); g.fill();
+      g.strokeStyle = 'rgba(233,216,197,.25)'; g.lineWidth = 1; g.strokeRect(-3.5, -3.5, 7, 7);
+    });
+  }
   function drawPlayer(g) {
     var t = run ? run.t : 0;
     g.save(); g.translate(P.x, P.y);
@@ -1051,6 +1123,15 @@
       var inks = [INK.teal, INK.peri, INK.violet, INK.pink]; g.strokeStyle = inks[(h>>>4) % 4]; g.globalAlpha = 0.22;
       g.beginPath(); if (h & 1) { g.moveTo(gx+8, gy+GS/2); g.lineTo(gx+GS-8, gy+GS/2); } else { g.moveTo(gx+GS/2, gy+8); g.lineTo(gx+GS/2, gy+GS-8); } g.stroke(); g.globalAlpha = 1;
     }
+    // Street furniture, deterministic per slab: puddles that catch the neon, lamps, manholes.
+    for (gx = x0; gx < camX + cssW/2 + GS; gx += GS) for (gy = y0; gy < camY + cssH/2 + GS; gy += GS) {
+      var hh = ((gx*83492791) ^ (gy*2654435761)) >>> 0, m7 = hh % 19;
+      if (m7 === 3) { g.fillStyle = [INK.teal, INK.peri, INK.violet, INK.pink][(hh>>>6) % 4]; g.globalAlpha = 0.05;
+        g.beginPath(); g.ellipse(gx + GS*0.5 + ((hh>>>9)%30) - 15, gy + GS*0.5 + ((hh>>>13)%30) - 15, 22 + (hh>>>3)%14, 9 + (hh>>>5)%6, 0, 0, 6.283); g.fill(); g.globalAlpha = 1; }
+      else if (m7 === 7) { var ls = lampSprite(); g.drawImage(ls.c, gx + GS*0.25 - ls.s/2, gy + GS*0.25 - ls.s/2, ls.s, ls.s); }
+      else if (m7 === 11) { g.strokeStyle = 'rgba(233,216,197,.06)'; g.lineWidth = 1; g.beginPath(); g.arc(gx + GS*0.7, gy + GS*0.65, 11, 0, 6.283); g.stroke();
+        g.beginPath(); g.arc(gx + GS*0.7, gy + GS*0.65, 7, 0, 6.283); g.stroke(); }
+    }
     // Lamp pool under the player.
     var grd = g.createRadialGradient(P.x, P.y, 20, P.x, P.y, 260); grd.addColorStop(0, 'rgba(233,216,197,.07)'); grd.addColorStop(1, 'rgba(233,216,197,0)');
     g.fillStyle = grd; g.fillRect(P.x-260, P.y-260, 520, 520);
@@ -1069,7 +1150,8 @@
       var fs = foeSprite(f); var fw = fs.s;
       g.drawImage(fs.c, f.x - fw/2, f.y - fw/2, fw, fw);
       if (f.flash > 0.02) { g.globalAlpha = f.flash*0.8; g.globalCompositeOperation = 'lighter'; g.drawImage(fs.c, f.x - fw/2, f.y - fw/2, fw, fw); g.globalCompositeOperation = 'source-over'; g.globalAlpha = 1; }
-      if (f.boss || f.elite) { g.strokeStyle = INK.gold; g.lineWidth = 1; g.strokeRect(f.x - f.r, f.y + f.r + 4, f.r*2, 3); g.fillStyle = INK.gold; g.fillRect(f.x - f.r, f.y + f.r + 4, f.r*2*Math.max(0, f.hp/f.maxHp), 3); }
+      if (f.boss || f.elite) { g.strokeStyle = INK.gold; g.lineWidth = 1; g.strokeRect(f.x - f.r, f.y + f.r + 4, f.r*2, 3); g.fillStyle = INK.gold; g.fillRect(f.x - f.r, f.y + f.r + 4, f.r*2*Math.max(0, f.hp/f.maxHp), 3);
+        g.globalAlpha = 0.35 + 0.2*Math.sin(run.t*5 + f.wob); g.beginPath(); g.arc(f.x, f.y, f.r + 5, 0, 6.283); g.stroke(); g.globalAlpha = 1; }
     }
 
     // Shots, additive so they glow without a bloom pass.
@@ -1094,6 +1176,10 @@
     drawPlayer(g);
     // Magnet ring, faint, so the pull radius is an instrument not a mystery.
     g.strokeStyle = 'rgba(233,216,197,.07)'; g.lineWidth = 1; g.beginPath(); g.arc(P.x, P.y, magnetR(), 0, 6.283); g.stroke();
+    // HP, as a hairline under the feet; hidden while full so the screen stays quiet.
+    if (P.hp < P.maxHp - 0.5) { var hw = 28, hy = P.y + P.r + 7, hk = Math.max(0, P.hp/P.maxHp);
+      g.fillStyle = 'rgba(11,6,9,.8)'; g.fillRect(P.x - hw/2 - 1, hy - 1, hw + 2, 5);
+      g.fillStyle = hk < 0.3 ? INK.rose : INK.bone; g.fillRect(P.x - hw/2, hy, hw*hk, 3); }
 
     // Damage numbers.
     g.textAlign = 'center'; g.textBaseline = 'middle';
@@ -1103,9 +1189,21 @@
     g.globalAlpha = 1;
     g.restore();
 
+    // Rain: screen-space, hashed by index and time so it never allocates.
+    if (run) { var rt = run.t; g.strokeStyle = 'rgba(233,216,197,.10)'; g.lineWidth = 1; g.beginPath();
+      for (i = 0; i < 44; i++) { var rx = ((i*97.3 + rt*140) % (cssW + 60)) - 30, ry = ((i*61.7 + rt*(820 + (i%5)*90)) % (cssH + 60)) - 30;
+        g.moveTo(rx, ry); g.lineTo(rx - 2.5, ry + 13); }
+      g.stroke(); }
     // Vignette.
     var vg = g.createRadialGradient(cssW/2, cssH/2, Math.min(cssW, cssH)*0.35, cssW/2, cssH/2, Math.max(cssW, cssH)*0.75);
     vg.addColorStop(0, 'rgba(5,2,3,0)'); vg.addColorStop(1, 'rgba(5,2,3,.62)'); g.fillStyle = vg; g.fillRect(0, 0, cssW, cssH);
+    // A warning is candlelight at the edges; the dawn is bone climbing up from the top.
+    if (run && run.warnT > 0) { var wk = Math.min(1, run.warnT/2) * (0.55 + 0.45*Math.sin(run.t*6));
+      var wg = g.createRadialGradient(cssW/2, cssH/2, Math.min(cssW, cssH)*0.4, cssW/2, cssH/2, Math.max(cssW, cssH)*0.7);
+      wg.addColorStop(0, 'rgba(217,164,65,0)'); wg.addColorStop(1, 'rgba(217,164,65,' + (0.3*wk).toFixed(3) + ')'); g.fillStyle = wg; g.fillRect(0, 0, cssW, cssH); }
+    if (run && run.dawn) { var dk = clamp((run.t - RUN_LEN)/60, 0, 1);
+      var dg = g.createLinearGradient(0, 0, 0, cssH); dg.addColorStop(0, 'rgba(233,216,197,' + (0.34*dk).toFixed(3) + ')'); dg.addColorStop(1, 'rgba(233,216,197,' + (0.06*dk).toFixed(3) + ')');
+      g.fillStyle = dg; g.fillRect(0, 0, cssW, cssH); }
   }
 
   /* ---------------- HUD paint ---------------- */
@@ -1153,6 +1251,7 @@
   function pickCard(o) {
     if (o.kind === 'gold') return { g:'greed', n:'Blood money', sub:'', d:'+40 gold. Everything is full.', ink:INK.gold };
     if (o.kind === 'w' || o.kind === 'wnew') { var d = WEAPONS[o.id], w = o.w; var nl = w ? w.lv+1 : 1, up = w ? d.lv[nl] : null; var ds = w ? Object.keys(up).map(function (k) { return { dmg:'+damage', amt:'+1 projectile', area:'+area', cd:'faster', pierce:'+pierce', dur:'+duration', r:'+range', bounces:'+bounce' }[k] || k; }).join(', ') : d.desc;
+      if (w && nl === 8) ds += ' · evolves with ' + PASSIVES[d.evo.need].n;
       return { g:d.g, n:d.n, sub: w ? 'lv ' + nl : '', d:ds, ink:INK[d.ink], cls: w ? '' : ' new' }; }
     var p = PASSIVES[o.id], pl = (P.passives[o.id] || 0) + 1; var v = p.per*pl, txt = p.fmt.replace('{v}', Math.round(v*10)/10).replace('{p}', Math.round(v*100));
     return { g:p.g, n:p.n, sub:'lv ' + pl, d: txt + ' — ' + p.desc, ink:'#c3a9ad', cls: pl === 1 ? ' new' : '' };
@@ -1162,7 +1261,10 @@
     else if (o.kind === 'wnew') addWeapon(o.id);
     else if (o.kind === 'w') o.w.lv++;
     else { P.passives[o.id] = (P.passives[o.id] || 0) + 1; if (o.id === 'heart') recomputeHp(); }
-    paintLoadout();
+    paintLoadout(); evoReadyToast();
+  }
+  function evoReadyToast() {
+    P.weapons.forEach(function (w) { if (!w.evo && !w.readyT && w.lv >= 8 && P.passives[w.def.evo.need]) { w.readyT = 1; setTimeout(function () { toast(w.def.n + ' is ready to awaken. Find a chest.'); }, 300); } });
   }
   function showLevelUp() {
     run.paused = true; Snd.levelup(); buzz([10, 30, 10]);
@@ -1240,7 +1342,7 @@
   swDiag.addEventListener('click', function () { settings.diag = !settings.diag; applySettings(); });
   alphaEl.addEventListener('input', function () { settings.stickAlpha = parseInt(alphaEl.value, 10); applySettings(); });
   shapeEl.addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; settings.stickShape = b.dataset.s; applySettings(); });
-  function openPause() { if (!run || run.over) { pauseEl.classList.add('on'); return; } run.paused = true;
+  function openPause() { $('bResume').textContent = run && !run.over ? 'Resume' : 'Close'; if (!run || run.over) { pauseEl.classList.add('on'); return; } run.paused = true;
     $('pauseStats').innerHTML = '<div class="kv"><span>Time</span><b>' + fmtTime(run.t) + '</b></div><div class="kv"><span>Fed</span><b>' + run.kills + '</b></div><div class="kv"><span>Best feast</span><b>×' + run.best + '</b></div><div class="kv"><span>HP</span><b>' + Math.round(P.hp) + ' / ' + P.maxHp + '</b></div>';
     $('bAbandon').style.display = ''; pauseEl.classList.add('on'); }
   $('bPause').addEventListener('click', openPause);
@@ -1266,33 +1368,52 @@
     var sb = $('shopList').querySelectorAll('.shopi'); for (i = 0; i < sb.length; i++) (function (b) { b.onclick = function () { var s = SHOP.filter(function (x) { return x.id === b.dataset.id; })[0]; var r = meta.ranks[s.id] || 0, cost = shopCost(s, r); if (r >= s.ranks || meta.gold < cost) return; meta.gold -= cost; meta.ranks[s.id] = r+1; saveMeta(); paintMain(); Snd.pickup(true); buzz(8); }; })(sb[i]);
     $('collW').innerHTML = WEAPON_IDS.map(function (id) { var d = WEAPONS[id]; return '<div class="c' + (meta.seen[id] ? '' : ' locked') + '" style="color:' + INK[d.ink] + '" title="' + d.n + '">' + svg(d.g) + '</div>'; }).join('');
     $('collE').innerHTML = WEAPON_IDS.map(function (id) { var d = WEAPONS[id]; return '<div class="c evo' + (meta.evos[id] ? '' : ' locked') + '" style="color:' + INK[d.ink] + '" title="' + d.evo.n + '">' + svg(d.evo.g) + '</div>'; }).join('');
+    var cw = $('collW').querySelectorAll('.c'), ce = $('collE').querySelectorAll('.c');
+    function collInfo(id, evo) { var d = WEAPONS[id], pn = PASSIVES[d.evo.need].n;
+      return evo ? '<div class="n">' + esc(d.evo.n) + '</div>' + esc(d.evo.desc) + '<div class="r">' + esc(d.n) + ' at level 8, holding ' + esc(pn) + '</div>'
+                 : '<div class="n">' + esc(d.n) + '</div>' + esc(d.desc) + '<div class="r">Evolves with ' + esc(pn) + ' into ' + esc(d.evo.n) + '</div>'; }
+    function bindColl(list, evo) { for (var k = 0; k < list.length; k++) (function (el, id) { el.onclick = function () {
+      for (var q = 0; q < cw.length; q++) cw[q].classList.remove('sel'); for (q = 0; q < ce.length; q++) ce[q].classList.remove('sel');
+      el.classList.add('sel'); $('collInfo').innerHTML = collInfo(id, evo); Snd.tick(); }; })(list[k], WEAPON_IDS[k]); }
+    bindColl(cw, false); bindColl(ce, true);
+    $('markList').innerHTML = MARKS.map(function (mk) { var on = !!meta.marks[mk.id];
+      return '<div class="mark' + (on ? ' on' : '') + '"><span class="dot"></span><span>' + esc(mk.n) + '<small>' + esc(mk.d) + '</small></span><b>' + (on ? '§' : '+' + mk.gold) + '</b></div>'; }).join('');
     $('statList').innerHTML = '<div class="kv"><span>Nights</span><b>' + meta.stats.runs + '</b></div><div class="kv"><span>Fed, all time</span><b>' + meta.stats.kills + '</b></div><div class="kv"><span>Evolutions</span><b>' + meta.stats.evolved + '</b></div><div class="kv"><span>Bosses</span><b>' + meta.stats.bosses + '</b></div>';
   }
   var tabs = mainEl.querySelectorAll('.tabs button');
   for (var ti = 0; ti < tabs.length; ti++) (function (b) { b.onclick = function () { for (var k = 0; k < tabs.length; k++) tabs[k].classList.toggle('on', tabs[k] === b);
     ['play','shop','coll'].forEach(function (t) { $('tab' + t.charAt(0).toUpperCase() + t.slice(1)).classList.toggle('on', b.dataset.tab === t); }); Snd.tick(); }; })(tabs[ti]);
-  function startRun(daily) { mainEl.classList.remove('on'); overEl.classList.remove('on'); hudEl.classList.remove('off'); newRun(selChar, daily); }
+  function startRun(daily) { mainEl.classList.remove('on'); overEl.classList.remove('on'); hudEl.classList.remove('off'); newRun(selChar, daily);
+    Snd.ambient(true);
+    if (meta.stats.runs <= 2) setTimeout(function () { if (run && !run.over) toast('Drag near either bottom corner to move. The rest is automatic.'); }, 700); }
   $('bHunt').addEventListener('click', function () { startRun(false); });
   $('bDaily').addEventListener('click', function () { startRun(true); });
-  $('bSettings').addEventListener('click', function () { $('bAbandon').style.display = 'none'; pauseEl.classList.add('on'); });
+  $('bSettings').addEventListener('click', function () { $('bAbandon').style.display = 'none'; $('bResume').textContent = 'Close'; pauseEl.classList.add('on'); });
   $('bAgain').addEventListener('click', function () { startRun(run && run.daily); });
   $('bMenu').addEventListener('click', function () { overEl.classList.remove('on'); hudEl.classList.add('off'); run = null; P = null; paintMain(); mainEl.classList.add('on'); });
+  $('bAbandon').addEventListener('click', function () { Snd.ambient(false); });
 
   function endRun(dawn) {
     if (!run || run.over) return;
-    run.over = true; run.paused = true;
+    run.over = true; run.paused = true; run.dawnSeen = !!dawn;
+    Snd.ambient(false);
     if (!dawn) { Snd.death(); shake = 26; burst(P.x, P.y, 60, INK.blood, 240); }
     var gold = run.gold + Math.round(run.t/60*8*(1+stat('greed')));
     meta.gold += gold;
     if (run.daily) { meta.dailyDone = dailyKey(); meta.stats.bestDaily = Math.max(meta.stats.bestDaily, Math.floor(run.t)); }
     else meta.stats.best = Math.max(meta.stats.best, Math.floor(run.t));
     try { localStorage.setItem(BKEY, String(Math.max(meta.stats.best, meta.stats.bestDaily))); } catch (e) {}
-    var got = checkUnlocks(); saveMeta();
+    var got = checkUnlocks(), marks = checkMarks(run); saveMeta();
+    if (marks.length) setTimeout(function () { Snd.mark(); }, 400);
     setTimeout(function () {
       $('overTitle').textContent = dawn ? 'Dawn' : 'Taken';
       $('overTime').innerHTML = fmtTime(run.t) + '<small>' + (dawn ? 'you saw the sun' : 'survived') + '</small>';
-      $('overStats').innerHTML = '<div class="kv"><span>Fed</span><b>' + run.kills + '</b></div><div class="kv"><span>Level</span><b>' + run.lv + '</b></div><div class="kv"><span>Best feast</span><b>×' + run.best + '</b></div><div class="kv"><span>Evolutions</span><b>' + run.evolved + '</b></div><div class="kv"><span>Gold banked</span><b>+' + gold + '</b></div>';
-      $('overUnlock').innerHTML = got.length ? '<div class="rule"></div><div class="lede" style="color:#d9a441;margin:0">Unlocked: ' + got.map(esc).join(', ') + '</div>' : '';
+      var mg = 0; marks.forEach(function (mk) { mg += mk.gold; });
+      $('overStats').innerHTML = '<div class="kv"><span>Fed</span><b>' + run.kills + '</b></div><div class="kv"><span>Level</span><b>' + run.lv + '</b></div><div class="kv"><span>Best feast</span><b>×' + run.best + '</b></div><div class="kv"><span>Evolutions</span><b>' + run.evolved + '</b></div><div class="kv"><span>Gold banked</span><b>+' + (gold + mg) + '</b></div>';
+      var extra = '';
+      if (marks.length) extra += marks.map(function (mk) { return '<div class="mark on"><span class="dot"></span><span>' + esc(mk.n) + '<small>' + esc(mk.d) + '</small></span><b>+' + mk.gold + '</b></div>'; }).join('');
+      if (got.length) extra += '<div class="lede" style="color:#d9a441;margin:8px 0 0">Unlocked: ' + got.map(esc).join(', ') + '</div>';
+      $('overUnlock').innerHTML = extra ? '<div class="rule"></div>' + extra : '';
       hudEl.classList.add('off'); overEl.classList.add('on');
     }, dawn ? 600 : 1100);
   }
