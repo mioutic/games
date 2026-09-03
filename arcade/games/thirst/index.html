@@ -856,6 +856,26 @@
 
   // Traits: ranked, tiered by level like the Halls. Elevated traits carry a cost.
   var TIER_LV = { 1: 1, 2: 6, 3: 14 };
+
+  /* Vigils — the bag that never empties.
+
+     Weapon levels, weapon slots and trait ranks are all finite, so a built-out
+     night used to run out of decisions around minute eight and offer gold
+     instead. These are small, repeatable rites that keep their value: every
+     key here is already a stat() key, so a vigil is just an increment on
+     P.base and the whole existing pipeline picks it up. They stay deliberately
+     modest — a vigil should never beat a real upgrade, only outlast one. */
+  var VIGILS = {
+    blood:  { n:'Vigil of Blood',  g:'blood',  k:'might',   per:0.06, fmt:'+{p}% damage',        ink:'blood',  d:'Sworn again, and it answers.' },
+    reach:  { n:'Vigil of Reach',  g:'area',   k:'area',    per:0.05, fmt:'+{p}% area',          ink:'violet', d:'The dark gives a little more ground.' },
+    sinew:  { n:'Vigil of Sinew',  g:'heart',  k:'hp',      per:8,    fmt:'+{v} vigour',         ink:'rose',   d:'Something in you refuses.' },
+    malice: { n:'Vigil of Malice', g:'crit',   k:'crit',    per:0.03, fmt:'+{p}% to strike deep',ink:'gold',   d:'You have learned where they are thin.' },
+    hunger: { n:'Vigil of Hunger', g:'magnet', k:'magnet',  per:14,   fmt:'+{v} draw',           ink:'teal',   d:'The blood comes to you now.' },
+    mend:   { n:'Vigil of Mending',g:'heal',   k:'regen',   per:0.30, fmt:'+{v} regen a second', ink:'green',  d:'Slowly, and never quite enough.' },
+    haste:  { n:'Vigil of Haste',  g:'speed',  k:'speed',   per:0.03, fmt:'+{p}% speed',         ink:'peri',   d:'Stillness is what kills.' },
+    greed:  { n:'Vigil of Avarice',g:'greed',  k:'greed',   per:0.09, fmt:'+{p}% gold',          ink:'gold',   d:'Take it. You earned the night.' }
+  };
+  var VIGIL_IDS = Object.keys(VIGILS);
   var TRAITS = {
     vigour:     { n:'Vigour',       g:'heart',    stat:'hp',      per:15,  ranks:5, tier:1, fmt:'+{v} max HP',        desc:'More of you to lose.' },
     might:      { n:'Might',        g:'might',    stat:'might',   per:.08, ranks:5, tier:1, fmt:'+{p}% damage',       desc:'Harder.' },
@@ -1151,7 +1171,7 @@
                   critdmg: b('critdmg'), thorns: b('thorns'), leech: b('leech'), kb: 0, dur: 0, pspd: 0, light: 0, lust: 0, spawn: 0, hpmul: 0 },
           wmods: { dmg: te.wdmg || {}, area: te.warea || {}, amt: te.wamt || {}, r: te.wr || {}, pierce: te.wpierce || {} },
           flags: { fangHeal: te.fangHeal || 0, poolHeal: te.poolHeal || 0 },
-          weapons: [], traits: {}, cds: {}, wear: {} };
+          weapons: [], traits: {}, vigils: {}, cds: {}, wear: {} };
     SLOTS.forEach(function (sl) { var id = meta.wear[sl]; if (id && meta.relics[id] && RELICS[id]) P.wear[sl] = id; });
     recomputeHp(); P.hp = P.maxHp;
     foes.length = 0; shots.length = 0; motes.length = 0; parts.length = 0; nums.length = 0; zones.length = 0; hazards.length = 0; decals.length = 0;
@@ -1750,15 +1770,81 @@
   var patterns = {};
   function groundPattern(g, map) {
     var key = map.tex + '@' + dpr; if (patterns[key]) return patterns[key];
-    var T = 192, c = document.createElement('canvas'); c.width = c.height = T*dpr; var q = c.getContext('2d'); q.scale(dpr, dpr);
+    /* 512, not 192.
+
+       Breaking up an obviously-repeating floor needs variation LARGER than the
+       tile. The first attempt drew that variation live — a dozen alpha-blended
+       ellipses per frame — and the second baked it as a second pattern filled
+       over the first. Both cost a whole extra screen of blending, and the
+       second measured worse than the first: an extra full-viewport composite is
+       the expensive thing, not the ellipses. So the macro tone goes INSIDE the
+       tile and the tile gets big enough to hold it, which leaves the ground at
+       exactly one fillRect — the same cost it had before any of this. */
+    var T = 512, c = document.createElement('canvas'); c.width = c.height = T*dpr; var q = c.getContext('2d'); q.scale(dpr, dpr);
     q.fillStyle = map.base; q.fillRect(0, 0, T, T);
     var rng = mulberry(map.tex === 'stone' ? 7 : map.tex === 'metal' ? 11 : 3);
-    for (var i = 0; i < 900; i++) { var x = rng()*T, y = rng()*T, l = rng(); q.fillStyle = l < 0.5 ? 'rgba(255,240,230,' + (0.03 + rng()*0.05).toFixed(3) + ')' : 'rgba(0,0,0,' + (0.06 + rng()*0.12).toFixed(3) + ')'; q.fillRect(x, y, 1 + (rng() < 0.2 ? 1 : 0), 1); }
-    if (map.tex === 'asphalt') { q.strokeStyle = 'rgba(0,0,0,.35)'; q.lineWidth = 1; for (i = 0; i < 4; i++) { q.beginPath(); var cx = rng()*T, cy = rng()*T; q.moveTo(cx, cy); for (var k = 0; k < 5; k++) { cx += rng()*30 - 15; cy += rng()*30 - 10; q.lineTo(cx, cy); } q.stroke(); } }
-    else if (map.tex === 'stone') { q.strokeStyle = 'rgba(0,0,0,.28)'; q.lineWidth = 1; for (i = 0; i < 7; i++) { q.beginPath(); var sx = rng()*T, sy = rng()*T; q.moveTo(sx, sy); q.lineTo(sx + rng()*26 - 13, sy + rng()*26 - 13); q.stroke(); }
-      q.fillStyle = 'rgba(255,240,230,.05)'; for (i = 0; i < 12; i++) q.fillRect(rng()*T, rng()*T, 6 + rng()*14, 2); }
-    else { q.strokeStyle = 'rgba(255,255,255,.06)'; q.lineWidth = 1; for (i = 0; i < 6; i++) { var yy = rng()*T; q.beginPath(); q.moveTo(0, yy); q.lineTo(T, yy + rng()*4 - 2); q.stroke(); }
-      q.fillStyle = 'rgba(111,179,171,.07)'; for (i = 0; i < 10; i++) { q.beginPath(); q.ellipse(rng()*T, rng()*T, 4 + rng()*10, 2 + rng()*4, 0, 0, 6.283); q.fill(); } }
+    // Broad tonal drift under the grain, so a floor has light and dark reaches
+    // rather than one flat value. Each blob is drawn nine times on a 3x3 offset
+    // lattice so it wraps properly — the 4px edge-strip trick below hides a hard
+    // seam, but it cannot hide a soft gradient that stops at the boundary.
+    for (var mi = 0; mi < 30; mi++) {
+      var mx = rng()*T, my = rng()*T, mrx = 54 + rng()*120, mry = 40 + rng()*95,
+          mrot = rng()*3.14, mt = (rng()*3)|0;
+      q.globalAlpha = 0.05 + rng()*0.06;
+      q.fillStyle = mt === 0 ? '#000000' : mt === 1 ? '#3a2028' : '#16202c';
+      for (var ox = -1; ox <= 1; ox++) for (var oy = -1; oy <= 1; oy++) {
+        q.beginPath(); q.ellipse(mx + ox*T, my + oy*T, mrx, mry, mrot, 0, 6.283); q.fill(); } }
+    q.globalAlpha = 1;
+    for (var i = 0; i < 6400; i++) { var x = rng()*T, y = rng()*T, l = rng(); q.fillStyle = l < 0.5 ? 'rgba(255,240,230,' + (0.03 + rng()*0.05).toFixed(3) + ')' : 'rgba(0,0,0,' + (0.06 + rng()*0.12).toFixed(3) + ')'; q.fillRect(x, y, 1 + (rng() < 0.2 ? 1 : 0), 1); }
+    if (map.tex === 'asphalt') {
+      // Aggregate: asphalt is stone held in tar, and reads as stone-in-tar only
+      // if the chips vary in size and tone rather than being uniform noise.
+      for (i = 0; i < 2400; i++) { var ax = rng()*T, ay = rng()*T, ar = 0.7 + rng()*1.9, al = rng();
+        q.fillStyle = al < 0.34 ? 'rgba(214,198,190,' + (0.05 + rng()*0.07).toFixed(3) + ')'
+                    : al < 0.62 ? 'rgba(150,120,124,' + (0.05 + rng()*0.06).toFixed(3) + ')'
+                                : 'rgba(0,0,0,' + (0.10 + rng()*0.14).toFixed(3) + ')';
+        q.beginPath(); q.ellipse(ax, ay, ar, ar*(0.6 + rng()*0.6), rng()*3.14, 0, 6.283); q.fill(); }
+      // A patched repair: a slightly different mix, poured as a rough square.
+      for (var pi = 0; pi < 5; pi++) {
+        var px0 = rng()*T*0.86, py0 = rng()*T*0.86, pw = 40 + rng()*70, ph = 30 + rng()*58;
+        q.fillStyle = 'rgba(0,0,0,.16)'; q.fillRect(px0, py0, pw, ph);
+        q.strokeStyle = 'rgba(24,14,18,.5)'; q.lineWidth = 2.2; q.strokeRect(px0, py0, pw, ph); }
+      // Tar seams: poured, so they are wider than a crack and slightly glossy.
+      q.lineCap = 'round';
+      for (i = 0; i < 21; i++) { q.beginPath(); var sx0 = rng()*T, sy0 = rng()*T;
+        q.moveTo(sx0, sy0);
+        for (var k = 0; k < 5; k++) { sx0 += rng()*34 - 17; sy0 += rng()*34 - 12; q.lineTo(sx0, sy0); }
+        q.strokeStyle = 'rgba(0,0,0,.42)'; q.lineWidth = 2.6 + rng()*1.6; q.stroke();
+        q.strokeStyle = 'rgba(196,176,170,.05)'; q.lineWidth = 0.9; q.stroke(); }
+      // Hairline cracks, thinner than the seams so the two read apart.
+      q.strokeStyle = 'rgba(0,0,0,.3)'; q.lineWidth = 0.8;
+      for (i = 0; i < 35; i++) { q.beginPath(); var cx = rng()*T, cy = rng()*T; q.moveTo(cx, cy);
+        for (var k2 = 0; k2 < 4; k2++) { cx += rng()*26 - 13; cy += rng()*26 - 9; q.lineTo(cx, cy); } q.stroke(); }
+      // Old oil, gone iridescent.
+      for (i = 0; i < 14; i++) { var ox = rng()*T, oy = rng()*T, orr = 9 + rng()*16;
+        var og = q.createRadialGradient(ox, oy, 1, ox, oy, orr);
+        og.addColorStop(0, 'rgba(90,60,86,.13)'); og.addColorStop(0.6, 'rgba(50,64,86,.07)'); og.addColorStop(1, 'rgba(0,0,0,0)');
+        q.fillStyle = og; q.beginPath(); q.arc(ox, oy, orr, 0, 6.283); q.fill(); }
+    }
+    else if (map.tex === 'stone') { q.strokeStyle = 'rgba(0,0,0,.28)'; q.lineWidth = 1; for (i = 0; i < 50; i++) { q.beginPath(); var sx = rng()*T, sy = rng()*T; q.moveTo(sx, sy); q.lineTo(sx + rng()*26 - 13, sy + rng()*26 - 13); q.stroke(); }
+      q.fillStyle = 'rgba(255,240,230,.05)'; for (i = 0; i < 85; i++) q.fillRect(rng()*T, rng()*T, 6 + rng()*14, 2);
+      // Mortar: flags laid in courses, with the joints cut and lit on one edge
+      // so the floor has a direction instead of being uniform speckle.
+      var jy = 0;
+      while (jy < T) { var jh = 34 + rng()*22; jy += jh;
+        q.strokeStyle = 'rgba(0,0,0,.34)'; q.lineWidth = 2; q.beginPath(); q.moveTo(0, jy); q.lineTo(T, jy + rng()*3 - 1.5); q.stroke();
+        q.strokeStyle = 'rgba(233,216,197,.045)'; q.lineWidth = 1; q.beginPath(); q.moveTo(0, jy + 1.6); q.lineTo(T, jy + 1.6 + rng()*3 - 1.5); q.stroke();
+        var jx = rng()*70; while (jx < T) { q.strokeStyle = 'rgba(0,0,0,.28)'; q.lineWidth = 1.6;
+          q.beginPath(); q.moveTo(jx, jy - jh); q.lineTo(jx + rng()*3 - 1.5, jy); q.stroke(); jx += 46 + rng()*40; } } }
+    else { q.strokeStyle = 'rgba(255,255,255,.06)'; q.lineWidth = 1; for (i = 0; i < 42; i++) { var yy = rng()*T; q.beginPath(); q.moveTo(0, yy); q.lineTo(T, yy + rng()*4 - 2); q.stroke(); }
+      q.fillStyle = 'rgba(111,179,171,.07)'; for (i = 0; i < 70; i++) { q.beginPath(); q.ellipse(rng()*T, rng()*T, 4 + rng()*10, 2 + rng()*4, 0, 0, 6.283); q.fill(); }
+      // Plate and rivet: the grate is made of something, and rivets are the
+      // cheapest mark that says so.
+      for (i = 0; i < 156; i++) { var rx = rng()*T, ry = rng()*T;
+        q.fillStyle = 'rgba(0,0,0,.30)'; q.beginPath(); q.arc(rx, ry, 1.7, 0, 6.283); q.fill();
+        q.fillStyle = 'rgba(233,216,197,.10)'; q.beginPath(); q.arc(rx - 0.5, ry - 0.6, 0.9, 0, 6.283); q.fill(); }
+      q.strokeStyle = 'rgba(0,0,0,.26)'; q.lineWidth = 2.2;
+      for (i = 0; i < 14; i++) { var px = rng()*T; q.beginPath(); q.moveTo(px, 0); q.lineTo(px + rng()*4 - 2, T); q.stroke(); } }
     // Wrap the edges so the tile does not show a seam: copy the strips across.
     q.drawImage(c, 0, 0, 4*dpr, T*dpr, T - 4, 0, 4, T); q.drawImage(c, 0, 0, T*dpr, 4*dpr, 0, T - 4, T, 4);
     var pat = g.createPattern(c, 'repeat'); if (pat.setTransform && window.DOMMatrix) pat.setTransform(new DOMMatrix().scale(1/dpr));
@@ -1774,8 +1860,18 @@
       if (kind === 'chest') { g.fillStyle = '#3d1f28'; g.strokeStyle = INK.gold; g.lineWidth = 1.5; g.shadowColor = INK.gold; g.shadowBlur = 10; g.fillRect(-r, -r*0.7, r*2, r*1.4); g.strokeRect(-r, -r*0.7, r*2, r*1.4); g.strokeRect(-r, -r*0.7, r*2, r*0.5); return; }
       if (kind === 'gold') { g.fillStyle = INK.gold; g.shadowColor = INK.gold; g.shadowBlur = 8; g.beginPath(); g.arc(0,0,r,0,6.283); g.fill(); return; }
       if (kind === 'vial') { g.fillStyle = INK.green; g.shadowColor = INK.green; g.shadowBlur = 8; g.fillRect(-r*0.5, -r, r, r*2); return; }
-      g.fillStyle = tier === 25 ? INK.rose : (tier === 5 ? '#d9557a' : INK.blood); g.shadowColor = g.fillStyle; g.shadowBlur = 7;
+      // Blood on near-black asphalt used to disappear into the grain: a 3.5px
+      // shape in arterial crimson, on a ground that is arterial crimson. It
+      // keeps the crimson body but gains a bone-hot core and a rim, which is
+      // what separates a dropped thing from the texture under it.
+      var body = tier === 25 ? INK.rose : (tier === 5 ? '#d9557a' : INK.blood);
+      g.shadowColor = body; g.shadowBlur = tier === 1 ? 9 : 12;
+      g.fillStyle = body;
       g.beginPath(); g.moveTo(0, -r); g.lineTo(r*0.7, 0); g.lineTo(0, r); g.lineTo(-r*0.7, 0); g.closePath(); g.fill();
+      g.shadowBlur = 0;
+      g.strokeStyle = 'rgba(255,224,232,.55)'; g.lineWidth = tier === 1 ? 0.9 : 1.2; g.stroke();
+      g.fillStyle = 'rgba(255,246,248,.92)';
+      g.beginPath(); g.arc(0, 0, Math.max(0.9, r*0.30), 0, 6.283); g.fill();
     });
   }
   function glowSprite(col, r, core) {
@@ -1787,10 +1883,93 @@
   }
   function hash2(x, y) { return ((x*83492791) ^ (y*2654435761)) >>> 0; }
 
+  /* A tag, generated rather than drawn.
+
+     No image ever enters this file, so a piece of graffiti is a path: a run of
+     connected segments whose control points come from a seeded stream. The
+     skeleton is built ONCE and stroked twice — fat and translucent for the
+     body, thin and offset for the highlight — because a highlight generated
+     from a second pass of the stream would not sit on the same letters. Drips
+     hang from where the paint pooled, which is the low point of a segment.
+
+     Three grammars: a bubble throw-up, an angular piece, a script tag. Eight
+     seeds. The variety that matters comes from the stamping, not the drawing —
+     hashed rotation, scale, squash and alpha mean the same eight never read as
+     eight. Deliberately uses its own mulberry stream and never R(), because
+     the render path sharing the seeded RNG is what makes daily runs
+     irreproducible. */
+  var GRAF_N = 8;
+  function graffitiSprite(i) {
+    return sprite('gf' + i, 48, function (g, R0) {
+      var rng = mulberry(1013 + i*7919);
+      var pal = [INK.teal, INK.peri, INK.violet, INK.pink, INK.rose, INK.bone];
+      var col = pal[(rng()*pal.length)|0], style = i % 3;
+      var W = R0*1.7, H = R0*0.72;
+      var segs = [], x = -W/2, sn = 3 + ((rng()*3)|0);
+      for (var s = 0; s < sn; s++) {
+        var nx = x + (W/sn)*(0.75 + rng()*0.5);
+        segs.push({ x0:x, y0:(rng()*2-1)*H*0.16, x1:nx, y1:(rng()*2-1)*H*0.22,
+                    c1:-H*(0.45 + rng()*0.5), c2:H*(0.4 + rng()*0.5) });
+        x = nx;
+      }
+      function trace() {
+        g.beginPath();
+        for (var j = 0; j < segs.length; j++) { var q = segs[j];
+          g.moveTo(q.x0, q.y0);
+          if (style === 0) g.quadraticCurveTo((q.x0 + q.x1)/2, q.c1, q.x1, q.y1);
+          else if (style === 1) { g.lineTo(q.x0 + (q.x1 - q.x0)*0.42, q.c1); g.lineTo(q.x1, q.y1); }
+          else g.bezierCurveTo(q.x0, q.c1, q.x1, q.c2, q.x1, q.y1);
+        }
+      }
+      g.lineCap = 'round'; g.lineJoin = 'round';
+      g.strokeStyle = col; g.globalAlpha = 0.40; g.lineWidth = 5 + rng()*4.5; trace(); g.stroke();
+      g.globalAlpha = 0.20; g.lineWidth = 1.3;
+      g.translate(-1.7, -1.9); trace(); g.stroke(); g.translate(1.7, 1.9);
+      g.globalAlpha = 0.26; g.lineWidth = 1.5; g.beginPath();
+      for (var d = 0; d < segs.length; d++) { if (rng() < 0.45) continue;
+        var dx = segs[d].x1, dy = Math.max(segs[d].y1, segs[d].c2);
+        g.moveTo(dx, dy); g.lineTo(dx, dy + 4 + rng()*11); }
+      g.stroke();
+      g.globalAlpha = 1;
+    });
+  }
+
   function drawGround(g, map, t) {
     var vx0 = camX - VW/2, vy0 = camY - VH/2, vx1 = camX + VW/2, vy1 = camY + VH/2, gx, gy;
     lights.length = 0;
     g.fillStyle = groundPattern(g, map); g.fillRect(vx0 - 4, vy0 - 4, VW + 8, VH + 8);
+
+    // Tags, stamped at hashed places. Culled to the view, so this is a handful
+    // of drawImage calls a frame however far the night runs.
+    var GC = 300;
+    for (gx = Math.floor(vx0/GC) - 1; gx <= Math.floor(vx1/GC) + 1; gx++)
+      for (gy = Math.floor(vy0/GC) - 1; gy <= Math.floor(vy1/GC) + 1; gy++) {
+        var gh = hash2(gx + 7, gy - 3);
+        if (gh % 5 > 2) continue;                       // roughly three cells in five
+        var sx = gx*GC + (gh % 211), sy = gy*GC + ((gh >> 8) % 197);
+        if (sx < vx0 - 90 || sx > vx1 + 90 || sy < vy0 - 90 || sy > vy1 + 90) continue;
+        var gs = graffitiSprite(gh % GRAF_N);
+        g.save();
+        g.translate(sx, sy);
+        g.rotate(((gh >> 3) % 628)/100);
+        g.scale(0.7 + ((gh >> 11) % 75)/100, (0.7 + ((gh >> 11) % 75)/100)*(0.78 + ((gh >> 19) % 42)/100));
+        g.globalAlpha = 0.46 + ((gh >> 23) % 34)/100;
+        g.drawImage(gs.c, -gs.s/2, -gs.s/2, gs.s, gs.s);
+        g.restore();
+        // Some walls get worked over twice. Without this the tags sit on an
+        // obvious one-per-cell lattice.
+        if (gh % 7 === 0) {
+          var g2 = graffitiSprite((gh >> 5) % GRAF_N);
+          g.save();
+          g.translate(sx + 40 + (gh % 61), sy - 30 + ((gh >> 9) % 55));
+          g.rotate(((gh >> 15) % 628)/100);
+          var s2 = 0.55 + ((gh >> 21) % 55)/100; g.scale(s2, s2*0.9);
+          g.globalAlpha = 0.34 + ((gh >> 13) % 26)/100;
+          g.drawImage(g2.c, -g2.s/2, -g2.s/2, g2.s, g2.s);
+          g.restore();
+        }
+      }
+    g.globalAlpha = 1;
     if (map.ground === 'grate') {
       // Water moving under the grating: a second layer, so the floor has depth.
       g.strokeStyle = 'rgba(111,179,171,.16)'; g.lineWidth = 1.5; g.beginPath();
@@ -1915,7 +2094,18 @@
     for (i = 0; i < lights.length; i++) { var l = lights[i]; if (l.x < vx0 || l.x > vx1 || l.y < vy0 || l.y > vy1) continue; lamp(l.x, l.y, l.col, l.r, 0.8); }
     if (!run) return;
     lamp(P.x, P.y, INK.bone, 250*(1 + stat('light')*0.6 - (run.fogT > 0 ? 0.35*Math.min(1, run.fogT/4) : 0) - (run.eclipseT > 0 ? 0.4*Math.min(1, run.eclipseT/2) : 0))*(1 + 0.03*Math.sin(t*23) + 0.02*Math.sin(t*7.3)), 1);
-    var gm = 0; for (i = 0; i < motes.length && gm < 30; i++) { var gmo = motes[i]; if (gmo.kind === 'xp' && gmo.v >= 25) { gm++; lamp(gmo.x, gmo.y, INK.rose, 34, 0.5); } }
+    // Every drop of blood carries its own light now, not just the 25s. Small
+    // ones get a small cheap lamp; the budget rises to 70 and is spent nearest
+    // first, because the ones you are about to walk over are the ones that
+    // need to be findable.
+    var gm = 0;
+    for (i = 0; i < motes.length && gm < 70; i++) {
+      var gmo = motes[i]; if (gmo.kind !== 'xp') continue;
+      if (gmo.x < vx0 - 60 || gmo.x > vx1 + 60 || gmo.y < vy0 - 60 || gmo.y > vy1 + 60) continue;
+      gm++;
+      var big = gmo.v >= 25, mid = gmo.v >= 5;
+      lamp(gmo.x, gmo.y, big ? INK.rose : '#d9557a', big ? 38 : mid ? 26 : 18, big ? 0.55 : mid ? 0.4 : 0.3);
+    }
     for (i = 0; i < run.bosses.length; i++) { var bz = run.bosses[i]; if (!bz.dead) lamp(bz.x, bz.y, bz.def.eye, bz.r*4 + 60, 0.9); }
     var n = 0;
     for (i = 0; i < shots.length && n < 90; i++) { var s = shots[i]; if (s.kind === 'mine') continue; if (s.x < vx0 || s.x > vx1 || s.y < vy0 || s.y > vy1) continue; n++;
@@ -1964,7 +2154,10 @@
     var vx0 = camX - VW/2 - 30, vx1 = camX + VW/2 + 30, vy0 = camY - VH/2 - 30, vy1 = camY + VH/2 + 30;
     for (i = 0; i < motes.length; i++) { var m = motes[i]; if (m.x < vx0 || m.x > vx1 || m.y < vy0 || m.y > vy1) continue;
       if (m.kind === 'relic' || m.kind === 'chest') { var bg = g.createLinearGradient(0, m.y - 110, 0, m.y); bg.addColorStop(0, 'rgba(217,164,65,0)'); bg.addColorStop(1, 'rgba(217,164,65,' + (m.kind === 'relic' ? 0.35 : 0.2) + ')'); g.fillStyle = bg; g.fillRect(m.x - 4, m.y - 110, 8, 110); }
-      var ms = moteSprite(m.kind, m.v || 0); if (m.kind === 'xp') g.globalAlpha = 0.7 + 0.3*Math.sin(t*6 + m.x*0.1);
+      var ms = moteSprite(m.kind, m.v || 0);
+      // A deeper pulse that never dips far: the old 0.7-1.0 swing was too
+      // shallow to catch the eye and too dim at its floor to find.
+      if (m.kind === 'xp') g.globalAlpha = 0.86 + 0.14*Math.sin(t*7 + m.x*0.12 + m.y*0.08);
       g.drawImage(ms.c, m.x - ms.s/2, m.y - ms.s/2 + (m.kind === 'chest' || m.kind === 'relic' ? Math.sin(m.t*4)*3 : 0), ms.s, ms.s); g.globalAlpha = 1; }
 
     // Foes, sorted nowhere: the shadow is baked into the sprite so overlap reads.
@@ -2137,14 +2330,26 @@
   var banishing = false, luPicks = [];
   function traitCount() { var n = 0; for (var k in P.traits) n++; return n; }
   function traitOpen(id) { var t = TRAITS[id]; if (run.banned[id]) return false; if (t.quest && !questDone(t.quest)) return false; if (run.lv < TIER_LV[t.tier]) return false;
-    var lv = P.traits[id] || 0; if (lv >= t.ranks) return false; if (!lv && traitCount() >= 8) return false; return true; }
+    var lv = P.traits[id] || 0; if (lv >= t.ranks) return false;
+    // Tier III opens at level 14, by which point eight slots are essentially
+    // always spoken for — so the whole tier was unreachable in a normal night.
+    // The deepest tier carries its own allowance rather than competing for the
+    // slots the early game already spent.
+    if (!lv && traitCount() >= (t.tier >= 3 ? 11 : 8)) return false; return true; }
   function luOptions() {
     var opts = [];
     P.weapons.forEach(function (w) { if (w.lv < WMAX && !w.evo) opts.push({ kind:'w', id:w.id, w:w }); });
     if (P.weapons.length < 6) WEAPON_IDS.forEach(function (id) { if (!weaponOf(id) && meta.weapons[id] && !run.banned[id]) opts.push({ kind:'wnew', id:id }); });
     TRAIT_IDS.forEach(function (id) { if (traitOpen(id)) opts.push({ kind: P.traits[id] ? 'p' : 'pnew', id:id }); });
+    // Vigils weigh almost nothing while there are real upgrades left, and take
+    // over as those run out — so the card is never a consolation prize, and the
+    // back half of a night still asks a question.
+    var real = opts.length;
+    var vw = real >= 10 ? 0.30 : real >= 6 ? 0.8 : real >= 3 ? 2.0 : 4.0;
+    VIGIL_IDS.forEach(function (id) { opts.push({ kind:'vig', id:id, wgt:vw }); });
+
     var pool = [];
-    opts.forEach(function (o) { var wgt = o.kind === 'w' ? 3 : o.kind === 'p' ? 2.4 : (o.kind === 'pnew' && TRAITS[o.id].bad ? 0.8 : 1); for (var k = 0; k < Math.round(wgt*4); k++) pool.push(o); });
+    opts.forEach(function (o) { var wgt = o.wgt != null ? o.wgt : o.kind === 'w' ? 3 : o.kind === 'p' ? 2.4 : (o.kind === 'pnew' && TRAITS[o.id].bad ? 0.8 : 1); for (var k = 0; k < Math.round(wgt*4); k++) pool.push(o); });
     var picks = [], n = 3 + (R() < stat('luck')*0.5 ? 1 : 0);
     while (picks.length < n && pool.length) { var o = pool.splice(rri(pool.length), 1)[0]; if (picks.some(function (p) { return p.id === o.id; })) continue; picks.push(o); }
     if (!picks.length) picks.push({ kind:'gold', id:'gold' });
@@ -2157,12 +2362,20 @@
       var ds = w ? Object.keys(up).map(function (k) { return { dmg:'+damage', amt:'+1 projectile', area:'+area', cd:'faster', pierce:'+pierce', dur:'+duration', r:'+range', bounces:'+bounce', spread:'wider', range:'+range', tick:'faster' }[k] || k; }).join(', ') : d.desc;
       if (w && nl === WMAX) ds += ' · evolves with ' + TRAITS[d.evo.need].n;
       return { g:d.g, n:d.n, sub: w ? 'lv ' + nl : '', d:ds, ink:INK[d.ink], cls: w ? '' : ' new', tag: w ? '' : 'NEW', pips: w ? { n: WMAX, on: w.lv } : null }; }
+    if (o.kind === 'vig') { var vg = VIGILS[o.id], vr = (P.vigils[o.id] || 0) + 1;
+      var vtx = vg.fmt.replace('{v}', vg.per >= 1 ? Math.round(vg.per) : Math.round(vg.per*10)/10).replace('{p}', Math.round(vg.per*100)) + ' — ' + esc(vg.d);
+      return { g:vg.g, n:vg.n, sub:'vigil ' + vr, d:vtx, raw:1, ink:INK[vg.ink] || '#c3a9ad', cls:' vig', tag:'VIGIL' }; }
     var t = TRAITS[o.id], pl = (P.traits[o.id] || 0) + 1;
     var txt = fmtTrait(t, pl, false) + (t.bad ? ' <em>' + fmtTrait(t, pl, true) + '</em>' : '') + (t.desc ? ' — ' + esc(t.desc) : '');
     return { g:t.g, n:t.n, sub:'rank ' + pl + '/' + t.ranks, d:txt, raw:1, ink: t.bad ? INK.violet : '#c3a9ad', cls: t.bad ? ' elev' : (pl === 1 ? ' new' : ''), tag: t.bad ? 'ELEVATED' : (pl === 1 ? 'NEW' : ''), pips: { n: t.ranks, on: pl-1 } };
   }
   function applyPick(o) {
     if (o.kind === 'gold') run.gold += 40;
+    else if (o.kind === 'vig') { var vg = VIGILS[o.id]; P.vigils[o.id] = (P.vigils[o.id] || 0) + 1;
+      // Every vigil key is already a stat() key, so incrementing the base is
+      // the whole implementation.
+      P.base[vg.k] = (P.base[vg.k] || 0) + vg.per;
+      if (vg.k === 'hp' || vg.k === 'hpmul') recomputeHp(); }
     else if (o.kind === 'wnew') addWeapon(o.id);
     else if (o.kind === 'w') o.w.lv++;
     else { P.traits[o.id] = (P.traits[o.id] || 0) + 1; if (P.traits[o.id] >= TRAITS[o.id].ranks) run.maxed++; if (o.id === 'vigour' || o.id === 'glass') recomputeHp(); }
