@@ -1174,7 +1174,8 @@
     SLOTS.forEach(function (sl) { var id = meta.wear[sl]; if (id && meta.relics[id] && RELICS[id]) P.wear[sl] = id; });
     recomputeHp(); P.hp = P.maxHp;
     foes.length = 0; shots.length = 0; motes.length = 0; parts.length = 0; nums.length = 0; zones.length = 0; hazards.length = 0; decals.length = 0;
-    camX = 0; camY = 0; shake = 0; hitStop = 0; flash = 0; pendingLevels = 0;
+    world = worldFor(mapId); P.x = world.start.x; P.y = world.start.y;
+    camX = P.x; camY = P.y; shake = 0; hitStop = 0; flash = 0; pendingLevels = 0;
     addWeapon(ch.weapon); bossBar(); bannerEl.classList.remove('on'); lastHudT = -1; paintTimeline();
     meta.stats.runs++; meta.stats.charRuns[ch.id] = (meta.stats.charRuns[ch.id] || 0) + 1; saveMeta();
     paintLoadout(); paintHud(true);
@@ -1270,8 +1271,8 @@
   }
   function spawnFoe(kind, opts) {
     opts = opts || {};
-    var def = ENEMIES[kind], a = rr(0, Math.PI*2), R0 = Math.max(VW || cssW, VH || cssH)*0.62 + 40;
-    var f = makeFoe(kind, def, opts.x !== undefined ? opts.x : P.x + Math.cos(a)*R0, opts.y !== undefined ? opts.y : P.y + Math.sin(a)*R0);
+    var def = ENEMIES[kind], sp = opts.x !== undefined ? { x: opts.x, y: opts.y } : spawnPoint();
+    var f = makeFoe(kind, def, sp.x, sp.y);
     if (opts.elite || (!opts.plain && R() < Math.min(0.055, 0.025 + run.min*0.0025))) { f.elite = true; f.hp *= 6; f.maxHp = f.hp; f.r *= 1.5; f.dmg *= 1.4; f.spd *= 0.92;
       f.affix = rpick(AFFIX_IDS); var ax = AFFIXES[f.affix]; if (ax.spd) f.spd *= ax.spd; if (ax.armor) f.armor += ax.armor; if (ax.shield) f.shield = ax.shield; }
     if (!run.met[kind]) { run.met[kind] = 1; meta.met[kind] = 1; if (INTRO[kind] && run.t > 2) toast(INTRO[kind]); }
@@ -1551,7 +1552,7 @@
     if (P.dashT > 0) { P.dashT -= dt; P.vx = P.dx*880; P.vy = P.dy*880; P.bob += dt*18; }
     else if (ml > 0.08) { if (ml > 1) { mx /= ml; my /= ml; ml = 1; } P.vx = mx*speed(); P.vy = my*speed(); P.fx = mx/ml; P.fy = my/ml; P.bob += dt*9; }
     else { P.vx *= Math.max(0, 1-dt*14); P.vy *= Math.max(0, 1-dt*14); }
-    P.x += P.vx*dt; P.y += P.vy*dt;
+    P.x += P.vx*dt; P.y += P.vy*dt; pushOut(P, P.r);
     if (!P.hist) P.hist = []; P.histT = (P.histT || 0) + dt; if (P.histT > 0.04) { P.histT = 0; P.hist.unshift({ x:P.x, y:P.y, fx:P.fx, fy:P.fy }); if (P.hist.length > 4) P.hist.length = 4; }
     updateAim(dt);
     P.inv = Math.max(0, P.inv - dt); P.hurtT = Math.max(0, P.hurtT - dt*2.2);
@@ -1602,6 +1603,7 @@
       if (dl < pr + f.r && !(f.act && f.act.k === 'dash') && f.born <= 0) hurtPlayer(f.dmg*0.55 + (f.boss ? 6 : 0), f);
       if (dl > leash && !f.boss) f.dead = true;
     }
+    for (i = 0; i < foes.length; i++) { var fw = foes[i]; if (!fw.dead && !fw.phased) pushOut(fw, fw.r*0.8, !!fw.boss); }
     for (i = 0; i < foes.length; i += 2) { var g = foes[i]; if (g.dead || g.phased) continue;
       nearFoes(g.x, g.y, g.r*2, function (o) { if (o === g || o.dead || o.phased) return; var ox = g.x-o.x, oy = g.y-o.y, ol = ox*ox+oy*oy, mr = g.r+o.r;
         if (ol < mr*mr && ol > 0.01) { var l = Math.sqrt(ol), push = (mr-l)*0.5; if (!g.boss) { g.x += ox/l*push; g.y += oy/l*push; } if (!o.boss) { o.x -= ox/l*push; o.y -= oy/l*push; } } }); }
@@ -1695,6 +1697,8 @@
     shake = Math.max(0, shake - dt*40); run.zoomK = Math.max(0, run.zoomK - dt/1.6);
     var lead = P.manualAim > 0 ? 26 : 0, tx = P.x + P.ax*lead + P.vx*0.12, ty = P.y + P.ay*lead + P.vy*0.12;
     camX += (tx - camX)*Math.min(1, dt*6); camY += (ty - camY)*Math.min(1, dt*6);
+    if (world) { var hw = VW/2 - 8, hh = VH/2 - 8;
+      camX = world.w > VW ? clamp(camX, hw, world.w - hw) : world.w/2; camY = world.h > VH ? clamp(camY, hh, world.h - hh) : world.h/2; }
     for (i = 0; i < foes.length; i++) if (foes[i].born > 0) foes[i].born -= dt;
     if (run.map.weather === 'rain') { run.boltT -= dt; if (run.boltT <= 0) { run.boltT = rr(16, 44); flash = 0.45; flashCol = INK.bone; run.boltFlash = 2; Snd.thunder(); } }
     Snd.intensity(0.2 + run.t/run.dur*0.45 + (run.bosses.length ? 0.35 : 0) + Math.min(0.15, foeCount()/400) + (run.moonT > 0 ? 0.1 : 0));
@@ -1888,91 +1892,442 @@
       g.fillStyle = grd; g.fillRect(-R0, -R0, R0*2, R0*2);
     });
   }
-  // Ground grain: one tile baked per map, tiled as a pattern in world space.
-  var patterns = {};
-  function groundPattern(g, map) {
-    var key = map.tex + '@' + dpr; if (patterns[key]) return patterns[key];
-    /* 512, not 192.
+  /* ================================================================
+     The world.
 
-       Breaking up an obviously-repeating floor needs variation LARGER than the
-       tile. The first attempt drew that variation live — a dozen alpha-blended
-       ellipses per frame — and the second baked it as a second pattern filled
-       over the first. Both cost a whole extra screen of blending, and the
-       second measured worse than the first: an extra full-viewport composite is
-       the expensive thing, not the ellipses. So the macro tone goes INSIDE the
-       tile and the tile gets big enough to hold it, which leaves the ground at
-       exactly one fillRect — the same cost it had before any of this. */
-    var T = 512, c = document.createElement('canvas'); c.width = c.height = T*dpr; var q = c.getContext('2d'); q.scale(dpr, dpr);
-    q.fillStyle = map.base; q.fillRect(0, 0, T, T);
-    var rng = mulberry(map.tex === 'stone' ? 7 : map.tex === 'metal' ? 11 : 3);
-    // Broad tonal drift under the grain, so a floor has light and dark reaches
-    // rather than one flat value. Each blob is drawn nine times on a 3x3 offset
-    // lattice so it wraps properly — the 4px edge-strip trick below hides a hard
-    // seam, but it cannot hide a soft gradient that stops at the boundary.
-    for (var mi = 0; mi < 30; mi++) {
-      var mx = rng()*T, my = rng()*T, mrx = 54 + rng()*120, mry = 40 + rng()*95,
-          mrot = rng()*3.14, mt = (rng()*3)|0;
-      q.globalAlpha = 0.05 + rng()*0.06;
-      q.fillStyle = mt === 0 ? '#000000' : mt === 1 ? '#3a2028' : '#16202c';
-      for (var ox = -1; ox <= 1; ox++) for (var oy = -1; oy <= 1; oy++) {
-        q.beginPath(); q.ellipse(mx + ox*T, my + oy*T, mrx, mry, mrot, 0, 6.283); q.fill(); } }
-    q.globalAlpha = 1;
-    for (var i = 0; i < 6400; i++) { var x = rng()*T, y = rng()*T, l = rng(); q.fillStyle = l < 0.5 ? 'rgba(255,240,230,' + (0.03 + rng()*0.05).toFixed(3) + ')' : 'rgba(0,0,0,' + (0.06 + rng()*0.12).toFixed(3) + ')'; q.fillRect(x, y, 1 + (rng() < 0.2 ? 1 : 0), 1); }
-    if (map.tex === 'asphalt') {
-      // Aggregate: asphalt is stone held in tar, and reads as stone-in-tar only
-      // if the chips vary in size and tone rather than being uniform noise.
-      for (i = 0; i < 2400; i++) { var ax = rng()*T, ay = rng()*T, ar = 0.7 + rng()*1.9, al = rng();
-        q.fillStyle = al < 0.34 ? 'rgba(214,198,190,' + (0.05 + rng()*0.07).toFixed(3) + ')'
-                    : al < 0.62 ? 'rgba(150,120,124,' + (0.05 + rng()*0.06).toFixed(3) + ')'
-                                : 'rgba(0,0,0,' + (0.10 + rng()*0.14).toFixed(3) + ')';
-        q.beginPath(); q.ellipse(ax, ay, ar, ar*(0.6 + rng()*0.6), rng()*3.14, 0, 6.283); q.fill(); }
-      // A patched repair: a slightly different mix, poured as a rough square.
-      for (var pi = 0; pi < 5; pi++) {
-        var px0 = rng()*T*0.86, py0 = rng()*T*0.86, pw = 40 + rng()*70, ph = 30 + rng()*58;
-        q.fillStyle = 'rgba(0,0,0,.16)'; q.fillRect(px0, py0, pw, ph);
-        q.strokeStyle = 'rgba(24,14,18,.5)'; q.lineWidth = 2.2; q.strokeRect(px0, py0, pw, ph); }
-      // Tar seams: poured, so they are wider than a crack and slightly glossy.
-      q.lineCap = 'round';
-      for (i = 0; i < 21; i++) { q.beginPath(); var sx0 = rng()*T, sy0 = rng()*T;
-        q.moveTo(sx0, sy0);
-        for (var k = 0; k < 5; k++) { sx0 += rng()*34 - 17; sy0 += rng()*34 - 12; q.lineTo(sx0, sy0); }
-        q.strokeStyle = 'rgba(0,0,0,.42)'; q.lineWidth = 2.6 + rng()*1.6; q.stroke();
-        q.strokeStyle = 'rgba(196,176,170,.05)'; q.lineWidth = 0.9; q.stroke(); }
-      // Hairline cracks, thinner than the seams so the two read apart.
-      q.strokeStyle = 'rgba(0,0,0,.3)'; q.lineWidth = 0.8;
-      for (i = 0; i < 35; i++) { q.beginPath(); var cx = rng()*T, cy = rng()*T; q.moveTo(cx, cy);
-        for (var k2 = 0; k2 < 4; k2++) { cx += rng()*26 - 13; cy += rng()*26 - 9; q.lineTo(cx, cy); } q.stroke(); }
-      // Old oil, gone iridescent.
-      for (i = 0; i < 14; i++) { var ox = rng()*T, oy = rng()*T, orr = 9 + rng()*16;
-        var og = q.createRadialGradient(ox, oy, 1, ox, oy, orr);
-        og.addColorStop(0, 'rgba(90,60,86,.13)'); og.addColorStop(0.6, 'rgba(50,64,86,.07)'); og.addColorStop(1, 'rgba(0,0,0,0)');
-        q.fillStyle = og; q.beginPath(); q.arc(ox, oy, orr, 0, 6.283); q.fill(); }
-    }
-    else if (map.tex === 'stone') { q.strokeStyle = 'rgba(0,0,0,.28)'; q.lineWidth = 1; for (i = 0; i < 50; i++) { q.beginPath(); var sx = rng()*T, sy = rng()*T; q.moveTo(sx, sy); q.lineTo(sx + rng()*26 - 13, sy + rng()*26 - 13); q.stroke(); }
-      q.fillStyle = 'rgba(255,240,230,.05)'; for (i = 0; i < 85; i++) q.fillRect(rng()*T, rng()*T, 6 + rng()*14, 2);
-      // Mortar: flags laid in courses, with the joints cut and lit on one edge
-      // so the floor has a direction instead of being uniform speckle.
-      var jy = 0;
-      while (jy < T) { var jh = 34 + rng()*22; jy += jh;
+     Not endless any more. Each map is a designed, bounded place: roads and
+     pavements, a plaza and a park, a cathedral with its nave and transept,
+     tunnels round a cistern. It is authored as data (zones, roads, blocks,
+     props) and painted once into 512px chunks that are cached, so the
+     per-frame ground cost is a handful of drawImage calls whatever is in
+     it. Blocks and solid props collide with the player and with foes.
+
+     Everything that flickers or glows lives in world.lights, a fixed list
+     culled to the view each frame. The old ground hashed its candles off a
+     grid whose start alignment changed as the camera moved, so the same
+     candle came and went. A list cannot do that.
+     ================================================================ */
+  var lights = [];
+  var TEX_BASE = { asphalt:'#221419', pavement:'#2a1c21', cobble:'#241619', grass:'#1b2320', tile:'#2a2027', carpet:'#3a1018',
+                   flag:'#1f1722', moss:'#1a2420', metal:'#141c1c', concrete:'#1d1a1c', water:'#0f1a1f', gravel:'#26201f', rubble:'#221a1e', roof:'#160c11', rock:'#120a0e' };
+  var texCache = {};
+  function texPattern(g, name) {
+    var key = name + '@' + dpr; if (texCache[key]) return texCache[key];
+    var T = 256, c = document.createElement('canvas'); c.width = c.height = T*dpr; var q = c.getContext('2d'); q.scale(dpr, dpr);
+    q.fillStyle = TEX_BASE[name] || '#1a0d12'; q.fillRect(0, 0, T, T);
+    var rng = mulberry(name.length*131 + name.charCodeAt(0)*7), i, k;
+    function grain(n, lo, hi) { for (i = 0; i < n; i++) { var l = rng(); q.fillStyle = l < 0.5 ? 'rgba(255,240,230,' + (lo + rng()*hi).toFixed(3) + ')' : 'rgba(0,0,0,' + (lo*2 + rng()*hi*2).toFixed(3) + ')'; q.fillRect(rng()*T, rng()*T, 1 + (rng() < 0.2 ? 1 : 0), 1); } }
+    function stains(n, col, a, rmin, rmax) { for (i = 0; i < n; i++) { q.fillStyle = col; q.globalAlpha = a*(0.5 + rng()); q.beginPath(); q.ellipse(rng()*T, rng()*T, rmin + rng()*rmax, (rmin + rng()*rmax)*0.6, rng()*3, 0, 6.283); q.fill(); } q.globalAlpha = 1; }
+    if (name === 'asphalt') {
+      grain(1600, 0.03, 0.05);
+      for (i = 0; i < 600; i++) { var al = rng(); q.fillStyle = al < 0.34 ? 'rgba(214,198,190,' + (0.05 + rng()*0.07).toFixed(3) + ')' : al < 0.62 ? 'rgba(150,120,124,' + (0.05 + rng()*0.06).toFixed(3) + ')' : 'rgba(0,0,0,' + (0.10 + rng()*0.14).toFixed(3) + ')';
+        q.beginPath(); q.ellipse(rng()*T, rng()*T, 0.7 + rng()*1.9, 0.5 + rng()*1.4, rng()*3.14, 0, 6.283); q.fill(); }
+      q.lineCap = 'round'; for (i = 0; i < 6; i++) { q.beginPath(); var sx0 = rng()*T, sy0 = rng()*T; q.moveTo(sx0, sy0); for (k = 0; k < 5; k++) { sx0 += rng()*34 - 17; sy0 += rng()*34 - 12; q.lineTo(sx0, sy0); }
+        q.strokeStyle = 'rgba(0,0,0,.42)'; q.lineWidth = 2.6 + rng()*1.6; q.stroke(); q.strokeStyle = 'rgba(196,176,170,.05)'; q.lineWidth = 0.9; q.stroke(); }
+      stains(4, '#3a2438', 0.09, 8, 18);
+    } else if (name === 'pavement') {
+      grain(1500, 0.03, 0.05);
+      // Slabs, 64 on a side, with a joint and a chipped corner here and there.
+      q.strokeStyle = 'rgba(0,0,0,.45)'; q.lineWidth = 1.6; q.beginPath();
+      for (k = 0; k <= T; k += 64) { q.moveTo(0, k); q.lineTo(T, k); q.moveTo(k, 0); q.lineTo(k, T); } q.stroke();
+      q.strokeStyle = 'rgba(233,216,197,.05)'; q.lineWidth = 1; q.beginPath();
+      for (k = 0; k <= T; k += 64) { q.moveTo(0, k + 1.6); q.lineTo(T, k + 1.6); q.moveTo(k + 1.6, 0); q.lineTo(k + 1.6, T); } q.stroke();
+      for (i = 0; i < 7; i++) { var cxs = ((rng()*4)|0)*64, cys = ((rng()*4)|0)*64; q.fillStyle = 'rgba(0,0,0,.2)'; q.fillRect(cxs + 2, cys + 2, 10 + rng()*20, 4 + rng()*10); }
+      stains(5, '#1a1014', 0.3, 10, 20);
+    } else if (name === 'cobble') {
+      grain(600, 0.02, 0.04);
+      for (var cy = 0; cy < T; cy += 14) for (var cx = ((cy/14)|0) % 2 ? 9 : 0; cx < T + 9; cx += 18) {
+        var cw = 14 + rng()*3, ch = 10 + rng()*3, lt = rng();
+        q.fillStyle = lt < 0.3 ? '#2c1c20' : lt < 0.6 ? '#261618' : '#2a1a1e'; q.beginPath(); q.ellipse(cx, cy + 7, cw/2, ch/2, 0, 0, 6.283); q.fill();
+        q.fillStyle = 'rgba(255,240,230,.06)'; q.beginPath(); q.ellipse(cx - 2, cy + 5, cw/4, ch/4, 0, 0, 6.283); q.fill(); }
+      // Wrap the seam so the rows tile: 256 is a multiple of 14? No — paint the
+      // bottom band again shifted so the join lands on a full row.
+      stains(3, '#0f0a0c', 0.35, 12, 24);
+    } else if (name === 'grass') {
+      grain(900, 0.02, 0.04);
+      q.strokeStyle = 'rgba(95,167,119,.16)'; q.lineWidth = 1; q.beginPath();
+      for (i = 0; i < 700; i++) { var bx = rng()*T, by = rng()*T; q.moveTo(bx, by); q.lineTo(bx + rng()*3 - 1.5, by - 3 - rng()*4); } q.stroke();
+      q.strokeStyle = 'rgba(0,0,0,.35)'; q.beginPath(); for (i = 0; i < 300; i++) { var bx2 = rng()*T, by2 = rng()*T; q.moveTo(bx2, by2); q.lineTo(bx2 + rng()*2 - 1, by2 - 2 - rng()*3); } q.stroke();
+      stains(6, '#0d1410', 0.35, 14, 30); stains(3, '#2a3328', 0.18, 10, 24);
+    } else if (name === 'tile') {
+      // Marble check, 48 on a side, two tones and a fine vein.
+      for (var ty = 0; ty < T; ty += 48) for (var tx = 0; tx < T; tx += 48) { var odd = (((tx/48)|0) + ((ty/48)|0)) % 2; q.fillStyle = odd ? '#241a22' : '#2e232c'; q.fillRect(tx, ty, 48, 48);
+        q.strokeStyle = 'rgba(233,216,197,.06)'; q.lineWidth = 1; q.beginPath(); var vx = tx + rng()*48, vy = ty; q.moveTo(vx, vy); for (k = 0; k < 3; k++) { vx += rng()*16 - 8; vy += 16; q.lineTo(vx, vy); } q.stroke(); }
+      q.strokeStyle = 'rgba(0,0,0,.5)'; q.lineWidth = 1.2; q.beginPath(); for (k = 0; k <= T; k += 48) { q.moveTo(0, k); q.lineTo(T, k); q.moveTo(k, 0); q.lineTo(k, T); } q.stroke();
+      grain(500, 0.02, 0.03);
+    } else if (name === 'carpet') {
+      grain(1200, 0.02, 0.04);
+      q.strokeStyle = 'rgba(0,0,0,.18)'; q.lineWidth = 1; q.beginPath(); for (k = 0; k < T; k += 3) { q.moveTo(0, k); q.lineTo(T, k); } q.stroke();
+      q.strokeStyle = 'rgba(233,216,197,.05)'; q.beginPath(); for (k = 0; k < T; k += 3) { q.moveTo(k, 0); q.lineTo(k, T); } q.stroke();
+      stains(4, '#1a0608', 0.4, 10, 22);
+    } else if (name === 'flag') {
+      grain(1500, 0.03, 0.05);
+      var jy = 0; while (jy < T) { var jh = 34 + rng()*22; jy += jh;
         q.strokeStyle = 'rgba(0,0,0,.34)'; q.lineWidth = 2; q.beginPath(); q.moveTo(0, jy); q.lineTo(T, jy + rng()*3 - 1.5); q.stroke();
         q.strokeStyle = 'rgba(233,216,197,.045)'; q.lineWidth = 1; q.beginPath(); q.moveTo(0, jy + 1.6); q.lineTo(T, jy + 1.6 + rng()*3 - 1.5); q.stroke();
-        var jx = rng()*70; while (jx < T) { q.strokeStyle = 'rgba(0,0,0,.28)'; q.lineWidth = 1.6;
-          q.beginPath(); q.moveTo(jx, jy - jh); q.lineTo(jx + rng()*3 - 1.5, jy); q.stroke(); jx += 46 + rng()*40; } } }
-    else { q.strokeStyle = 'rgba(255,255,255,.06)'; q.lineWidth = 1; for (i = 0; i < 42; i++) { var yy = rng()*T; q.beginPath(); q.moveTo(0, yy); q.lineTo(T, yy + rng()*4 - 2); q.stroke(); }
-      q.fillStyle = 'rgba(111,179,171,.07)'; for (i = 0; i < 70; i++) { q.beginPath(); q.ellipse(rng()*T, rng()*T, 4 + rng()*10, 2 + rng()*4, 0, 0, 6.283); q.fill(); }
-      // Plate and rivet: the grate is made of something, and rivets are the
-      // cheapest mark that says so.
-      for (i = 0; i < 156; i++) { var rx = rng()*T, ry = rng()*T;
-        q.fillStyle = 'rgba(0,0,0,.30)'; q.beginPath(); q.arc(rx, ry, 1.7, 0, 6.283); q.fill();
-        q.fillStyle = 'rgba(233,216,197,.10)'; q.beginPath(); q.arc(rx - 0.5, ry - 0.6, 0.9, 0, 6.283); q.fill(); }
-      q.strokeStyle = 'rgba(0,0,0,.26)'; q.lineWidth = 2.2;
-      for (i = 0; i < 14; i++) { var px = rng()*T; q.beginPath(); q.moveTo(px, 0); q.lineTo(px + rng()*4 - 2, T); q.stroke(); } }
-    // Wrap the edges so the tile does not show a seam: copy the strips across.
-    q.drawImage(c, 0, 0, 4*dpr, T*dpr, T - 4, 0, 4, T); q.drawImage(c, 0, 0, T*dpr, 4*dpr, 0, T - 4, T, 4);
+        var jx = rng()*70; while (jx < T) { q.strokeStyle = 'rgba(0,0,0,.28)'; q.lineWidth = 1.6; q.beginPath(); q.moveTo(jx, jy - jh); q.lineTo(jx + rng()*3 - 1.5, jy); q.stroke(); jx += 46 + rng()*40; } }
+      q.strokeStyle = 'rgba(0,0,0,.28)'; q.lineWidth = 1; for (i = 0; i < 12; i++) { q.beginPath(); var sx = rng()*T, sy = rng()*T; q.moveTo(sx, sy); q.lineTo(sx + rng()*26 - 13, sy + rng()*26 - 13); q.stroke(); }
+      stains(4, '#0d080c', 0.3, 10, 22);
+    } else if (name === 'moss') {
+      grain(800, 0.02, 0.04); stains(24, '#22352a', 0.16, 6, 16); stains(12, '#0c140e', 0.3, 8, 18);
+    } else if (name === 'metal') {
+      grain(1200, 0.03, 0.05);
+      q.strokeStyle = 'rgba(255,255,255,.06)'; q.lineWidth = 1; for (i = 0; i < 12; i++) { var yy = rng()*T; q.beginPath(); q.moveTo(0, yy); q.lineTo(T, yy + rng()*4 - 2); q.stroke(); }
+      q.strokeStyle = 'rgba(0,0,0,.4)'; q.lineWidth = 1; q.beginPath(); for (k = 0; k < T; k += 12) { q.moveTo(k, 0); q.lineTo(k, T); } for (k = 0; k < T; k += 48) { q.moveTo(0, k); q.lineTo(T, k); } q.stroke();
+      for (i = 0; i < 40; i++) { var rx = rng()*T, ry = rng()*T; q.fillStyle = 'rgba(0,0,0,.30)'; q.beginPath(); q.arc(rx, ry, 1.7, 0, 6.283); q.fill(); q.fillStyle = 'rgba(233,216,197,.10)'; q.beginPath(); q.arc(rx - 0.5, ry - 0.6, 0.9, 0, 6.283); q.fill(); }
+      stains(6, '#3a2a1a', 0.16, 6, 14);
+    } else if (name === 'concrete') {
+      grain(1400, 0.03, 0.05); stains(8, '#0d0a0b', 0.3, 12, 26); stains(5, '#2a2422', 0.12, 8, 20);
+      q.strokeStyle = 'rgba(0,0,0,.3)'; q.lineWidth = 0.8; for (i = 0; i < 6; i++) { q.beginPath(); var cx2 = rng()*T, cy2 = rng()*T; q.moveTo(cx2, cy2); for (k = 0; k < 4; k++) { cx2 += rng()*26 - 13; cy2 += rng()*26 - 9; q.lineTo(cx2, cy2); } q.stroke(); }
+    } else if (name === 'water') {
+      grain(300, 0.01, 0.02);
+      q.strokeStyle = 'rgba(111,179,171,.10)'; q.lineWidth = 1; q.beginPath();
+      for (i = 0; i < 18; i++) { var wy = rng()*T; q.moveTo(0, wy); for (k = 0; k <= T; k += 16) q.lineTo(k, wy + Math.sin(k*0.08 + i)*3); } q.stroke();
+      stains(4, '#0a1216', 0.3, 20, 40);
+    } else if (name === 'gravel') {
+      grain(1200, 0.03, 0.05); for (i = 0; i < 500; i++) { q.fillStyle = rng() < 0.5 ? 'rgba(214,198,190,.08)' : 'rgba(0,0,0,.2)'; q.beginPath(); q.arc(rng()*T, rng()*T, 0.8 + rng()*1.4, 0, 6.283); q.fill(); }
+    } else if (name === 'rubble') {
+      grain(800, 0.02, 0.04); for (i = 0; i < 90; i++) { q.fillStyle = rng() < 0.4 ? '#2c2026' : '#1a1216'; q.strokeStyle = 'rgba(0,0,0,.5)'; q.lineWidth = 1; q.beginPath(); var rx2 = rng()*T, ry2 = rng()*T, rs = 3 + rng()*8; q.moveTo(rx2 - rs, ry2); q.lineTo(rx2, ry2 - rs*0.7); q.lineTo(rx2 + rs*0.8, ry2 - rs*0.2); q.lineTo(rx2 + rs*0.3, ry2 + rs*0.6); q.closePath(); q.fill(); q.stroke(); }
+    } else if (name === 'roof') {
+      grain(1800, 0.02, 0.04); stains(6, '#0a0508', 0.4, 20, 40);
+      q.strokeStyle = 'rgba(0,0,0,.4)'; q.lineWidth = 1; q.beginPath(); for (k = 0; k < T; k += 32) { q.moveTo(0, k); q.lineTo(T, k); } q.stroke();
+    } else if (name === 'rock') {
+      grain(1200, 0.02, 0.04); stains(14, '#0a0508', 0.4, 12, 30); stains(8, '#241820', 0.16, 8, 20);
+      q.strokeStyle = 'rgba(0,0,0,.45)'; q.lineWidth = 1.2; for (i = 0; i < 10; i++) { q.beginPath(); var kx = rng()*T, ky = rng()*T; q.moveTo(kx, ky); for (k = 0; k < 5; k++) { kx += rng()*30 - 15; ky += rng()*30 - 15; q.lineTo(kx, ky); } q.stroke(); }
+    }
+    // Wrap the seams.
+    q.drawImage(c, 0, 0, Math.round(4*dpr), Math.round(T*dpr), T - 4, 0, 4, T); q.drawImage(c, 0, 0, Math.round(T*dpr), Math.round(4*dpr), 0, T - 4, T, 4);
     var pat = g.createPattern(c, 'repeat'); if (pat.setTransform && window.DOMMatrix) pat.setTransform(new DOMMatrix().scale(1/dpr));
-    patterns[key] = pat; return pat;
+    texCache[key] = pat; return pat;
   }
-  var lights = [];
+
+  /* ---- authoring helpers ---- */
+  function W_() {
+    var w = { w: 2000, h: 2000, base: 'pavement', zones: [], roads: [], blocks: [], props: [], lights: [], start: { x: 1000, y: 1000 }, solids: [] };
+    w.zone = function (tex, x, y, ww, hh, o) { var z = { tex: tex, x: x, y: y, w: ww, h: hh }; if (o) for (var k in o) z[k] = o[k]; w.zones.push(z); return z; };
+    w.disc = function (tex, x, y, r, o) { var z = { tex: tex, cx: x, cy: y, r: r }; if (o) for (var k in o) z[k] = o[k]; w.zones.push(z); return z; };
+    w.road = function (pts, wid, o) { var r = { pts: pts, w: wid }; if (o) for (var k in o) r[k] = o[k]; w.roads.push(r); return r; };
+    w.block = function (x, y, ww, hh, o) { var b = { x: x, y: y, w: ww, h: hh, kind: 'building' }; if (o) for (var k in o) b[k] = o[k]; w.blocks.push(b); w.solids.push({ rect: 1, x: x, y: y, w: ww, h: hh }); return b; };
+    w.prop = function (kind, x, y, o) { var p = { kind: kind, x: x, y: y }; if (o) for (var k in o) p[k] = o[k]; w.props.push(p);
+      if (p.r) w.solids.push({ x: x, y: y, r: p.r }); if (p.rw) w.solids.push({ rect: 1, x: x - p.rw/2, y: y - p.rh/2, w: p.rw, h: p.rh }); return p; };
+    w.light = function (kind, x, y, col, r, o) { var l = { kind: kind, x: x, y: y, col: col, r: r }; if (o) for (var k in o) l[k] = o[k]; w.lights.push(l); return l; };
+    return w;
+  }
+
+  /* ---- the three places ---- */
+  function buildStreet() {
+    var w = W_(); w.w = 2600; w.h = 2600; w.base = 'pavement'; w.start = { x: 1635, y: 1450 };
+    var RX = [650, 1300, 1950], RY = [700, 1900];
+    // Ring road, avenues and cross streets.
+    w.road([[160, 160], [2440, 160], [2440, 2440], [160, 2440], [160, 160]], 120, { closed: 1 });
+    w.road([[160, 700], [2440, 700]], 150); w.road([[160, 1900], [2440, 1900]], 150);
+    w.road([[650, 160], [650, 2440]], 120); w.road([[1300, 160], [1300, 2440]], 170, { dash: 1 }); w.road([[1950, 160], [1950, 2440]], 120);
+    // Crossings and manholes at the junctions.
+    RX.forEach(function (x) { RY.forEach(function (y) { w.prop('zebra', x, y - 105, { horiz: 1, len: 120 }); w.prop('zebra', x, y + 105, { horiz: 1, len: 120 }); w.prop('manhole', x + 40, y + 30); }); });
+    // Buildings: two per block with an alley, except the plaza and the park.
+    var cols = [[235, 590], [725, 1215], [1385, 1865], [2025, 2365]], rows = [[235, 625], [775, 1825], [1975, 2365]];
+    cols.forEach(function (c, ci) { rows.forEach(function (r, ri) {
+      var x0 = c[0], x1 = c[1], y0 = r[0], y1 = r[1];
+      if (ri === 1 && ci === 2) {
+        // The plaza.
+        w.zone('tile', x0, y0, x1 - x0, y1 - y0, { edge: 1 });
+        w.prop('fountain', 1625, 1300, { r: 74 }); w.light('lamp', 1625, 1300, INK.moon, 160, { still: 1 });
+        [[1470, 1000], [1780, 1000], [1470, 1600], [1780, 1600]].forEach(function (p) { w.prop('lamp', p[0], p[1], { r: 6 }); w.light('lamp', p[0], p[1], INK.bone, 150); });
+        [[1520, 1300], [1730, 1300], [1625, 1140], [1625, 1460]].forEach(function (p) { w.prop('bench', p[0], p[1], { rw: 46, rh: 14 }); });
+        w.prop('kiosk', 1440, 1750, { rw: 70, rh: 50 }); w.light('neon', 1440, 1722, INK.pink, 90);
+        return; }
+      if (ri === 1 && ci === 1) {
+        // The park: grass, a gravel loop, a pond, trees.
+        w.zone('grass', x0, y0, x1 - x0, y1 - y0, { edge: 1 });
+        w.road([[820, 900], [1120, 900], [1120, 1700], [820, 1700], [820, 900]], 34, { tex: 'gravel', nokerb: 1 });
+        w.disc('water', 970, 1300, 120, { edge: 1 });
+        [[780, 840], [1160, 840], [780, 1760], [1160, 1760], [880, 1010], [1060, 1010], [880, 1590], [1060, 1590], [1180, 1300], [760, 1300]].forEach(function (p) { w.prop('tree', p[0], p[1], { r: 22 }); });
+        [[970, 880], [970, 1720]].forEach(function (p) { w.prop('lamp', p[0], p[1], { r: 6 }); w.light('lamp', p[0], p[1], INK.bone, 140); });
+        w.prop('statue', 970, 1300, { r: 16 });
+        return; }
+      // Ordinary block: an alley splits it the long way.
+      var tall = (y1 - y0) > (x1 - x0), a = 68;
+      if (tall) { var ym = (y0 + y1)/2; w.block(x0 + 30, y0 + 30, x1 - x0 - 60, ym - a/2 - y0 - 30); w.block(x0 + 30, ym + a/2, x1 - x0 - 60, y1 - ym - a/2 - 30);
+        w.zone('asphalt', x0 + 30, ym - a/2, x1 - x0 - 60, a); w.prop('dumpster', x0 + 80, ym, { rw: 40, rh: 24 }); w.prop('crate', x1 - 90, ym + 14, { rw: 18, rh: 18 }); }
+      else { var xm = (x0 + x1)/2; w.block(x0 + 30, y0 + 30, xm - a/2 - x0 - 30, y1 - y0 - 60); w.block(xm + a/2, y0 + 30, x1 - xm - a/2 - 30, y1 - y0 - 60);
+        w.zone('asphalt', xm - a/2, y0 + 30, a, y1 - y0 - 60); w.prop('dumpster', xm, y0 + 80, { rw: 24, rh: 40 }); w.prop('crate', xm - 14, y1 - 90, { rw: 18, rh: 18 }); }
+      // A sign on the street face.
+      var sc = [INK.pink, INK.teal, INK.violet, INK.peri][(ci + ri) % 4], sx = tall ? x0 + 30 : x0 + 60, sy = tall ? y0 + 60 : y0 + 30;
+      w.prop('sign', sx, sy, { col: sc, vert: tall ? 1 : 0 }); w.light('neon', sx + (tall ? -6 : 0), sy + (tall ? 0 : -6), sc, 110);
+    }); });
+    // Lamps down the avenues, cars on the ring road, puddles where the road dips.
+    for (var lx = 420; lx < 2440; lx += 320) { if (Math.abs(lx - 1300) < 120) continue; [700, 1900].forEach(function (y) { w.prop('lamp', lx, y - 92, { r: 6 }); w.light('lamp', lx, y - 92, INK.bone, 150); }); }
+    for (var ly = 420; ly < 2440; ly += 380) { if (Math.abs(ly - 700) < 120 || Math.abs(ly - 1900) < 120) continue; w.prop('lamp', 1300 - 104, ly, { r: 6 }); w.light('lamp', 1300 - 104, ly, INK.bone, 150); }
+    [[500, 130, 0], [1100, 130, 0], [2000, 130, 0], [2470, 900, 1], [2470, 1500, 1], [130, 1200, 1], [130, 2000, 1], [900, 2470, 0], [1700, 2470, 0]].forEach(function (c) { w.prop('car', c[0], c[1], c[2] ? { rw: 34, rh: 70, vert: 1 } : { rw: 70, rh: 34 }); });
+    [[700, 760], [1400, 1960], [2300, 640], [1000, 2300], [1750, 240]].forEach(function (p, i) { w.prop('puddle', p[0], p[1], { rx: 40 + i*8, ry: 18 + i*3 }); });
+    return w;
+  }
+  function buildNave() {
+    var w = W_(); w.w = 2000; w.h = 2800; w.base = 'flag'; w.start = { x: 1000, y: 1900 };
+    // The building is the negative space: everything outside the cross is wall.
+    w.block(0, 0, 2000, 150, { kind: 'wall' }); w.block(0, 2650, 2000, 150, { kind: 'wall' }); w.block(0, 150, 150, 2500, { kind: 'wall' }); w.block(1850, 150, 150, 2500, { kind: 'wall' });
+    w.block(150, 150, 150, 550, { kind: 'wall' }); w.block(1700, 150, 150, 550, { kind: 'wall' });
+    w.block(150, 700, 300, 1000, { kind: 'wall' }); w.block(1550, 700, 300, 1000, { kind: 'wall' });
+    w.block(150, 2100, 300, 550, { kind: 'wall' }); w.block(1550, 2100, 300, 550, { kind: 'wall' });
+    // Apse and altar dais, the carpet down the nave and across the transept.
+    w.disc('tile', 1000, 430, 300, { edge: 1 }); w.zone('tile', 700, 430, 600, 300);
+    w.zone('carpet', 930, 560, 140, 2090, { edge: 1 }); w.zone('carpet', 300, 1830, 1400, 140, { edge: 1 });
+    w.prop('altar', 1000, 380, { rw: 160, rh: 50 });
+    [[880, 300], [1120, 300], [820, 420], [1180, 420]].forEach(function (p) { w.prop('candelabra', p[0], p[1], { r: 8 }); w.light('candle', p[0], p[1], INK.gold, 120); });
+    [[600, 300], [1400, 300], [700, 200], [1300, 200]].forEach(function (p) { w.prop('statue', p[0], p[1], { r: 18 }); });
+    // Pillars in two rows, with a candelabra at every other one.
+    for (var py = 800; py <= 2500; py += 300) { [600, 1400].forEach(function (px, i) { w.prop('pillar', px, py, { r: 26 }); if (((py/300)|0) % 2 === i) { w.prop('candelabra', px + (i ? -50 : 50), py, { r: 8 }); w.light('candle', px + (i ? -50 : 50), py, INK.gold, 130); } }); }
+    // Pews, in two blocks, with the crossing left open.
+    [[1000, 1180], [2240, 2420]].forEach(function (rg) { for (var y = rg[0]; y <= rg[1]; y += 60) { w.prop('pew', 800, y, { rw: 180, rh: 14 }); w.prop('pew', 1200, y, { rw: 180, rh: 14 }); } });
+    // Transept ends: braziers, a crypt stair on the left, a collapsed section on the right.
+    w.zone('rubble', 1560, 1740, 260, 320); w.zone('moss', 1500, 2000, 120, 90); w.zone('moss', 460, 720, 90, 140); w.zone('moss', 1480, 1300, 70, 200);
+    w.zone('rock', 330, 1760, 140, 140, { edge: 1, sunk: 1 });
+    [[380, 1720], [380, 2020], [1620, 1720], [1620, 2020]].forEach(function (p) { w.prop('brazier', p[0], p[1], { r: 12 }); w.light('brazier', p[0], p[1], INK.gold, 170); });
+    // Rose window light on the floor of the crossing, and the side chapels.
+    w.prop('glass', 1000, 1900, { rx: 260, ry: 130, cols: [INK.violet, INK.gold, INK.pink, INK.peri] });
+    w.prop('glass', 520, 1100, { rx: 60, ry: 140, cols: [INK.violet, INK.peri] }); w.prop('glass', 1480, 1100, { rx: 60, ry: 140, cols: [INK.gold, INK.pink] });
+    [[500, 2300], [1500, 2300], [500, 900], [1500, 900]].forEach(function (p) { w.prop('tomb', p[0], p[1], { rw: 40, rh: 70 }); });
+    for (var cy = 800; cy <= 2500; cy += 150) { w.prop('sconce', 465, cy, {}); w.light('candle', 470, cy, INK.gold, 80, { small: 1 }); w.prop('sconce', 1535, cy, { flip: 1 }); w.light('candle', 1530, cy, INK.gold, 80, { small: 1 }); }
+    return w;
+  }
+  function buildUndercity() {
+    var w = W_(); w.w = 2800; w.h = 2200; w.base = 'concrete'; w.start = { x: 1400, y: 1100 };
+    var TX = [600, 1400, 2200], TY = [500, 1100, 1700], TW = 220;
+    // Rock between the tunnels, except the cistern hall in the middle and the pump room bottom-left.
+    var cx = [[0, 490], [710, 1290], [1510, 2090], [2310, 2800]], cy = [[0, 390], [610, 990], [1210, 1590], [1810, 2200]];
+    cx.forEach(function (c, i) { cy.forEach(function (r, j) {
+      if ((i === 1 || i === 2) && (j === 1 || j === 2)) return;
+      if (i === 0 && j === 3) return;
+      w.block(c[0], r[0], c[1] - c[0], r[1] - r[0], { kind: 'rock' }); }); });
+    // Outer rock, so the tunnels dead-end into the walls of the world.
+    w.block(0, 0, 2800, 40, { kind: 'rock' }); w.block(0, 2160, 2800, 40, { kind: 'rock' }); w.block(0, 0, 40, 2200, { kind: 'rock' }); w.block(2760, 0, 40, 2200, { kind: 'rock' });
+    // Tunnel floors: grate walkways with a channel of water down the middle.
+    TY.forEach(function (y) { w.zone('metal', 40, y - TW/2, 2720, TW); w.zone('water', 40, y - 32, 2720, 64, { edge: 1 }); });
+    TX.forEach(function (x) { w.zone('metal', x - TW/2, 40, TW, 2120); w.zone('water', x - 32, 40, 64, 2120, { edge: 1 }); });
+    // The cistern hall: concrete floor, a great round pool, four pillars.
+    w.zone('concrete', 710, 610, 1380, 980); w.disc('water', 1400, 1100, 300, { edge: 1 });
+    [[1000, 800], [1800, 800], [1000, 1400], [1800, 1400]].forEach(function (p) { w.prop('pillar', p[0], p[1], { r: 30 }); w.light('lamp', p[0] + 40, p[1], INK.teal, 130); });
+    // The pump room: machinery, barrels, a valve.
+    w.zone('metal', 40, 1810, 450, 350); [[150, 1900], [330, 1900]].forEach(function (p) { w.prop('pump', p[0], p[1], { rw: 90, rh: 60 }); w.light('lamp', p[0], p[1] - 44, INK.gold, 90, { still: 1 }); });
+    [[100, 2080], [130, 2110], [400, 2080]].forEach(function (p) { w.prop('barrel', p[0], p[1], { r: 12 }); }); w.prop('valve', 250, 2060, { r: 10 });
+    // Pipes along the tunnel walls, drains in the floor, lanterns at the junctions.
+    TY.forEach(function (y) { w.prop('pipe', 40, y - TW/2 + 12, { len: 2720, horiz: 1 }); });
+    TX.forEach(function (x) { w.prop('pipe', x + TW/2 - 12, 40, { len: 2120 }); });
+    TX.forEach(function (x) { TY.forEach(function (y) { w.prop('lantern', x - 80, y - 80, { r: 6 }); w.light('lamp', x - 80, y - 80, INK.teal, 150); w.prop('drain', x + 70, y + 70, {}); w.light('drain', x + 70, y + 70, INK.teal, 70, { small: 1 }); }); });
+    for (var dx = 300; dx < 2800; dx += 500) { TY.forEach(function (y) { w.prop('drain', dx, y + 70, {}); w.light('drain', dx, y + 70, INK.teal, 60, { small: 1 }); }); }
+    [[900, 1650], [1900, 550], [2400, 1800], [500, 1150]].forEach(function (p) { w.prop('barrel', p[0], p[1], { r: 12 }); w.prop('barrel', p[0] + 26, p[1] + 8, { r: 12 }); });
+    w.zone('rubble', 2300, 1900, 200, 120); w.zone('moss', 1420, 380, 160, 60); w.zone('moss', 480, 1600, 60, 180);
+    return w;
+  }
+  var worldCache = {};
+  function worldFor(id) {
+    if (worldCache[id]) return worldCache[id];
+    var w = id === 'nave' ? buildNave() : id === 'undercity' ? buildUndercity() : buildStreet();
+    // Solids into a grid, so a foe only tests what is near it.
+    w.cell = 256; w.grid = {};
+    w.solids.forEach(function (s) { var x0 = s.rect ? s.x : s.x - s.r, y0 = s.rect ? s.y : s.y - s.r, x1 = s.rect ? s.x + s.w : s.x + s.r, y1 = s.rect ? s.y + s.h : s.y + s.r;
+      for (var gx = Math.floor(x0/w.cell); gx <= Math.floor(x1/w.cell); gx++) for (var gy = Math.floor(y0/w.cell); gy <= Math.floor(y1/w.cell); gy++) { var k = gx + ',' + gy; (w.grid[k] = w.grid[k] || []).push(s); } });
+    worldCache[id] = w; return w;
+  }
+  var world = null;
+
+  /* ---- collision ---- */
+  function blockedAt(x, y, r, rectsOnly) {
+    var w = world; if (x < r || y < r || x > w.w - r || y > w.h - r) return true;
+    var list = w.grid[Math.floor(x/w.cell) + ',' + Math.floor(y/w.cell)]; if (!list) return false;
+    for (var i = 0; i < list.length; i++) { var s = list[i];
+      if (s.rect) { var nx = x < s.x ? s.x : x > s.x + s.w ? s.x + s.w : x, ny = y < s.y ? s.y : y > s.y + s.h ? s.y + s.h : y; if ((x - nx)*(x - nx) + (y - ny)*(y - ny) < r*r) return true; }
+      else if (!rectsOnly) { var cx = x - s.x, cy = y - s.y, cr = r + s.r; if (cx*cx + cy*cy < cr*cr) return true; } }
+    return false;
+  }
+  function freeNear(x, y, r, rectsOnly) {
+    // Rings outward, sixteen directions each: the first clear spot wins.
+    for (var rad = 12; rad < 900; rad += rad < 100 ? 12 : 40) for (var k = 0; k < 16; k++) { var a = k/16*6.283 + rad*0.01, px = x + Math.cos(a)*rad, py = y + Math.sin(a)*rad;
+      if (!blockedAt(px, py, r, rectsOnly)) return { x: px, y: py }; }
+    return { x: world.w/2, y: world.h/2 };
+  }
+  function pushOut(e, r, rectsOnly) {
+    var w = world; if (!w) return;
+    function bounds() { if (e.x < r) e.x = r; if (e.y < r) e.y = r; if (e.x > w.w - r) e.x = w.w - r; if (e.y > w.h - r) e.y = w.h - r; }
+    bounds();
+    // Up to three passes: a corner is two walls, and leaving one can mean
+    // standing in the other until the next pass moves you on.
+    for (var pass = 0; pass < 3; pass++) {
+      var list = w.grid[Math.floor(e.x/w.cell) + ',' + Math.floor(e.y/w.cell)], moved = false; if (!list) break;
+      for (var i = 0; i < list.length; i++) { var s = list[i];
+        if (s.rect) {
+          var nx = e.x < s.x ? s.x : e.x > s.x + s.w ? s.x + s.w : e.x, ny = e.y < s.y ? s.y : e.y > s.y + s.h ? s.y + s.h : e.y;
+          var dx = e.x - nx, dy = e.y - ny, d2 = dx*dx + dy*dy;
+          if (d2 >= r*r) continue;
+          moved = true;
+          if (d2 > 0.0001) { var d = Math.sqrt(d2); e.x += dx/d*(r - d); e.y += dy/d*(r - d); }
+          else {
+            // Inside. Leave by a face, ranked: one that lands in the world and
+            // clear of the neighbouring walls first; in the world at all
+            // second; nearest last. A perimeter wall's nearest face is the
+            // outside one, and the bounds would only hand that straight back.
+            var cands = [[s.x - r, e.y], [s.x + s.w + r, e.y], [e.x, s.y - r], [e.x, s.y + s.h + r]], bestRank = -1, bestD = 1e9, bx = e.x, by = e.y;
+            for (var ci = 0; ci < 4; ci++) { var cxp = cands[ci][0], cyp = cands[ci][1], rank = cxp >= r && cyp >= r && cxp <= w.w - r && cyp <= w.h - r ? 2 : 0;
+              if (rank) for (var oj = 0; oj < list.length; oj++) { var o = list[oj]; if (o === s || !o.rect) continue; if (cxp > o.x - r && cxp < o.x + o.w + r && cyp > o.y - r && cyp < o.y + o.h + r) { rank = 1; break; } }
+              var dd = Math.abs(cxp - e.x) + Math.abs(cyp - e.y); if (rank > bestRank || (rank === bestRank && dd < bestD)) { bestRank = rank; bestD = dd; bx = cxp; by = cyp; } }
+            if (bestRank < 2) { var fr = freeNear(e.x, e.y, r, rectsOnly); bx = fr.x; by = fr.y; }
+            e.x = bx; e.y = by; }
+        } else if (!rectsOnly) {
+          var cx = e.x - s.x, cy = e.y - s.y, cr = r + s.r, c2 = cx*cx + cy*cy;
+          if (c2 >= cr*cr) continue;
+          moved = true;
+          if (c2 < 0.0001) { e.x += cr; continue; }
+          var cd = Math.sqrt(c2); e.x += cx/cd*(cr - cd); e.y += cy/cd*(cr - cd);
+        }
+      }
+      bounds();
+      if (!moved) break;
+    }
+  }
+  function inSolid(x, y, r) { var p = { x: x, y: y }; pushOut(p, r); return Math.abs(p.x - x) > 0.5 || Math.abs(p.y - y) > 0.5; }
+  function inWorld(x, y, m) { return world && x > m && y > m && x < world.w - m && y < world.h - m; }
+  // A spawn point off-screen, inside the world, and not in a wall.
+  function spawnPoint() {
+    var R0 = Math.max(VW || cssW, VH || cssH)*0.62 + 40, best = null;
+    for (var i = 0; i < 14; i++) { var a = rr(0, Math.PI*2), x = P.x + Math.cos(a)*R0, y = P.y + Math.sin(a)*R0;
+      if (!inWorld(x, y, 30)) continue; if (inSolid(x, y, 12)) continue; return { x: x, y: y }; }
+    // Cornered: the nearest spot that is at least off-screen along the long axis.
+    var p = { x: P.x + (P.x < world.w/2 ? R0 : -R0), y: P.y + (P.y < world.h/2 ? R0*0.6 : -R0*0.6) }; pushOut(p, 12); return p;
+  }
+
+  /* ---- painting ---- */
+  var CH = 512, chunkCache = {}, chunkOrder = [];
+  function paintWorld(q, w, x0, y0, x1, y1) {
+    var i, k, z, r, b, p;
+    function vis(ax, ay, aw, ah) { return ax < x1 && ax + aw > x0 && ay < y1 && ay + ah > y0; }
+    q.fillStyle = texPattern(q, w.base); q.fillRect(x0, y0, x1 - x0, y1 - y0);
+    // Broad tone, in world space, so a floor has light and dark reaches.
+    for (i = 0; i < 40; i++) { var hh = hash2(i*7 + 1, i*13 + 3); var mx = (hh % 1000)/1000*w.w, my = ((hh >>> 10) % 1000)/1000*w.h; if (!vis(mx - 300, my - 300, 600, 600)) continue;
+      q.globalAlpha = 0.05 + ((hh >>> 20) % 5)/100; q.fillStyle = (hh >>> 3) % 3 === 0 ? '#000' : (hh >>> 3) % 3 === 1 ? '#3a2028' : '#16202c'; q.beginPath(); q.ellipse(mx, my, 120 + (hh >>> 5) % 200, 80 + (hh >>> 7) % 140, ((hh >>> 9) % 314)/100, 0, 6.283); q.fill(); }
+    q.globalAlpha = 1;
+    // Zones.
+    for (i = 0; i < w.zones.length; i++) { z = w.zones[i];
+      if (z.r !== undefined) { if (!vis(z.cx - z.r, z.cy - z.r, z.r*2, z.r*2)) continue; q.fillStyle = texPattern(q, z.tex); q.beginPath(); q.arc(z.cx, z.cy, z.r, 0, 6.283); q.fill();
+        if (z.edge) { q.strokeStyle = 'rgba(0,0,0,.6)'; q.lineWidth = 4; q.stroke(); q.strokeStyle = 'rgba(233,216,197,.08)'; q.lineWidth = 1.5; q.beginPath(); q.arc(z.cx, z.cy, z.r - 3, 0, 6.283); q.stroke(); }
+        if (z.tex === 'water') { q.strokeStyle = 'rgba(0,0,0,.5)'; q.lineWidth = 8; q.beginPath(); q.arc(z.cx, z.cy, z.r + 2, 0, 6.283); q.stroke(); } }
+      else { if (!vis(z.x, z.y, z.w, z.h)) continue; q.fillStyle = texPattern(q, z.tex); q.fillRect(z.x, z.y, z.w, z.h);
+        if (z.sunk) { q.fillStyle = 'rgba(0,0,0,.5)'; q.fillRect(z.x, z.y, z.w, z.h); q.strokeStyle = 'rgba(233,216,197,.1)'; q.lineWidth = 1; for (k = 0; k < 6; k++) { q.beginPath(); q.moveTo(z.x, z.y + k*z.h/6); q.lineTo(z.x + z.w, z.y + k*z.h/6); q.stroke(); } }
+        if (z.edge) { q.strokeStyle = 'rgba(0,0,0,.55)'; q.lineWidth = 3; q.strokeRect(z.x, z.y, z.w, z.h); q.strokeStyle = 'rgba(233,216,197,.07)'; q.lineWidth = 1; q.strokeRect(z.x + 2.5, z.y + 2.5, z.w - 5, z.h - 5); }
+        if (z.tex === 'carpet') { q.strokeStyle = 'rgba(217,164,65,.28)'; q.lineWidth = 2; q.strokeRect(z.x + 8, z.y + 8, z.w - 16, z.h - 16); } } }
+    // Roads: kerbs first so junctions merge, then the surface, then the markings.
+    q.lineCap = 'butt'; q.lineJoin = 'round';
+    function trace(rd) { q.beginPath(); for (k = 0; k < rd.pts.length; k++) { if (k) q.lineTo(rd.pts[k][0], rd.pts[k][1]); else q.moveTo(rd.pts[k][0], rd.pts[k][1]); } }
+    for (i = 0; i < w.roads.length; i++) { r = w.roads[i]; if (r.nokerb) continue; trace(r); q.strokeStyle = '#0b0609'; q.lineWidth = r.w + 10; q.stroke(); }
+    for (i = 0; i < w.roads.length; i++) { r = w.roads[i]; if (r.nokerb) continue; trace(r); q.strokeStyle = 'rgba(233,216,197,.10)'; q.lineWidth = r.w + 6; q.stroke(); }
+    for (i = 0; i < w.roads.length; i++) { r = w.roads[i]; trace(r); q.strokeStyle = texPattern(q, r.tex || 'asphalt'); q.lineWidth = r.w; q.lineCap = r.nokerb ? 'round' : 'butt'; q.stroke(); }
+    q.lineCap = 'butt';
+    for (i = 0; i < w.roads.length; i++) { r = w.roads[i]; if (r.nokerb) continue; trace(r); q.setLineDash(r.dash ? [26, 22] : [1, 0]); q.strokeStyle = r.dash ? 'rgba(233,216,197,.16)' : 'rgba(233,216,197,.06)'; q.lineWidth = r.dash ? 2 : 1; q.stroke(); q.setLineDash([]); }
+    // Blocks: buildings with a roof and a shadow; walls of stone; rock.
+    for (i = 0; i < w.blocks.length; i++) { b = w.blocks[i]; if (!vis(b.x - 30, b.y - 30, b.w + 60, b.h + 60)) continue;
+      if (b.kind === 'building') { q.fillStyle = 'rgba(0,0,0,.5)'; q.fillRect(b.x + 10, b.y + 12, b.w, b.h);
+        q.fillStyle = texPattern(q, 'roof'); q.fillRect(b.x, b.y, b.w, b.h);
+        q.strokeStyle = 'rgba(233,216,197,.16)'; q.lineWidth = 2; q.strokeRect(b.x + 1, b.y + 1, b.w - 2, b.h - 2); q.strokeStyle = 'rgba(0,0,0,.7)'; q.lineWidth = 1; q.strokeRect(b.x + 5, b.y + 5, b.w - 10, b.h - 10);
+        // Rooftop clutter: a vent, a tank, a skylight.
+        var hb = hash2(b.x, b.y); q.fillStyle = '#1e1218'; q.fillRect(b.x + 20 + hb % 40, b.y + 20 + (hb >>> 8) % 40, 26, 18); q.strokeStyle = 'rgba(233,216,197,.1)'; q.strokeRect(b.x + 20 + hb % 40, b.y + 20 + (hb >>> 8) % 40, 26, 18);
+        q.fillStyle = '#100810'; q.beginPath(); q.arc(b.x + b.w - 40 - (hb >>> 4) % 30, b.y + b.h - 40 - (hb >>> 12) % 30, 14, 0, 6.283); q.fill(); q.strokeStyle = 'rgba(233,216,197,.12)'; q.lineWidth = 1; q.stroke();
+        if (b.w > 120 && b.h > 120) { q.fillStyle = 'rgba(126,156,196,.06)'; q.fillRect(b.x + b.w/2 - 20, b.y + b.h/2 - 14, 40, 28); q.strokeStyle = 'rgba(233,216,197,.1)'; q.strokeRect(b.x + b.w/2 - 20, b.y + b.h/2 - 14, 40, 28); } }
+      else if (b.kind === 'wall') { q.fillStyle = texPattern(q, 'rock'); q.fillRect(b.x, b.y, b.w, b.h); q.fillStyle = 'rgba(0,0,0,.35)'; q.fillRect(b.x, b.y, b.w, b.h);
+        q.strokeStyle = 'rgba(233,216,197,.12)'; q.lineWidth = 3; q.strokeRect(b.x + 1.5, b.y + 1.5, b.w - 3, b.h - 3);
+        // Coursed stone along the inside faces.
+        q.strokeStyle = 'rgba(0,0,0,.5)'; q.lineWidth = 1; q.beginPath(); for (k = 0; k < b.h; k += 28) { q.moveTo(b.x, b.y + k); q.lineTo(b.x + b.w, b.y + k); } for (k = 0; k < b.w; k += 44) { q.moveTo(b.x + k, b.y); q.lineTo(b.x + k, b.y + b.h); } q.stroke(); }
+      else { q.fillStyle = texPattern(q, 'rock'); q.fillRect(b.x, b.y, b.w, b.h); q.fillStyle = 'rgba(0,0,0,.45)'; q.fillRect(b.x, b.y, b.w, b.h);
+        q.strokeStyle = 'rgba(111,179,171,.10)'; q.lineWidth = 3; q.strokeRect(b.x + 1.5, b.y + 1.5, b.w - 3, b.h - 3); q.strokeStyle = 'rgba(0,0,0,.8)'; q.lineWidth = 6; q.strokeRect(b.x - 3, b.y - 3, b.w + 6, b.h + 6); } }
+    // Props, the static parts.
+    for (i = 0; i < w.props.length; i++) { p = w.props[i]; if (!vis(p.x - 120, p.y - 120, 240, 240)) continue; paintProp(q, p); }
+  }
+  function paintProp(q, p) {
+    var k = p.kind, i;
+    q.save(); q.translate(p.x, p.y); q.lineCap = 'round';
+    if (k === 'lamp' || k === 'lantern') { q.fillStyle = 'rgba(0,0,0,.4)'; q.beginPath(); q.ellipse(4, 4, 8, 4, 0, 0, 6.283); q.fill(); q.fillStyle = '#2a1c21'; q.beginPath(); q.arc(0, 0, 7, 0, 6.283); q.fill(); q.strokeStyle = 'rgba(233,216,197,.3)'; q.lineWidth = 1.5; q.stroke(); q.fillStyle = k === 'lamp' ? INK.bone : INK.teal; q.beginPath(); q.arc(0, 0, 3, 0, 6.283); q.fill(); }
+    else if (k === 'tree') { q.fillStyle = 'rgba(0,0,0,.45)'; q.beginPath(); q.ellipse(8, 10, p.r + 6, p.r*0.7, 0, 0, 6.283); q.fill();
+      for (i = 0; i < 7; i++) { var a = i/7*6.283, tr = p.r*(0.75 + 0.25*Math.sin(i*2.1)); q.fillStyle = i % 2 ? '#1b2a22' : '#142019'; q.beginPath(); q.arc(Math.cos(a)*p.r*0.35, Math.sin(a)*p.r*0.35, tr, 0, 6.283); q.fill(); }
+      q.fillStyle = '#22352a'; q.beginPath(); q.arc(-p.r*0.25, -p.r*0.25, p.r*0.5, 0, 6.283); q.fill(); q.fillStyle = '#0d120e'; q.beginPath(); q.arc(0, 0, 4, 0, 6.283); q.fill(); }
+    else if (k === 'fountain') { q.fillStyle = 'rgba(0,0,0,.4)'; q.beginPath(); q.arc(6, 6, p.r, 0, 6.283); q.fill(); q.fillStyle = '#2e232c'; q.beginPath(); q.arc(0, 0, p.r, 0, 6.283); q.fill(); q.strokeStyle = 'rgba(233,216,197,.2)'; q.lineWidth = 3; q.stroke();
+      q.fillStyle = texPattern(q, 'water'); q.beginPath(); q.arc(0, 0, p.r - 12, 0, 6.283); q.fill(); q.strokeStyle = 'rgba(126,156,196,.25)'; q.lineWidth = 1; for (i = 1; i < 4; i++) { q.beginPath(); q.arc(0, 0, (p.r - 12)*i/4, 0, 6.283); q.stroke(); }
+      q.fillStyle = '#3a2b36'; q.beginPath(); q.arc(0, 0, 16, 0, 6.283); q.fill(); q.strokeStyle = 'rgba(233,216,197,.25)'; q.stroke(); q.fillStyle = '#4a3846'; q.beginPath(); q.arc(0, 0, 6, 0, 6.283); q.fill(); }
+    else if (k === 'bench' || k === 'pew') { q.fillStyle = 'rgba(0,0,0,.4)'; q.fillRect(-p.rw/2 + 3, -p.rh/2 + 4, p.rw, p.rh); q.fillStyle = k === 'pew' ? '#2a1a16' : '#2c2026'; q.fillRect(-p.rw/2, -p.rh/2, p.rw, p.rh); q.strokeStyle = 'rgba(233,216,197,.16)'; q.lineWidth = 1; q.strokeRect(-p.rw/2, -p.rh/2, p.rw, p.rh); q.strokeStyle = 'rgba(0,0,0,.5)'; q.beginPath(); q.moveTo(-p.rw/2, 0); q.lineTo(p.rw/2, 0); q.stroke(); }
+    else if (k === 'kiosk' || k === 'pump') { q.fillStyle = 'rgba(0,0,0,.5)'; q.fillRect(-p.rw/2 + 6, -p.rh/2 + 8, p.rw, p.rh); q.fillStyle = k === 'pump' ? '#1e2424' : '#2a1c24'; q.fillRect(-p.rw/2, -p.rh/2, p.rw, p.rh); q.strokeStyle = 'rgba(233,216,197,.2)'; q.lineWidth = 2; q.strokeRect(-p.rw/2, -p.rh/2, p.rw, p.rh);
+      if (k === 'pump') { q.fillStyle = '#0f1414'; q.beginPath(); q.arc(-p.rw/4, 0, 14, 0, 6.283); q.fill(); q.strokeStyle = 'rgba(111,179,171,.4)'; q.lineWidth = 2; q.stroke(); q.beginPath(); q.moveTo(-p.rw/4, -14); q.lineTo(-p.rw/4, 14); q.moveTo(-p.rw/4 - 14, 0); q.lineTo(-p.rw/4 + 14, 0); q.stroke(); q.fillStyle = '#2a2a24'; q.fillRect(p.rw/8, -p.rh/3, p.rw/3, p.rh*0.66); q.strokeStyle = 'rgba(0,0,0,.6)'; q.strokeRect(p.rw/8, -p.rh/3, p.rw/3, p.rh*0.66); }
+      else { q.fillStyle = 'rgba(201,106,142,.25)'; q.fillRect(-p.rw/2 + 6, -p.rh/2 + 6, p.rw - 12, 8); } }
+    else if (k === 'dumpster' || k === 'crate' || k === 'altar' || k === 'tomb') { q.fillStyle = 'rgba(0,0,0,.5)'; q.fillRect(-p.rw/2 + 4, -p.rh/2 + 5, p.rw, p.rh);
+      q.fillStyle = k === 'dumpster' ? '#1c2a26' : k === 'crate' ? '#2c2018' : k === 'altar' ? '#2e232c' : '#241a22'; q.fillRect(-p.rw/2, -p.rh/2, p.rw, p.rh); q.strokeStyle = 'rgba(233,216,197,.18)'; q.lineWidth = 1.5; q.strokeRect(-p.rw/2, -p.rh/2, p.rw, p.rh);
+      if (k === 'dumpster') { q.strokeStyle = 'rgba(0,0,0,.6)'; q.beginPath(); q.moveTo(0, -p.rh/2); q.lineTo(0, p.rh/2); q.stroke(); } if (k === 'crate') { q.strokeStyle = 'rgba(0,0,0,.5)'; q.beginPath(); q.moveTo(-p.rw/2, -p.rh/2); q.lineTo(p.rw/2, p.rh/2); q.moveTo(p.rw/2, -p.rh/2); q.lineTo(-p.rw/2, p.rh/2); q.stroke(); }
+      if (k === 'altar') { q.fillStyle = 'rgba(217,164,65,.3)'; q.fillRect(-p.rw/2 + 10, -3, p.rw - 20, 6); } if (k === 'tomb') { q.strokeStyle = 'rgba(233,216,197,.12)'; q.beginPath(); q.moveTo(0, -p.rh/3); q.lineTo(0, p.rh/4); q.moveTo(-8, -p.rh/6); q.lineTo(8, -p.rh/6); q.stroke(); } }
+    else if (k === 'car') { q.save(); if (p.vert) q.rotate(1.5708); var cw = 70, chh = 34; q.fillStyle = 'rgba(0,0,0,.5)'; q.fillRect(-cw/2 + 5, -chh/2 + 6, cw, chh);
+      var hc = hash2(p.x, p.y); q.fillStyle = ['#2a1a22', '#1c2028', '#2a2420', '#221a2a'][hc % 4]; q.beginPath(); q.moveTo(-cw/2 + 6, -chh/2); q.lineTo(cw/2 - 6, -chh/2); q.quadraticCurveTo(cw/2, -chh/2, cw/2, -chh/2 + 6); q.lineTo(cw/2, chh/2 - 6); q.quadraticCurveTo(cw/2, chh/2, cw/2 - 6, chh/2); q.lineTo(-cw/2 + 6, chh/2); q.quadraticCurveTo(-cw/2, chh/2, -cw/2, chh/2 - 6); q.lineTo(-cw/2, -chh/2 + 6); q.quadraticCurveTo(-cw/2, -chh/2, -cw/2 + 6, -chh/2); q.fill();
+      q.strokeStyle = 'rgba(233,216,197,.2)'; q.lineWidth = 1.5; q.stroke(); q.fillStyle = 'rgba(126,156,196,.18)'; q.fillRect(-cw/2 + 14, -chh/2 + 4, 10, chh - 8); q.fillRect(cw/2 - 22, -chh/2 + 4, 8, chh - 8); q.fillStyle = 'rgba(0,0,0,.4)'; q.fillRect(-cw/2 + 26, -chh/2 + 3, cw/2 - 4, chh - 6); q.restore(); }
+    else if (k === 'zebra') { q.fillStyle = 'rgba(233,216,197,.16)'; for (i = -p.len/2; i < p.len/2; i += 20) { if (p.horiz) q.fillRect(i, -14, 10, 28); else q.fillRect(-14, i, 28, 10); } }
+    else if (k === 'manhole') { q.fillStyle = '#17100f'; q.beginPath(); q.arc(0, 0, 13, 0, 6.283); q.fill(); q.strokeStyle = 'rgba(233,216,197,.16)'; q.lineWidth = 1.5; q.stroke(); q.beginPath(); q.arc(0, 0, 8, 0, 6.283); q.stroke(); }
+    else if (k === 'puddle') { q.fillStyle = 'rgba(126,156,196,.10)'; q.beginPath(); q.ellipse(0, 0, p.rx, p.ry, 0.3, 0, 6.283); q.fill(); q.strokeStyle = 'rgba(233,216,197,.06)'; q.lineWidth = 1; q.stroke(); }
+    else if (k === 'sign') { q.save(); if (p.vert) q.rotate(1.5708); q.fillStyle = '#0b0609'; q.fillRect(-30, -7, 60, 14); q.fillStyle = p.col; q.globalAlpha = 0.85; q.fillRect(-26, -3, 52, 6); q.globalAlpha = 1; q.restore(); }
+    else if (k === 'statue') { q.fillStyle = 'rgba(0,0,0,.45)'; q.beginPath(); q.ellipse(5, 6, p.r + 4, p.r*0.7, 0, 0, 6.283); q.fill(); q.fillStyle = '#2a2027'; q.beginPath(); q.arc(0, 0, p.r, 0, 6.283); q.fill(); q.strokeStyle = 'rgba(233,216,197,.22)'; q.lineWidth = 2; q.stroke(); q.fillStyle = '#3a2d37'; q.beginPath(); q.moveTo(0, -p.r*0.7); q.lineTo(p.r*0.5, p.r*0.5); q.lineTo(-p.r*0.5, p.r*0.5); q.closePath(); q.fill(); q.fillStyle = '#4a3a46'; q.beginPath(); q.arc(0, -p.r*0.25, p.r*0.22, 0, 6.283); q.fill(); }
+    else if (k === 'pillar') { q.fillStyle = 'rgba(0,0,0,.5)'; q.beginPath(); q.ellipse(8, 10, p.r + 6, p.r*0.8, 0, 0, 6.283); q.fill(); q.fillStyle = '#1f1722'; q.beginPath(); q.arc(0, 0, p.r + 6, 0, 6.283); q.fill(); q.fillStyle = '#2e232c'; q.beginPath(); q.arc(0, 0, p.r, 0, 6.283); q.fill(); q.strokeStyle = 'rgba(233,216,197,.25)'; q.lineWidth = 2; q.stroke();
+      var pg = q.createRadialGradient(-p.r*0.4, -p.r*0.4, 2, 0, 0, p.r); pg.addColorStop(0, 'rgba(255,240,230,.18)'); pg.addColorStop(1, 'rgba(0,0,0,.4)'); q.fillStyle = pg; q.beginPath(); q.arc(0, 0, p.r, 0, 6.283); q.fill(); q.strokeStyle = 'rgba(0,0,0,.5)'; q.lineWidth = 1; for (i = 0; i < 8; i++) { var pa = i/8*6.283; q.beginPath(); q.moveTo(Math.cos(pa)*p.r*0.5, Math.sin(pa)*p.r*0.5); q.lineTo(Math.cos(pa)*p.r, Math.sin(pa)*p.r); q.stroke(); } }
+    else if (k === 'candelabra') { q.fillStyle = 'rgba(0,0,0,.4)'; q.beginPath(); q.ellipse(3, 4, 10, 5, 0, 0, 6.283); q.fill(); q.fillStyle = '#2a2027'; q.beginPath(); q.arc(0, 0, 7, 0, 6.283); q.fill(); q.strokeStyle = 'rgba(217,164,65,.5)'; q.lineWidth = 1.5; q.stroke(); q.fillStyle = 'rgba(233,216,197,.6)'; for (i = 0; i < 3; i++) { q.fillRect(-7 + i*6, -4, 2, 6); } }
+    else if (k === 'brazier') { q.fillStyle = 'rgba(0,0,0,.45)'; q.beginPath(); q.ellipse(4, 5, p.r + 4, p.r*0.7, 0, 0, 6.283); q.fill(); q.fillStyle = '#17100f'; q.beginPath(); q.arc(0, 0, p.r, 0, 6.283); q.fill(); q.strokeStyle = 'rgba(217,164,65,.5)'; q.lineWidth = 2; q.stroke(); q.fillStyle = '#3a1a08'; q.beginPath(); q.arc(0, 0, p.r - 4, 0, 6.283); q.fill(); }
+    else if (k === 'sconce') { q.save(); if (p.flip) q.scale(-1, 1); q.fillStyle = '#2a2027'; q.fillRect(-4, -8, 8, 16); q.strokeStyle = 'rgba(217,164,65,.4)'; q.lineWidth = 1; q.strokeRect(-4, -8, 8, 16); q.fillStyle = 'rgba(233,216,197,.6)'; q.fillRect(3, -3, 3, 6); q.restore(); }
+    else if (k === 'glass') { for (i = 0; i < p.cols.length; i++) { q.fillStyle = p.cols[i]; q.globalAlpha = 0.05; q.beginPath(); q.ellipse((i - (p.cols.length - 1)/2)*p.rx*0.5, 0, p.rx*0.45, p.ry, 0, 0, 6.283); q.fill(); } q.globalAlpha = 1;
+      q.strokeStyle = 'rgba(233,216,197,.05)'; q.lineWidth = 1; q.beginPath(); q.ellipse(0, 0, p.rx, p.ry, 0, 0, 6.283); q.stroke(); }
+    else if (k === 'pipe') { q.save(); if (p.horiz) q.rotate(1.5708); q.fillStyle = 'rgba(0,0,0,.5)'; q.fillRect(-9, 0, 18, p.len); q.fillStyle = '#1e2424'; q.fillRect(-7, 0, 14, p.len); q.fillStyle = 'rgba(233,216,197,.08)'; q.fillRect(-7, 0, 4, p.len); q.fillStyle = '#242c2c'; for (i = 60; i < p.len; i += 180) { q.fillRect(-10, i, 20, 10); } q.restore(); }
+    else if (k === 'drain') { q.fillStyle = '#0b1214'; q.fillRect(-14, -10, 28, 20); q.strokeStyle = 'rgba(111,179,171,.35)'; q.lineWidth = 1; q.strokeRect(-14, -10, 28, 20); q.beginPath(); for (i = -8; i <= 8; i += 4) { q.moveTo(i, -8); q.lineTo(i, 8); } q.stroke(); }
+    else if (k === 'barrel') { q.fillStyle = 'rgba(0,0,0,.45)'; q.beginPath(); q.ellipse(4, 5, p.r + 2, p.r*0.7, 0, 0, 6.283); q.fill(); q.fillStyle = '#2a2018'; q.beginPath(); q.arc(0, 0, p.r, 0, 6.283); q.fill(); q.strokeStyle = 'rgba(233,216,197,.2)'; q.lineWidth = 1.5; q.stroke(); q.strokeStyle = 'rgba(0,0,0,.6)'; q.beginPath(); q.arc(0, 0, p.r*0.6, 0, 6.283); q.stroke(); }
+    else if (k === 'valve') { q.fillStyle = '#1e2424'; q.beginPath(); q.arc(0, 0, p.r, 0, 6.283); q.fill(); q.strokeStyle = 'rgba(111,179,171,.5)'; q.lineWidth = 2; q.stroke(); q.beginPath(); q.moveTo(-p.r, 0); q.lineTo(p.r, 0); q.moveTo(0, -p.r); q.lineTo(0, p.r); q.stroke(); }
+    q.restore();
+  }
+  function groundChunk(w, id, cx, cy) {
+    var key = id + ':' + cx + ',' + cy + '@' + dpr, c = chunkCache[key];
+    if (c) return c;
+    c = document.createElement('canvas'); c.width = c.height = CH*dpr; var q = c.getContext('2d'); q.scale(dpr, dpr);
+    var x0 = cx*CH, y0 = cy*CH;
+    q.translate(-x0, -y0);
+    q.fillStyle = '#050203'; q.fillRect(x0, y0, CH, CH);
+    // Only the part inside the world is painted; outside stays void.
+    q.save(); q.beginPath(); q.rect(0, 0, w.w, w.h); q.clip();
+    paintWorld(q, w, x0, y0, x0 + CH, y0 + CH);
+    q.restore();
+    // The edge of the world, if this chunk touches it.
+    q.strokeStyle = 'rgba(233,216,197,.14)'; q.lineWidth = 6; q.strokeRect(3, 3, w.w - 6, w.h - 6); q.strokeStyle = '#050203'; q.lineWidth = 2; q.strokeRect(0, 0, w.w, w.h);
+    chunkCache[key] = c; chunkOrder.push(key);
+    if (chunkOrder.length > 12) { var old = chunkOrder.shift(); delete chunkCache[old]; }
+    return c;
+  }
+  function drawGround(g, map, t) {
+    var w = world || worldFor(run ? run.mapId : selMap), id = run ? run.mapId : selMap;
+    var vx0 = camX - VW/2, vy0 = camY - VH/2, vx1 = camX + VW/2, vy1 = camY + VH/2, i;
+    lights.length = 0;
+    g.fillStyle = '#050203'; g.fillRect(vx0 - 4, vy0 - 4, VW + 8, VH + 8);
+    for (var cx = Math.floor(vx0/CH); cx <= Math.floor(vx1/CH); cx++) for (var cy = Math.floor(vy0/CH); cy <= Math.floor(vy1/CH); cy++) {
+      if (cx < 0 || cy < 0 || cx*CH >= w.w || cy*CH >= w.h) continue;
+      g.drawImage(groundChunk(w, id, cx, cy), cx*CH, cy*CH, CH, CH); }
+    // The living parts: flames, lamp glow, water moving. From a fixed list,
+    // culled to the view, so nothing can come and go with the camera.
+    for (i = 0; i < w.lights.length; i++) { var l = w.lights[i]; if (l.x < vx0 - 200 || l.x > vx1 + 200 || l.y < vy0 - 200 || l.y > vy1 + 200) continue;
+      var fl = l.still ? 1 : 0.86 + 0.14*Math.sin(t*(l.kind === 'candle' ? 11 : l.kind === 'brazier' ? 7 : l.kind === 'neon' ? 23 : 3) + l.x*0.37 + l.y*0.11);
+      if (l.kind === 'neon' && Math.sin(t*1.7 + l.x) > 0.96) fl *= 0.3;
+      lights.push({ x: l.x, y: l.y, col: l.col, r: l.r*fl });
+      if (l.kind === 'candle' || l.kind === 'brazier') { var n = l.small ? 1 : l.kind === 'brazier' ? 5 : 3;
+        for (var c = 0; c < n; c++) { var fx = l.x + (c - (n - 1)/2)*(l.kind === 'brazier' ? 4 : 6), fy = l.y - (l.kind === 'brazier' ? 6 : 8) - (c % 2)*3, fk = 0.7 + 0.3*Math.sin(t*9 + c*2 + l.x);
+          g.fillStyle = INK.gold; g.globalAlpha = fk; g.beginPath(); g.ellipse(fx, fy - 3, 1.6, 3.4*fk + 1, 0, 0, 6.283); g.fill(); g.fillStyle = '#fff2d8'; g.globalAlpha = fk*0.8; g.beginPath(); g.ellipse(fx, fy - 2, 0.7, 1.6, 0, 0, 6.283); g.fill(); }
+        g.globalAlpha = 1; var gs = glowSprite(INK.gold, l.kind === 'brazier' ? 60 : 40, false); g.globalAlpha = fl; g.drawImage(gs.c, l.x - gs.s/2, l.y - gs.s/2 - 6, gs.s, gs.s); g.globalAlpha = 1; }
+      else if (l.kind === 'lamp') { var ls = glowSprite(l.col, 44, false); g.globalAlpha = 0.8*fl; g.drawImage(ls.c, l.x - ls.s/2, l.y - ls.s/2, ls.s, ls.s); g.globalAlpha = 1; }
+      else if (l.kind === 'drain') { var ds = glowSprite(l.col, 30, false); g.globalAlpha = 0.7*fl; g.drawImage(ds.c, l.x - ds.s/2, l.y - ds.s/2, ds.s, ds.s); g.globalAlpha = 1; }
+      else if (l.kind === 'neon') { var ns = glowSprite(l.col, 34, false); g.globalAlpha = fl; g.drawImage(ns.c, l.x - ns.s/2, l.y - ns.s/2, ns.s, ns.s); g.globalAlpha = 1; } }
+    // Water moves.
+    g.strokeStyle = 'rgba(111,179,171,.14)'; g.lineWidth = 1.2; g.beginPath();
+    for (i = 0; i < w.zones.length; i++) { var z = w.zones[i]; if (z.tex !== 'water') continue;
+      if (z.r !== undefined) { if (z.cx + z.r < vx0 || z.cx - z.r > vx1 || z.cy + z.r < vy0 || z.cy - z.r > vy1) continue;
+        for (var rk = 0; rk < 3; rk++) { var rp = (t*0.35 + rk/3) % 1; g.moveTo(z.cx + z.r*rp, z.cy); g.arc(z.cx, z.cy, z.r*rp, 0, 6.283); } }
+      else { if (z.x + z.w < vx0 || z.x > vx1 || z.y + z.h < vy0 || z.y > vy1 || z.w < 20) continue;
+        var horiz = z.w > z.h, len = horiz ? z.w : z.h, a0 = Math.max(0, (horiz ? vx0 - z.x : vy0 - z.y) - 40), a1 = Math.min(len, (horiz ? vx1 - z.x : vy1 - z.y) + 40);
+        for (var wl = 0; wl < 2; wl++) { var off = (horiz ? z.y : z.x) + (horiz ? z.h : z.w)*(0.3 + wl*0.4), first = true;
+          for (var s = a0; s <= a1; s += 18) { var wv = Math.sin(s*0.05 + t*1.6 + wl*2)*3, px = horiz ? z.x + s : off + wv, py = horiz ? off + wv : z.y + s; if (first) { g.moveTo(px, py); first = false; } else g.lineTo(px, py); } } } }
+    g.stroke();
+  }
   function moteSprite(kind, v) {
     var tier = v >= 25 ? 25 : v >= 5 ? 5 : 1;
     return sprite('m' + kind + tier, kind === 'chest' ? 12 : kind === 'relic' ? 11 : (tier === 25 ? 7 : tier === 5 ? 5 : 3.5), function (g, r) {
@@ -2020,200 +2375,6 @@
      eight. Deliberately uses its own mulberry stream and never R(), because
      the render path sharing the seeded RNG is what makes daily runs
      irreproducible. */
-  /* Graffiti: words, not scribbles.
-
-     Letters are stroke skeletons on a unit box, so a word is a list of
-     polylines and a hand is how those polylines get painted. Three hands:
-     bubble (fat round strokes, outline, a 3D drop), block (square caps,
-     skewed, hard extrusion) and handstyle (one thin nervous stroke, letters
-     overlapping, a swash underneath). All of it is math into one baked sprite
-     per word, never an image. */
-  var GLYPH = {
-    A:[[[0,1],[0.5,0],[1,1]],[[0.22,0.62],[0.78,0.62]]],
-    B:[[[0,0],[0,1]],[[0,0],[0.7,0],[0.86,0.25],[0.7,0.5],[0,0.5]],[[0,0.5],[0.78,0.5],[1,0.75],[0.78,1],[0,1]]],
-    C:[[[1,0.18],[0.72,0],[0.24,0],[0,0.3],[0,0.7],[0.24,1],[0.72,1],[1,0.82]]],
-    D:[[[0,0],[0,1]],[[0,0],[0.58,0],[1,0.3],[1,0.7],[0.58,1],[0,1]]],
-    E:[[[1,0],[0,0],[0,1],[1,1]],[[0,0.5],[0.7,0.5]]],
-    F:[[[1,0],[0,0],[0,1]],[[0,0.5],[0.68,0.5]]],
-    G:[[[1,0.18],[0.72,0],[0.24,0],[0,0.3],[0,0.7],[0.24,1],[0.78,1],[1,0.76],[1,0.55],[0.58,0.55]]],
-    H:[[[0,0],[0,1]],[[1,0],[1,1]],[[0,0.5],[1,0.5]]],
-    I:[[[0.5,0],[0.5,1]],[[0.18,0],[0.82,0]],[[0.18,1],[0.82,1]]],
-    K:[[[0,0],[0,1]],[[1,0],[0.05,0.56]],[[0.34,0.42],[1,1]]],
-    L:[[[0,0],[0,1],[1,1]]],
-    M:[[[0,1],[0,0],[0.5,0.58],[1,0],[1,1]]],
-    N:[[[0,1],[0,0],[1,1],[1,0]]],
-    O:[[[0.5,0],[0.1,0.24],[0.1,0.76],[0.5,1],[0.9,0.76],[0.9,0.24],[0.5,0]]],
-    R:[[[0,1],[0,0],[0.7,0],[0.9,0.25],[0.7,0.5],[0,0.5]],[[0.42,0.5],[1,1]]],
-    S:[[[1,0.16],[0.7,0],[0.22,0],[0,0.24],[0.22,0.5],[0.78,0.5],[1,0.76],[0.78,1],[0.22,1],[0,0.84]]],
-    T:[[[0,0],[1,0]],[[0.5,0],[0.5,1]]],
-    U:[[[0,0],[0,0.74],[0.3,1],[0.7,1],[1,0.74],[1,0]]],
-    V:[[[0,0],[0.5,1],[1,0]]],
-    W:[[[0,0],[0.25,1],[0.5,0.42],[0.75,1],[1,0]]],
-    X:[[[0,0],[1,1]],[[1,0],[0,1]]],
-    Y:[[[0,0],[0.5,0.5],[1,0]],[[0.5,0.5],[0.5,1]]],
-    Z:[[[0,0],[1,0],[0,1],[1,1]]]
-  };
-  var GRAF_WORDS = ['THIRST','FANG','VEIN','NOX','RIOT','ASH','HOWL','SIN','DUSK','BITE','RAW','KIN','VOID','LUST','MOON','HEX','WAKE','DRAIN','FEED','EMBER'];
-  var GRAF_N = GRAF_WORDS.length;
-  function graffitiSprite(i) {
-    return sprite('gf' + i, 82, function (g, R0) {
-      var rng = mulberry(1013 + i*7919), word = GRAF_WORDS[i], hand = i % 3;
-      var PALS = [[INK.pink, '#2a0d16', '#ffd6e0'], [INK.teal, '#0b1f1c', '#d8fff8'], [INK.violet, '#1a0f26', '#ead9ff'],
-                  [INK.peri, '#0f1024', '#e0e2ff'], [INK.bone, '#1a0d12', '#ffffff'], [INK.gold, '#231600', '#fff0c8'], [INK.rose, '#2a0810', '#ffe0e6']];
-      var pal = PALS[(rng()*PALS.length)|0], body = pal[0], dark = pal[1], hi = pal[2];
-      var W = R0*1.22, H = R0*(hand === 2 ? 0.44 : 0.56), nL = word.length;
-      var adv = W/(nL - (hand === 0 ? 0.35*(nL-1) : hand === 2 ? 0.25*(nL-1) : 0)), LW = adv*(hand === 0 ? 1.2 : hand === 2 ? 1.1 : 0.86);
-      // Per-letter placement, fixed up front so every pass lines up.
-      var L = [], x = -W/2;
-      for (var k = 0; k < nL; k++) {
-        L.push({ ch: word[k], x: x, y: (rng()*2-1)*H*(hand === 2 ? 0.16 : 0.09), rot: (rng()*2-1)*(hand === 2 ? 0.22 : 0.1),
-                 sc: 0.88 + rng()*0.26, skew: hand === 1 ? -0.28 : (hand === 2 ? -0.16 : 0) });
-        x += adv;
-      }
-      function letter(l, fn) {
-        var gl = GLYPH[l.ch]; if (!gl) return;
-        g.save(); g.translate(l.x + LW/2, l.y); g.rotate(l.rot); g.transform(1, 0, l.skew, 1, 0, 0); g.scale(l.sc, l.sc);
-        g.beginPath();
-        for (var s = 0; s < gl.length; s++) { var pl = gl[s];
-          for (var p = 0; p < pl.length; p++) { var px = (pl[p][0] - 0.5)*LW, py = (pl[p][1] - 0.5)*H; if (p) g.lineTo(px, py); else g.moveTo(px, py); } }
-        fn(); g.restore();
-      }
-      function pass(dx, dy, col, lw, alpha) {
-        g.save(); g.translate(dx, dy); g.strokeStyle = col; g.lineWidth = lw; g.globalAlpha = alpha;
-        for (var k = 0; k < L.length; k++) letter(L[k], function () { g.stroke(); });
-        g.restore();
-      }
-      g.lineCap = hand === 1 ? 'square' : 'round'; g.lineJoin = hand === 1 ? 'miter' : 'round';
-      var bw = hand === 0 ? H*0.30 : hand === 1 ? H*0.24 : H*0.075;
-      if (hand === 0) {
-        // Bubble: 3D drop, thick outline, body, glint.
-        for (var d3 = 6; d3 > 0; d3 -= 1.5) pass(d3, d3, dark, bw + 5, 0.9);
-        pass(0, 0, dark, bw + 5, 1); pass(0, 0, body, bw, 1);
-        pass(-bw*0.22, -bw*0.22, hi, bw*0.22, 0.55);
-      } else if (hand === 1) {
-        // Block: hard extrusion down-right, then the face.
-        for (var e = 7; e > 0; e -= 1) pass(e, e*0.8, dark, bw + 3, 1);
-        pass(0, 0, dark, bw + 3.5, 1); pass(0, 0, body, bw, 1);
-        pass(-1.4, -1.4, hi, 1.6, 0.42);
-      } else {
-        // Handstyle: one nervous line, a shadow of itself, and a swash.
-        pass(1.5, 2, dark, bw*2.6, 0.7); pass(0, 0, body, bw*1.6, 0.95); pass(-0.8, -0.8, hi, bw*0.5, 0.35);
-        g.strokeStyle = body; g.lineWidth = bw*1.5; g.globalAlpha = 0.9; g.beginPath();
-        g.moveTo(-W/2 - 6, H*0.62); g.quadraticCurveTo(0, H*0.95, W/2 + 12, H*0.5); g.stroke();
-        g.beginPath(); g.moveTo(W/2 + 12, H*0.5); g.lineTo(W/2 + 3, H*0.36); g.moveTo(W/2 + 12, H*0.5); g.lineTo(W/2 + 1, H*0.6); g.stroke();
-      }
-      // Drips, from the bottoms of a few letters.
-      g.strokeStyle = body; g.lineCap = 'round'; g.globalAlpha = 0.85; g.beginPath();
-      for (var dr = 0; dr < nL; dr++) { if (rng() < 0.55) continue; var lx = L[dr].x + LW*(0.3 + rng()*0.5), ly = L[dr].y + H*0.5;
-        g.lineWidth = 2 + rng()*2.5; g.moveTo(lx, ly); g.lineTo(lx + (rng()*2-1)*2, ly + 6 + rng()*16); }
-      g.stroke();
-      // A crown, star or arrow, the way tags get one.
-      var orn = (rng()*3)|0; g.fillStyle = body; g.strokeStyle = body; g.lineWidth = 2; g.globalAlpha = 0.9;
-      var oxx = W/2 + 9, oyy = -H*0.7;
-      if (orn === 0) { g.beginPath(); for (var st = 0; st < 10; st++) { var ra = st % 2 ? 3 : 7, aa = st/10*6.283 - 1.57; g.lineTo(oxx + Math.cos(aa)*ra, oyy + Math.sin(aa)*ra); } g.closePath(); g.fill(); }
-      else if (orn === 1) { g.beginPath(); g.moveTo(-W/2 - 2, -H*0.55); g.lineTo(-W/2 + 2, -H*0.85); g.lineTo(-W/2 + 7, -H*0.62); g.lineTo(-W/2 + 12, -H*0.9); g.lineTo(-W/2 + 17, -H*0.62); g.lineTo(-W/2 + 22, -H*0.85); g.lineTo(-W/2 + 26, -H*0.55); g.closePath(); g.fill(); }
-      else { g.beginPath(); g.moveTo(-W/2 - 14, H*0.1); g.lineTo(-W/2 - 4, H*0.1); g.moveTo(-W/2 - 4, H*0.1); g.lineTo(-W/2 - 9, H*0.1 - 5); g.moveTo(-W/2 - 4, H*0.1); g.lineTo(-W/2 - 9, H*0.1 + 5); g.stroke(); }
-      g.globalAlpha = 1;
-    });
-  }
-
-  function drawGround(g, map, t) {
-    var vx0 = camX - VW/2, vy0 = camY - VH/2, vx1 = camX + VW/2, vy1 = camY + VH/2, gx, gy;
-    lights.length = 0;
-    g.fillStyle = groundPattern(g, map); g.fillRect(vx0 - 4, vy0 - 4, VW + 8, VH + 8);
-
-    // Tags, stamped at hashed places. Culled to the view, so this is a handful
-    // of drawImage calls a frame however far the night runs.
-    // 340px cells, two in five: about three words in view. The sprites are
-    // 2.8x the pixels they were as scribbles, so the count stays modest.
-    var GC = 340;
-    for (gx = Math.floor(vx0/GC) - 1; gx <= Math.floor(vx1/GC) + 1; gx++)
-      for (gy = Math.floor(vy0/GC) - 1; gy <= Math.floor(vy1/GC) + 1; gy++) {
-        // Unsigned, or a negative hash picks a word that does not exist and
-        // (before that) silently skipped the cell: half the tags never drew.
-        var gh = hash2(gx + 7, gy - 3) >>> 0;
-        if (gh % 5 > 1) continue;                       // roughly two cells in five
-        var sx = gx*GC + (gh % 211), sy = gy*GC + ((gh >>> 8) % 197);
-        if (sx < vx0 - 90 || sx > vx1 + 90 || sy < vy0 - 90 || sy > vy1 + 90) continue;
-        var gs = graffitiSprite(gh % GRAF_N);
-        g.save();
-        g.translate(sx, sy);
-        // Words read best near level. A quarter of them are turned hard, the
-        // way a tag on a kerb or a wall-foot would be.
-        g.rotate(((gh >>> 3) % 4) === 0 ? (((gh >>> 5) % 2) ? 1.5708 : -1.5708) + (((gh >>> 7) % 40) - 20)/100 : (((gh >>> 3) % 50) - 25)/100);
-        g.scale(0.48 + ((gh >>> 11) % 50)/100, (0.48 + ((gh >>> 11) % 50)/100)*(0.84 + ((gh >>> 19) % 30)/100));
-        g.globalAlpha = 0.5 + ((gh >>> 23) % 34)/100;
-        g.drawImage(gs.c, -gs.s/2, -gs.s/2, gs.s, gs.s);
-        g.restore();
-        // Some walls get worked over twice. Without this the tags sit on an
-        // obvious one-per-cell lattice.
-        if (gh % 9 === 0) {
-          var g2 = graffitiSprite((gh >>> 5) % GRAF_N);
-          g.save();
-          g.translate(sx + 40 + (gh % 61), sy - 30 + ((gh >>> 9) % 55));
-          g.rotate((((gh >>> 15) % 60) - 30)/100);
-          var s2 = 0.45 + ((gh >>> 21) % 45)/100; g.scale(s2, s2*0.9);
-          g.globalAlpha = 0.34 + ((gh >>> 13) % 26)/100;
-          g.drawImage(g2.c, -g2.s/2, -g2.s/2, g2.s, g2.s);
-          g.restore();
-        }
-      }
-    g.globalAlpha = 1;
-    if (map.ground === 'grate') {
-      // Water moving under the grating: a second layer, so the floor has depth.
-      g.strokeStyle = 'rgba(111,179,171,.16)'; g.lineWidth = 1.5; g.beginPath();
-      for (var wl = 0; wl < 14; wl++) { var wy = vy0 + ((wl*67 + t*18 + camY*0.15) % (VH + 60)) - 30; g.moveTo(vx0, wy);
-        for (var wx = vx0; wx <= vx1 + 24; wx += 24) g.lineTo(wx, wy + Math.sin(wx*0.03 + t*1.4 + wl)*4); }
-      g.stroke();
-    }
-    if (map.ground === 'flags') {
-      var FS = 64, fx0 = Math.floor(vx0/FS)*FS - FS, fy0 = Math.floor(vy0/FS)*FS - FS;
-      g.strokeStyle = map.line; g.lineWidth = 1; g.beginPath();
-      for (gy = fy0; gy < vy1 + FS; gy += FS) { g.moveTo(fx0, gy); g.lineTo(vx1 + FS, gy); var off = ((gy/FS)|0) % 2 ? FS/2 : 0; for (gx = fx0 + off; gx < vx1 + FS; gx += FS) { g.moveTo(gx, gy); g.lineTo(gx, gy + FS); } }
-      g.stroke();
-      for (gx = fx0; gx < vx1 + FS; gx += FS*2) for (gy = fy0; gy < vy1 + FS; gy += FS*2) {
-        var h = hash2(gx, gy), m = h % 19;
-        if (m === 5) { var cs = glowSprite(INK.gold, 46, false); g.drawImage(cs.c, gx + 20 - cs.s/2, gy + 20 - cs.s/2, cs.s, cs.s); lights.push({ x: gx + 20, y: gy + 18, col: INK.gold, r: 90 + 6*Math.sin(t*9 + h) });
-          for (var c = 0; c < 3; c++) { var cx = gx + 12 + c*8, cy = gy + 22 - (c%2)*5, fl = 0.7 + 0.3*Math.sin(t*9 + c*2 + h); g.fillStyle = 'rgba(233,216,197,.5)'; g.fillRect(cx - 1, cy, 2, 6);
-            g.fillStyle = INK.gold; g.globalAlpha = fl; g.beginPath(); g.ellipse(cx, cy - 3, 1.6, 3.2, 0, 0, 6.283); g.fill(); g.globalAlpha = 1; } }
-        else if (m === 9) { g.fillStyle = 'rgba(11,6,9,.55)'; g.strokeStyle = 'rgba(233,216,197,.07)'; g.lineWidth = 1; g.fillRect(gx + 10, gy + 40, 46, 13); g.strokeRect(gx + 10, gy + 40, 46, 13); g.fillRect(gx + 10, gy + 34, 46, 3); }
-        else if (m === 13) { g.fillStyle = [INK.violet, INK.gold, INK.peri, INK.pink][(h>>>6) % 4]; g.globalAlpha = 0.045; g.beginPath(); g.ellipse(gx + 60, gy + 60, 74, 40, (h>>>3)%6, 0, 6.283); g.fill(); g.globalAlpha = 1; }
-      }
-    } else if (map.ground === 'grate') {
-      var GR = 48, rx0 = Math.floor(vx0/GR)*GR - GR, ry0 = Math.floor(vy0/GR)*GR - GR;
-      g.strokeStyle = map.line; g.lineWidth = 1; g.beginPath();
-      for (gx = rx0; gx < vx1 + GR; gx += GR) { g.moveTo(gx, ry0); g.lineTo(gx, vy1 + GR); }
-      for (gy = ry0; gy < vy1 + GR; gy += GR) { g.moveTo(rx0, gy); g.lineTo(vx1 + GR, gy); }
-      g.stroke();
-      g.strokeStyle = 'rgba(111,179,171,.10)'; g.beginPath();
-      for (gx = Math.floor(vx0/(GR*4))*GR*4 - GR*4; gx < vx1 + GR*4; gx += GR*4) { g.moveTo(gx, ry0); g.lineTo(gx, vy1 + GR); }
-      for (gy = Math.floor(vy0/(GR*4))*GR*4 - GR*4; gy < vy1 + GR*4; gy += GR*4) { g.moveTo(rx0, gy); g.lineTo(vx1 + GR, gy); }
-      g.stroke();
-      for (gx = rx0; gx < vx1 + GR; gx += GR*2) for (gy = ry0; gy < vy1 + GR; gy += GR*2) {
-        var h2 = hash2(gx, gy), m2 = h2 % 23;
-        if (m2 === 4) { var vs = glowSprite(INK.teal, 54, false); g.drawImage(vs.c, gx + 24 - vs.s/2, gy + 24 - vs.s/2 + 2*Math.sin(t*2 + h2), vs.s, vs.s); lights.push({ x: gx + 24, y: gy + 24, col: INK.teal, r: 110 });
-          g.strokeStyle = 'rgba(111,179,171,.35)'; g.lineWidth = 1; g.beginPath(); for (var sl = 0; sl < 4; sl++) { g.moveTo(gx + 12, gy + 16 + sl*5); g.lineTo(gx + 36, gy + 16 + sl*5); } g.stroke(); }
-        else if (m2 === 8) { g.fillStyle = 'rgba(11,6,9,.6)'; g.fillRect(gx, gy + 20, GR*2, 5); g.fillStyle = 'rgba(233,216,197,.06)'; g.fillRect(gx, gy + 20, GR*2, 1); }
-        else if (m2 === 12) { g.fillStyle = INK.teal; g.globalAlpha = 0.06; g.beginPath(); g.ellipse(gx + 30 + (h2>>>9)%20, gy + 30, 22 + (h2>>>3)%12, 8 + (h2>>>5)%5, 0, 0, 6.283); g.fill(); g.globalAlpha = 1;
-          g.strokeStyle = 'rgba(111,179,171,.18)'; g.lineWidth = 1; var rk = (t*0.6 + (h2 % 7)/7) % 1; g.globalAlpha = (1 - rk)*0.5; g.beginPath(); g.ellipse(gx + 30 + (h2>>>9)%20, gy + 30, 4 + rk*18, 1.5 + rk*7, 0, 0, 6.283); g.stroke(); g.globalAlpha = 1; }
-      }
-    } else {
-      var GS = 96, x0 = Math.floor(vx0/GS)*GS - GS, y0 = Math.floor(vy0/GS)*GS - GS;
-      g.strokeStyle = map.line; g.lineWidth = 1; g.beginPath();
-      for (gx = x0; gx < vx1 + GS; gx += GS) { g.moveTo(gx, y0); g.lineTo(gx, vy1 + GS); }
-      for (gy = y0; gy < vy1 + GS; gy += GS) { g.moveTo(x0, gy); g.lineTo(vx1 + GS, gy); }
-      g.stroke();
-      for (gx = x0; gx < vx1 + GS; gx += GS) for (gy = y0; gy < vy1 + GS; gy += GS) {
-        var hs = ((gx*73856093) ^ (gy*19349663)) >>> 0;
-        if ((hs % 11) === 0) { g.strokeStyle = INK[map.seams[(hs>>>4) % 4]]; g.globalAlpha = 0.5 + 0.1*Math.sin(t*3 + hs); lights.push({ x: gx + GS/2, y: gy + GS/2, col: INK[map.seams[(hs>>>4) % 4]], r: 70 });
-          g.beginPath(); if (hs & 1) { g.moveTo(gx+8, gy+GS/2); g.lineTo(gx+GS-8, gy+GS/2); } else { g.moveTo(gx+GS/2, gy+8); g.lineTo(gx+GS/2, gy+GS-8); } g.stroke(); g.globalAlpha = 1; }
-        var hh = hash2(gx, gy), m7 = hh % 19;
-        if (m7 === 3) { g.fillStyle = INK[map.seams[(hh>>>6) % 4]]; g.globalAlpha = 0.05; g.beginPath(); g.ellipse(gx + GS*0.5 + ((hh>>>9)%30) - 15, gy + GS*0.5 + ((hh>>>13)%30) - 15, 22 + (hh>>>3)%14, 9 + (hh>>>5)%6, 0, 0, 6.283); g.fill(); g.globalAlpha = 1; }
-        else if (m7 === 7) { var ls = glowSprite(INK.bone, 34, true); g.drawImage(ls.c, gx + GS*0.25 - ls.s/2, gy + GS*0.25 - ls.s/2, ls.s, ls.s); lights.push({ x: gx + GS*0.25, y: gy + GS*0.25, col: INK.bone, r: 150 }); }
-        else if (m7 === 11) { g.strokeStyle = 'rgba(233,216,197,.06)'; g.lineWidth = 1; g.beginPath(); g.arc(gx + GS*0.7, gy + GS*0.65, 11, 0, 6.283); g.stroke(); g.beginPath(); g.arc(gx + GS*0.7, gy + GS*0.65, 7, 0, 6.283); g.stroke(); }
-      }
-    }
-  }
   function drawWeather(g, map, t) {
     var i;
     if (map.weather === 'rain') { g.strokeStyle = 'rgba(233,216,197,.10)'; g.lineWidth = 1; g.beginPath();
@@ -2311,7 +2472,7 @@
     var g = ctx, map = run ? run.map : MAPS[selMap] || MAPS.street, t = run ? run.t : performance.now()/1000;
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     g.fillStyle = map.base; g.fillRect(0, 0, cssW, cssH);
-    if (!run) { camX = Math.sin(t*0.05)*140; camY = t*14; }
+    if (!run) { var mw = worldFor(selMap); camX = mw.w/2 + Math.sin(t*0.05)*140; camY = mw.h/2 + Math.sin(t*0.037)*160; }
     // 0.86: a little more street in view. Spawns key off VW/VH so they stay
     // off-screen at any zoom.
     zoom = run ? 0.86*(1 - 0.1*Math.sin(Math.PI*run.zoomK)) : 1; VW = cssW/zoom; VH = cssH/zoom;
