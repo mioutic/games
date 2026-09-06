@@ -305,6 +305,15 @@
   .beast .c.sel { border-color: var(--accent); box-shadow: var(--bloom); }
   .beast .c.lord { border-color: var(--line-2); }
   .spark { width: 100%; height: 44px; display: block; margin: 6px 0 2px; }
+  .mapbtn { position: absolute; right: calc(var(--safe-r) + 10px); top: calc(var(--safe-t) + 158px); width: 38px; height: 38px; pointer-events: auto; appearance: none;
+            border: 1px solid var(--line-2); border-radius: var(--radius); background: rgba(11,6,9,.7); color: var(--t-1); display: grid; place-items: center; z-index: 5; }
+  .mapbtn:active { background: rgba(233,216,197,.16); color: var(--accent); }
+  #mapCv { width: 100%; display: block; border: 1px solid var(--line-2); background: #0b0609; }
+  .mapfoot { display: flex; justify-content: space-between; gap: 10px; margin-top: 8px; font: 500 10px/1.5 var(--font-mono); color: var(--t-2); }
+  .talkname { font: 400 20px/1.1 var(--font-display); color: var(--accent); letter-spacing: .04em; }
+  .talkline { font-size: 13.5px; line-height: 1.6; color: var(--t-1); margin: 8px 0 10px; }
+  .talkq { font: 500 11px/1.5 var(--font-mono); color: var(--warning); padding: 8px 10px; border: 1px solid var(--line-2); background: var(--s-1); }
+  .questline { color: var(--warning); }
   .goldline { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
   .goldline b { font: 500 16px/1 var(--font-mono); color: var(--warning); }
   .toast { position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(var(--safe-b) + 214px); z-index: 6; padding: 8px 13px;
@@ -337,6 +346,9 @@
   <div class="boss" id="bossBar"><div class="nm" id="bossName">—</div><div class="bar"><i id="bossFill"></i></div></div>
   <div class="banner" id="banner"><div class="t" id="bannerT">—</div><div class="s" id="bannerS"></div><div class="rule"></div></div>
   <div class="tlbar" id="tlbar"></div>
+  <button class="mapbtn" id="bMap" aria-label="Map">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="square"><path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2z"/><path d="M9 4v14M15 6v14"/></svg>
+  </button>
   <button class="pause" id="bPause" aria-label="Pause">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="square"><path d="M8 4v16M16 4v16"/></svg>
   </button>
@@ -484,6 +496,27 @@
   </div>
 </div>
 
+<!-- talk -->
+<div class="sheet" id="talk">
+  <div class="panel card">
+    <div class="talkname" id="talkName">—</div>
+    <div class="talkline" id="talkLine">—</div>
+    <div class="talkq" id="talkQuest">—</div>
+    <button class="go wide" id="bAccept" style="margin-top:12px">Take it on</button>
+    <button class="go ghost wide" id="bLater">Later</button>
+  </div>
+</div>
+
+<!-- map -->
+<div class="sheet" id="mapSheet">
+  <div class="panel card">
+    <div class="cardhead"><span class="ornament">❦</span><h3 id="mapTitle">The district</h3><span class="micro" id="mapPct" style="margin-left:auto"></span></div>
+    <canvas id="mapCv" width="720" height="720"></canvas>
+    <div class="mapfoot"><span id="mapQuest"></span></div>
+    <button class="go wide" id="bMapClose" style="margin-top:10px">Close</button>
+  </div>
+</div>
+
 <!-- results -->
 <div class="sheet" id="over">
   <div class="panel card">
@@ -550,7 +583,7 @@
   function freshMeta() {
     return { v: 2, gold: 0, bless: {}, unlocked: { novice: 1 }, maps: { street: 1 },
              weapons: { fang: 1, needle: 1, halo: 1, bolt: 1, pool: 1, bats: 1 }, trees: {}, quests: {}, seen: {}, evos: {},
-             relics: {}, wear: {}, vials: 0, flasks: 0, agony: {}, spent: 0, met: {}, kindKills: {},
+             relics: {}, wear: {}, vials: 0, flasks: 0, agony: {}, spent: 0, met: {}, kindKills: {}, explored: {}, seenLm: {}, metNpc: {},
              stats: { runs: 0, kills: 0, bestAny: 0, best: {}, dawns: {}, evolved: 0, bosses: 0, minis: 0, levels: 0, chests: 0, goldAll: 0,
                       elites: 0, bestCombo: 0, bestLv: 0, charRuns: {}, charKills: {}, charBest: {}, dailies: 0, lordKills: {}, agonyDawns: {}, bestAgony: {} },
              dailyDone: '', savedAt: 0 };
@@ -678,6 +711,10 @@
     }
     function unlock() { var x = ensure(); if (x && x.state === 'suspended') x.resume(); if (x && ambOn && !ambNodes) ambient(true); if (x && musOn && !musTimer) music(true); }
     ['touchstart','mousedown','keydown'].forEach(function (ev) { window.addEventListener(ev, unlock, { passive: true }); });
+    // iOS suspends the context when the audio route changes (headphones, a
+    // speaker). Nothing tells the page, so ask it to come back on a clock.
+    setInterval(function () { if (c && want && c.state !== 'running') { try { c.resume().catch(function () {}); } catch (e) {} } }, 1200);
+    document.addEventListener('visibilitychange', function () { if (!document.hidden && c && c.state !== 'running') { try { c.resume().catch(function () {}); } catch (e) {} } });
     function tone(f, dur, type, vol, slide, attack, delay) {
       if (!c || !want) return;
       var t = c.currentTime + (delay || 0), o = c.createOscillator(), g = c.createGain();
@@ -1128,7 +1165,9 @@
     Q('relics6',  'm', 'Dressed',           'Wear six relics at once in a night.',        function (m, r) { return r && r.worn >= 6; }, { gold:200 }),
     Q('wardrobe', 'm', 'Collector',         'Retrieve ten relics, all time.',             function (m) { var n = 0; for (var k in m.relics) n++; return n >= 10; }, { gold:300 }, function (m) { var n = 0; for (var k in m.relics) n++; return n/10; }),
     Q('agonyDawn','m', 'Agony',             'Survive any ground in Agony until dawn.',    function (m) { for (var k in m.stats.agonyDawns) return true; return false; }, { gold:1000 }),
-    Q('lords2',   'm', 'Two in a Night',    'Put down two lords in one night.',           function (m, r) { return r && r.lords >= 2; }, { gold:400 })
+    Q('lords2',   'm', 'Two in a Night',    'Put down two lords in one night.',           function (m, r) { return r && r.lords >= 2; }, { gold:400 }),
+    Q('favours3', 'm', 'Three Favours',     'Finish three errands for the people of the night.', function (m) { return (m.stats.wq || 0) >= 3; }, { gold:200 }, function (m) { return (m.stats.wq || 0)/3; }),
+    Q('walked',   'm', 'Every Street',      'Walk nine tenths of a district.',            function (m) { for (var k in m.explored) { var e = m.explored[k], n = 0; for (var i = 0; i < e.length; i++) if (e[i] === '1') n++; if (n/e.length >= 0.9) return true; } return false; }, { gold:300 })
   ];
   CHARS.forEach(function (c) {
     QUESTS.push(Q(c.id + '1', c.id, c.n + ', fed', 'Feed on 200 as ' + c.n + '.', function (m) { return (m.stats.charKills[c.id] || 0) >= 200; }, { gold:100 }, function (m) { return (m.stats.charKills[c.id] || 0)/200; }));
@@ -1162,7 +1201,7 @@
             combo: 0, comboT: 0, best: 0, rerolls: Math.round(metaStat('reroll') + (te.reroll || 0)), banishes: Math.round(metaStat('banish')), banned: {},
             met: {}, maxW: 1, dawnSeen: false, evolved: 0, minis: 0, lords: 0, elites: 0, chests: 0, firstHit: -1, dmgTaken: 0, maxed: 0,
             revived: false, sched: [], finalDown: false, lordKills: {}, banner: 0, nextEv: null, agony: !!meta.agony[mapId] && !!meta.stats.dawns[mapId],
-            found: [], lost: [], flasks: meta.flasks || 0, worn: 0, kpm: [], killedBy: '', zoomK: 0, boltT: rr(18, 40), streakT: 0, dashCd: 0, eclipseT: 0, lastChest: -99 };
+            found: [], lost: [], flasks: meta.flasks || 0, worn: 0, kpm: [], killedBy: '', zoomK: 0, boltT: rr(18, 40), streakT: 0, dashCd: 0, eclipseT: 0, lastChest: -99, visited: {}, talked: {}, wq: null };
     function b(k) { return metaStat(k) + (ch.bonus[k] || 0) + (te[k] || 0); }
     P = { x: 0, y: 0, r: 11, fx: 1, fy: 0, ax: 1, ay: 0, manualAim: 0, vx: 0, vy: 0, hp: 100, maxHp: 100, hurtT: 0, inv: 0, bob: 0,
           base: { hp: 100 + b('hp'), cd: b('cd'), armor: b('armor'), area: b('area'), regen: b('regen'), amt: 0, luck: b('luck'), speed: b('speed'),
@@ -1176,7 +1215,7 @@
     foes.length = 0; shots.length = 0; motes.length = 0; parts.length = 0; nums.length = 0; zones.length = 0; hazards.length = 0; decals.length = 0;
     world = worldFor(mapId); P.x = world.start.x; P.y = world.start.y; navBuild(world); navFlood(P.x, P.y);
     camX = P.x; camY = P.y; shake = 0; hitStop = 0; flash = 0; pendingLevels = 0;
-    addWeapon(ch.weapon); bossBar(); bannerEl.classList.remove('on'); lastHudT = -1; paintTimeline();
+    addWeapon(ch.weapon); bossBar(); bannerEl.classList.remove('on'); lastHudT = -1; paintTimeline(); explore();
     meta.stats.runs++; meta.stats.charRuns[ch.id] = (meta.stats.charRuns[ch.id] || 0) + 1; saveMeta();
     paintLoadout(); paintHud(true);
   }
@@ -1432,7 +1471,7 @@
     if (P.kit === 'feed' && P.hp < P.maxHp*0.5) heal(2);
     if (P.kit === 'wilt' && !f.boss) { var emb = 0; for (var hi = 0; hi < hazards.length; hi++) if (hazards[hi].kind === 'ember') emb++;
       if (emb < 26) hazards.push({ kind:'ember', x:f.x, y:f.y, r: 30 + f.r, t:0, life:2.4, tick:0.2, dmg: 5*mightMul() }); } meta.stats.kills++; meta.stats.charKills[run.char.id] = (meta.stats.charKills[run.char.id] || 0) + 1;
-    meta.kindKills[f.k] = (meta.kindKills[f.k] || 0) + 1; var kb30 = Math.floor(run.t/30); run.kpm[kb30] = (run.kpm[kb30] || 0) + 1;
+    meta.kindKills[f.k] = (meta.kindKills[f.k] || 0) + 1; questTick('kill', f.k); if (f.def.flee) questTick('courier'); var kb30 = Math.floor(run.t/30); run.kpm[kb30] = (run.kpm[kb30] || 0) + 1;
     run.combo++; run.comboT = 2.2;
     var STREAKS = { 10:'Feast', 25:'Gorge', 50:'Massacre', 100:'Exsanguination', 200:'Abattoir' };
     if (STREAKS[run.combo]) { addNum(P.x, P.y - 34, STREAKS[run.combo], false, true); Snd.streak(Object.keys(STREAKS).indexOf(String(run.combo))); flash = Math.max(flash, 0.2); flashCol = INK.gold; }
@@ -1581,7 +1620,7 @@
     run.banner = Math.max(0, run.banner - dt); if (run.banner <= 0) bannerEl.classList.remove('on');
     flash = Math.max(0, flash - dt*1.6);
 
-    updateSpawns(dt);
+    updateSpawns(dt); updateWorld(dt);
     rebuildGrid();
     for (i = 0; i < P.weapons.length; i++) fireWeapon(P.weapons[i], dt);
 
@@ -1652,6 +1691,7 @@
         if (s.t > s.life) shots.splice(i, 1);
       } else if (s.kind === 'foe') {
         s.x += s.vx*dt; s.y += s.vy*dt;
+        if (blockedAt(s.x, s.y, 1, true)) { burst(s.x, s.y, 3, INK.rose, 80); shots.splice(i, 1); continue; }
         var pdx = P.x-s.x, pdy = P.y-s.y;
         if (pdx*pdx+pdy*pdy < (P.r+s.r)*(P.r+s.r)) { hurtPlayer(s.dmg, null); shots.splice(i, 1); continue; }
         if (s.t > s.life) shots.splice(i, 1);
@@ -1660,7 +1700,7 @@
         if (s.t >= s.life) { hazards.push({ kind:'acid', x:s.tx, y:s.ty, r:34, t:0, life:3.2, dmg:s.dmg, ink:INK.green, tick:0 }); shots.splice(i, 1); }
       } else if (s.kind === 'boom') {
         s.spin += dt*14;
-        if (s.out) { s.dist += s.spd*dt; s.x = s.ox + s.dx*s.dist; s.y = s.oy + s.dy*s.dist; if (s.dist >= s.range) { s.out = 0; s.hit = {}; } }
+        if (s.out) { s.dist += s.spd*dt; s.x = s.ox + s.dx*s.dist; s.y = s.oy + s.dy*s.dist; if (s.dist >= s.range || blockedAt(s.x, s.y, 4, true)) { if (s.dist < s.range) burst(s.x, s.y, 5, INK[s.ink] || INK.bone, 100); s.out = 0; s.hit = {}; } }
         else { var bdx = P.x-s.x, bdy = P.y-s.y, bl = Math.hypot(bdx, bdy) || 1, step = s.spd*1.25*dt; if (bl <= step + 8 || s.t > s.life) { shots.splice(i, 1); continue; } s.x += bdx/bl*step; s.y += bdy/bl*step; }
         (function (s) { nearFoes(s.x, s.y, s.r+24, function (f) { if (s.hit[f.id]) return; var ex=f.x-s.x, ey=f.y-s.y; if (ex*ex+ey*ey < (s.r+f.r)*(s.r+f.r)) { s.hit[f.id] = 1; hurtFoe(f, s.dmg, s.w, s.kb); } }); })(s);
       } else if (s.kind === 'mine') {
@@ -1679,6 +1719,7 @@
       } else {  // bolt: needle, ichor, bats, mirror, shard pellets, wisp shots
         if (s.home) { var hn = nearest(s.x, s.y, 240, true); if (hn) { var ha = Math.atan2(hn.y-s.y, hn.x-s.x), ca = Math.atan2(s.vy, s.vx), dd = ((ha-ca+Math.PI*3)%(Math.PI*2))-Math.PI; ca += clamp(dd, -4.5*dt, 4.5*dt); var sv = Math.hypot(s.vx, s.vy); s.vx = Math.cos(ca)*sv; s.vy = Math.sin(ca)*sv; } }
         s.x += s.vx*dt; s.y += s.vy*dt;
+        if (blockedAt(s.x, s.y, 1, true)) { burst(s.x, s.y, 3, INK[s.ink] || INK.bone, 90); shots.splice(i, 1); continue; }
         var died = false, self = s;
         nearFoes(s.x, s.y, s.r+24, function (f) {
           if (self.hit[f.id] || f.phased) return;
@@ -1705,7 +1746,7 @@
       var m = motes[i]; m.t += dt;
       var mdx = P.x-m.x, mdy = P.y-m.y, md = Math.hypot(mdx, mdy);
       var pull = m.kind === 'chest' || m.kind === 'vial' || m.kind === 'relic' ? 56 : mr;
-      if (md < pull || m.pulled) { m.pulled = true; var step = Math.min(md, (380 + m.t*900)*dt); if (md > 0.01) { m.x += mdx/md*step; m.y += mdy/md*step; } }
+      if (md < pull || m.pulled) { if (!m.pulled) { m.pulled = true; m.pt = 0; } m.pt += dt; var step = Math.min(md, (110 + m.pt*m.pt*2600)*dt); if (md > 0.01) { m.x += mdx/md*step; m.y += mdy/md*step; } }
       if (md < P.r + 8) {
         motes.splice(i, 1);
         if (m.kind === 'xp') { gainXp(m.v); Snd.pickup(m.v); }
@@ -1934,6 +1975,78 @@
      candle came and went. A list cannot do that.
      ================================================================ */
   var lights = [];
+  /* ---------------- 2.5D: the world with height ----------------
+     Buildings are extruded away from the screen centre so they lean the way a
+     camera above the street would see them. Everything alive stands upright. */
+  var LEAN = 0.0007, RISE = 0.42;
+  function figSprite(f, fr) {
+    var d = f.def, key = 'g' + f.k + (f.elite ? 'E' : '') + (f.boss ? 'B' : '') + (fr ? '1' : '0'), ph = fr ? 1 : -1;
+    return sprite(key, f.r*2.1, function (g, R0) {
+      var r = f.r, H = r*2.4, col = d.col;
+      g.fillStyle = 'rgba(0,0,0,.42)'; g.beginPath(); g.ellipse(0, r*0.85, r*1.05, r*0.36, 0, 0, 6.283); g.fill();
+      // Legs, then the body, then the head. The frame swaps the legs.
+      g.strokeStyle = 'rgba(11,6,9,.85)'; g.lineWidth = Math.max(2, r*0.22); g.beginPath();
+      g.moveTo(-r*0.35, r*0.1); g.lineTo(-r*0.45 - ph*r*0.15, r*0.85); g.moveTo(r*0.35, r*0.1); g.lineTo(r*0.45 + ph*r*0.15, r*0.85); g.stroke();
+      g.save(); g.translate(0, -r*0.35); g.scale(1, 1.25); g.fillStyle = col; g.lineWidth = f.boss ? 2 : 1.5; g.strokeStyle = f.elite || f.boss ? INK.gold : 'rgba(233,216,197,.35)';
+      shapePath(g, d.shape, r); g.fill();
+      var sh = g.createRadialGradient(-r*0.35, -r*0.45, r*0.1, 0, 0, r*1.2); sh.addColorStop(0, 'rgba(255,240,230,.25)'); sh.addColorStop(0.55, 'rgba(255,240,230,0)'); sh.addColorStop(1, 'rgba(0,0,0,.5)');
+      g.fillStyle = sh; shapePath(g, d.shape, r); g.fill(); g.stroke();
+      g.strokeStyle = 'rgba(11,6,9,.5)'; g.lineWidth = 1; g.beginPath();
+      if (d.shape === 'blob') { g.moveTo(-r*0.5, r*0.2); g.lineTo(-r*0.9, r*(0.6 + 0.15*ph)); g.moveTo(r*0.5, r*0.2); g.lineTo(r*0.9, r*(0.6 - 0.15*ph)); }
+      else if (d.shape === 'wing') { g.moveTo(0, -r*0.4); g.lineTo(r*0.9, -r*(0.8 + 0.3*ph)); g.moveTo(0, -r*0.4); g.lineTo(-r*0.9, -r*(0.8 + 0.3*ph)); }
+      else if (d.shape === 'box') { g.moveTo(-r*0.6, -r*0.5); g.lineTo(r*0.6, -r*0.5); g.moveTo(-r*0.6, r*0.4); g.lineTo(r*0.6, r*0.4); }
+      else if (d.shape === 'spire') { g.moveTo(-r*0.4, r*0.2); g.lineTo(r*0.4, r*0.2); g.moveTo(-r*0.6, r*0.6); g.lineTo(r*0.6, r*0.6); }
+      else { g.moveTo(-r*0.3, 0); g.lineTo(r*0.3, 0); }
+      g.stroke(); g.restore();
+      if (f.boss) { g.strokeStyle = 'rgba(217,164,65,.35)'; g.lineWidth = 1; g.save(); g.translate(0, -r*0.35); g.scale(1, 1.25); shapePath(g, d.shape, r*1.16); g.restore(); g.stroke(); }
+      // Head: a darker dome with the eyes, so the face reads from above.
+      var hy = -r*1.35, hr = r*0.5;
+      g.fillStyle = col; g.beginPath(); g.arc(0, hy, hr, 0, 6.283); g.fill(); g.fillStyle = 'rgba(11,6,9,.35)'; g.beginPath(); g.arc(0, hy, hr, Math.PI, 6.283); g.fill();
+      g.fillStyle = d.eye; g.shadowColor = d.eye; g.shadowBlur = 7; var er = Math.max(1.3, hr*0.28);
+      g.beginPath(); g.arc(-hr*0.42, hy + hr*0.1, er, 0, 6.283); g.arc(hr*0.42, hy + hr*0.1, er, 0, 6.283); g.fill();
+    });
+  }
+  function figEyes(f) {
+    var d = f.def, key = 'ge' + f.k + (f.boss ? 'B' : '') + (f.elite ? 'E' : '');
+    return sprite(key, f.r*2.1, function (g, R0) { var r = f.r, hy = -r*1.35, hr = r*0.5, er = Math.max(1.3, hr*0.28); g.fillStyle = d.eye; g.shadowColor = d.eye; g.shadowBlur = 9;
+      g.beginPath(); g.arc(-hr*0.42, hy + hr*0.1, er, 0, 6.283); g.arc(hr*0.42, hy + hr*0.1, er, 0, 6.283); g.fill(); });
+  }
+  function lean(x, y, z) { var k = z*LEAN; return { x: x + (x - camX)*k, y: y - z*RISE + (y - camY)*k }; }
+  function blockZ(b) { return b.kind === 'wall' ? 60 : b.kind === 'rock' ? 34 : 90 + hash2(b.x, b.y) % 80; }
+  function drawBlock(g, b, t) {
+    var x0 = b.x, y0 = b.y, x1 = b.x + b.w, y1 = b.y + b.h, z = blockZ(b);
+    var c00 = lean(x0, y0, z), c10 = lean(x1, y0, z), c11 = lean(x1, y1, z), c01 = lean(x0, y1, z);
+    var wallA = b.kind === 'rock' ? 'rgba(30,38,38,.97)' : b.kind === 'wall' ? 'rgba(44,36,46,.97)' : 'rgba(34,22,30,.97)';
+    function face(ax, ay, bx, by, ca, cb, shade) { g.fillStyle = wallA; g.beginPath(); g.moveTo(ax, ay); g.lineTo(bx, by); g.lineTo(cb.x, cb.y); g.lineTo(ca.x, ca.y); g.closePath(); g.fill();
+      g.fillStyle = 'rgba(0,0,0,' + shade + ')'; g.fill(); g.strokeStyle = 'rgba(233,216,197,.1)'; g.lineWidth = 1; g.stroke(); }
+    if (camX < x0) face(x0, y0, x0, y1, c00, c01, 0.22); if (camX > x1) face(x1, y0, x1, y1, c10, c11, 0.22);
+    face(x0, y1, x1, y1, c01, c11, 0.3);
+    if (b.kind === 'building' && z >= 90) { var rows = Math.max(1, Math.floor(z/38)), hsh = hash2(b.x, b.y);
+      for (var rw = 0; rw < rows; rw++) { var k = (rw + 0.5)/rows, lit = ((hsh >> rw) & 1) === 1, wa = lean(x0, y1, z*k), wb = lean(x1, y1, z*k);
+        for (var wc = 0.15; wc < 0.9; wc += 0.22) { var wx = wa.x + (wb.x - wa.x)*wc, wy = wa.y + (wb.y - wa.y)*wc; g.fillStyle = lit ? INK.gold : 'rgba(11,6,9,.6)'; g.globalAlpha = lit ? 0.7 : 1; g.fillRect(wx - 3, wy - 4, 6, 7); g.globalAlpha = 1; if (lit && wc < 0.4 && rw === 0) lights.push({ x: wx, y: wy, col: INK.gold, r: 44 }); } } }
+    var roof = null; try { roof = texPattern(g, b.kind === 'rock' ? 'rock' : 'roof'); } catch (e) {}
+    g.fillStyle = roof || (b.kind === 'rock' ? '#1c2626' : b.kind === 'wall' ? '#332a38' : '#2c1c26');
+    g.beginPath(); g.moveTo(c00.x, c00.y); g.lineTo(c10.x, c10.y); g.lineTo(c11.x, c11.y); g.lineTo(c01.x, c01.y); g.closePath(); g.fill();
+    g.fillStyle = 'rgba(0,0,0,.18)'; g.fill(); g.strokeStyle = 'rgba(233,216,197,.16)'; g.lineWidth = 1; g.stroke();
+    if (b.kind === 'building' && z > 140) { var tp = lean(x0 + b.w/2, y0 + b.h/2, z); g.fillStyle = INK.rose; g.globalAlpha = 0.5 + 0.5*Math.sin(t*2 + b.x); g.beginPath(); g.arc(tp.x, tp.y, 2, 0, 6.283); g.fill(); g.globalAlpha = 1; }
+  }
+  function visibleBlocks() { var w = world || worldFor(run ? run.mapId : selMap), out = [], vx0 = camX - VW/2 - 240, vy0 = camY - VH/2 - 240, vx1 = camX + VW/2 + 240, vy1 = camY + VH/2 + 240;
+    for (var i = 0; i < w.blocks.length; i++) { var b = w.blocks[i]; if (b.x > vx1 || b.x + b.w < vx0 || b.y > vy1 || b.y + b.h < vy0) continue; out.push(b); } return out; }
+  function drawBlocks(g, t) { var vb = visibleBlocks(); vb.sort(function (a, b) { return (Math.abs(a.x + a.w/2 - camX) + Math.abs(a.y + a.h/2 - camY)) - (Math.abs(b.x + b.w/2 - camX) + Math.abs(b.y + b.h/2 - camY)); }); for (var i = vb.length - 1; i >= 0; i--) drawBlock(g, vb[i], t); }
+  function drawLandmarkMark(g, lm, t) {
+    if (lm.kind === 'lamp') return;
+    var pt = lean(lm.x, lm.y, 30); g.strokeStyle = 'rgba(233,216,197,.3)'; g.lineWidth = 1; g.beginPath(); g.arc(lm.x, lm.y, 10 + 2*Math.sin(t*3), 0, 6.283); g.stroke();
+    if (!(run && run.visited[lm.id])) { g.fillStyle = INK.bone; g.globalAlpha = 0.6; g.beginPath(); g.moveTo(pt.x, pt.y - 6); g.lineTo(pt.x + 4, pt.y); g.lineTo(pt.x, pt.y + 6); g.lineTo(pt.x - 4, pt.y); g.closePath(); g.fill(); g.globalAlpha = 1; }
+  }
+  function drawNpc(g, np, t) {
+    var talked = run.talked[np.id], q = run.wq && run.wq.npc === np;
+    g.fillStyle = 'rgba(0,0,0,.4)'; g.beginPath(); g.ellipse(np.x, np.y + 9, 11, 4, 0, 0, 6.283); g.fill();
+    g.fillStyle = '#4a3a3f'; g.beginPath(); g.moveTo(np.x - 9, np.y + 8); g.lineTo(np.x - 5, np.y - 14); g.lineTo(np.x + 5, np.y - 14); g.lineTo(np.x + 9, np.y + 8); g.closePath(); g.fill();
+    g.fillStyle = INK.bone; g.beginPath(); g.arc(np.x, np.y - 19, 5.5, 0, 6.283); g.fill(); g.fillStyle = '#4a3a3f'; g.beginPath(); g.arc(np.x, np.y - 19, 5.5, Math.PI, 6.283); g.fill();
+    lights.push({ x: np.x, y: np.y, col: INK.bone, r: 80 });
+    var mark = q ? (run.wq.done ? '§' : '·') : (talked ? '' : '?'); if (mark) { g.font = '400 16px Georgia, serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = INK.gold; g.shadowColor = INK.gold; g.shadowBlur = 8; g.fillText(mark, np.x, np.y - 38 + Math.sin(t*3)*2); g.shadowBlur = 0; }
+  }
+
   var TEX_BASE = { asphalt:'#221419', pavement:'#2a1c21', cobble:'#241619', grass:'#1b2320', tile:'#2a2027', carpet:'#3a1018',
                    flag:'#1f1722', moss:'#1a2420', metal:'#141c1c', concrete:'#1d1a1c', water:'#0f1a1f', gravel:'#26201f', rubble:'#221a1e', roof:'#160c11', rock:'#120a0e' };
   var texCache = {};
@@ -2145,6 +2258,70 @@
     w.zone('rubble', 2300, 1900, 200, 120); w.zone('moss', 1420, 380, 160, 60); w.zone('moss', 480, 1600, 60, 180);
     return w;
   }
+  /* ---- places and people ----
+     Landmarks name what you find; the people have errands. Positions are on
+     the designed maps and pushed out of any solid on first use. */
+  function L(id, x, y, kind, n) { return { id:id, x:x, y:y, kind:kind, n:n }; }
+  function N(id, x, y, n, line, done, quest) { return { id:id, x:x, y:y, n:n, line:line, done:done, quest:quest }; }
+  var PLACES = {
+    street: { landmarks:[ L('fountain',1625,1300,'fountain','Plaza Fountain'), L('statue',970,1300,'post','Park Statue'), L('kiosk',1440,1750,'post','The Kiosk'),
+                          L('l1',1470,1000,'lamp','Lamp of the North'), L('l2',1780,1000,'lamp','Lamp of the East'), L('l3',1470,1600,'lamp','Lamp of the West'), L('l4',1780,1600,'lamp','Lamp of the South'),
+                          L('ring_n',1300,160,'gate','North Ring'), L('ring_s',1300,2440,'gate','South Ring') ],
+              npcs:[ N('lamplighter',1560,1210,'The Lamplighter','Four lamps on the plaza went out tonight. Walk to each and they will remember how to burn.','You lit them all. The plaza is a little less theirs.', { kind:'visit', ids:['l1','l2','l3','l4'], reward:{ gold:150 }, d:'Visit the four plaza lamps' }),
+                     N('fence',1500,1760,'The Fence','A courier runs this district with someone else’s bag. Bring me the bag and keep what is in it.','You caught one. Nobody ever catches one.', { kind:'courier', reward:{ relic:1, gold:60 }, d:'Catch a courier' }),
+                     N('gardener',1040,1200,'The Gardener','The ghouls dig up what I plant. Forty of them, and I will owe you.','Forty. They will be back by Sunday, but tonight the park is quiet.', { kind:'kill', kinds:['ghoul','thrall'], n:40, reward:{ flask:1, gold:100 }, d:'Put down 40 thralls or ghouls' }) ] },
+    nave:   { landmarks:[ L('altar',1000,470,'shrine','The Altar'), L('crossing',1000,1900,'fountain','The Crossing'), L('wt',380,1870,'lamp','West Transept'), L('et',1620,1870,'lamp','East Transept'),
+                          L('stair',400,1830,'gate','Crypt Stair'), L('door',1000,2580,'gate','The Great Door') ],
+              npcs:[ N('verger',1100,620,'The Verger','The choir sings in threes and the sound carries. Silence thirty of them and I will open the vestry.','Thirty voices fewer. I can hear myself think.', { kind:'kill', kinds:['choir','wretch'], n:30, reward:{ gold:120, flask:1 }, d:'Put down 30 choir or wretches' }),
+                     N('anchorite',520,2360,'The Anchorite','I have not left this chapel in forty years. Stand in the transepts for me, both of them, and tell me what the windows look like.','Red, you say. They were blue.', { kind:'visit', ids:['wt','et'], reward:{ gold:140 }, d:'Visit both transepts' }),
+                     N('novice',1100,2560,'The Novice','Stay until the bell. Past midnight the lords walk, and I want to see one from the door.','You heard it too. It rings itself.', { kind:'survive', t:420, reward:{ relic:1 }, d:'Survive to 13:00' }) ] },
+    undercity: { landmarks:[ L('cistern',1400,760,'fountain','The Cistern'), L('valve',250,2060,'post','Master Valve'), L('nw',600,500,'lamp','North-west Junction'), L('ne',2200,500,'lamp','North-east Junction'),
+                             L('sw',600,1700,'lamp','South-west Junction'), L('se',2200,1700,'lamp','South-east Junction') ],
+              npcs:[ N('engineer',330,1990,'The Engineer','The valve is jammed and the crawlers are in the pipes. Fifty of them, and I can turn it.','The pressure is dropping. You will hear the pipes sigh in a minute.', { kind:'kill', kinds:['crawler','spitter','husk'], n:50, reward:{ gold:150, flask:1 }, d:'Put down 50 crawlers, spitters or husks' }),
+                     N('ferryman',640,1760,'The Ferryman','I will take you across for a price. Two hundred in gold, gathered tonight, and the boat is yours.','Paid in full. Nobody pays in full.', { kind:'gold', n:200, reward:{ relic:1 }, d:'Gather 200 gold tonight' }),
+                     N('ratcatcher',2160,560,'The Rat-catcher','Something with a bag ran into the tunnels. Bring me what it was carrying.','That bag has been through four hands tonight. Yours are the cleanest.', { kind:'courier', reward:{ gold:120, relic:1 }, d:'Catch a courier' }) ] }
+  };
+  function placesOf() { return PLACES[run ? run.mapId : selMap] || PLACES.street; }
+  function settlePlaces() { var pl = placesOf(); if (pl.settled) return; pl.npcs.forEach(function (n) { pushOut(n, 14); }); pl.settled = true; }
+  function landmarkById(id) { var lms = placesOf().landmarks; for (var i = 0; i < lms.length; i++) if (lms[i].id === id) return lms[i]; return null; }
+  // What the map knows. Cells are 128px; the string is the save.
+  var CELL_MAP = 128;
+  function mapDims() { var w = world || worldFor(run ? run.mapId : selMap); return { nx: Math.ceil(w.w/CELL_MAP), ny: Math.ceil(w.h/CELL_MAP) }; }
+  function exploredStr() { var id = run ? run.mapId : selMap, d = mapDims(), e = meta.explored[id]; if (!e || e.length !== d.nx*d.ny) { e = new Array(d.nx*d.ny + 1).join('0'); meta.explored[id] = e; } return e; }
+  function explore() {
+    var d = mapDims(), e = exploredStr().split(''), cx = Math.floor(P.x/CELL_MAP), cy = Math.floor(P.y/CELL_MAP), rad = 2, changed = false;
+    for (var y = cy - rad; y <= cy + rad; y++) for (var x = cx - rad; x <= cx + rad; x++) { if (x < 0 || y < 0 || x >= d.nx || y >= d.ny) continue; var i = y*d.nx + x; if (e[i] === '0') { e[i] = '1'; changed = true; } }
+    if (changed) meta.explored[run.mapId] = e.join('');
+  }
+  function exploredFrac() { var e = exploredStr(), n = 0; for (var i = 0; i < e.length; i++) if (e[i] === '1') n++; return n/e.length; }
+  function questTarget() { var q = run.wq; if (!q || q.kind !== 'visit') return null; for (var i = 0; i < q.ids.length; i++) if (!q.seen[q.ids[i]]) return landmarkById(q.ids[i]); return null; }
+  function questText() {
+    var q = run.wq; if (!q) return '';
+    if (q.kind === 'visit') { var n = 0; for (var k in q.seen) n++; return q.d + ' · ' + n + '/' + q.ids.length; }
+    if (q.kind === 'kill') return q.d + ' · ' + q.have + '/' + q.n;
+    if (q.kind === 'gold') return q.d + ' · ' + run.gold + '/' + q.n;
+    return q.d;
+  }
+  function questTick(evt, arg) {
+    var q = run.wq; if (!q || q.done) return;
+    if (q.kind === 'kill' && evt === 'kill' && q.kinds.indexOf(arg) >= 0) q.have++;
+    if (q.kind === 'courier' && evt === 'courier') q.have = 1;
+    var ok = (q.kind === 'kill' && q.have >= q.n) || (q.kind === 'courier' && q.have >= 1) || (q.kind === 'survive' && run.t >= q.t) || (q.kind === 'gold' && run.gold >= q.n) || (q.kind === 'visit' && !questTarget());
+    if (ok) { q.done = true; toast(q.npc.n + ': ' + q.npc.done); Snd.quest(); flash = 0.3; flashCol = INK.gold;
+      if (q.reward.gold) run.gold += q.reward.gold; if (q.reward.flask) run.flasks++; if (q.reward.relic) dropRelic(P.x + 30, P.y); meta.stats.wq = (meta.stats.wq || 0) + 1;
+      later(0.3, function () { toast('Reward: ' + (q.reward.gold ? '+' + q.reward.gold + ' gold ' : '') + (q.reward.flask ? '· a flask ' : '') + (q.reward.relic ? '· a relic' : '')); }); }
+  }
+  function updateWorld(dt) {
+    settlePlaces();
+    run.exploreT = (run.exploreT || 0) + dt; if (run.exploreT > 0.5) { run.exploreT = 0; explore(); }
+    var pl = placesOf(), i;
+    for (i = 0; i < pl.landmarks.length; i++) { var lm = pl.landmarks[i]; var dx = lm.x - P.x, dy = lm.y - P.y; if (dx*dx + dy*dy < 90*90) { if (!run.visited[lm.id]) { run.visited[lm.id] = 1; meta.seenLm[lm.id] = 1; toast(lm.n); Snd.tick(); }
+      if (run.wq && run.wq.kind === 'visit' && run.wq.ids.indexOf(lm.id) >= 0 && !run.wq.seen[lm.id]) { run.wq.seen[lm.id] = 1; Snd.quest(); questTick('visit'); } } }
+    if (run.wq && !run.wq.done && (run.wq.kind === 'survive' || run.wq.kind === 'gold')) questTick('time');
+    for (i = 0; i < pl.npcs.length; i++) { var np = pl.npcs[i]; var ndx = np.x - P.x, ndy = np.y - P.y;
+      if (ndx*ndx + ndy*ndy < 44*44) { if (!run.talked[np.id]) { run.talked[np.id] = 1; meta.metNpc[np.id] = 1; openTalk(np); } } else if (run.talked[np.id] === 1 && ndx*ndx + ndy*ndy > 90*90) run.talked[np.id] = 2; }
+  }
+
   var worldCache = {};
   function worldFor(id) {
     if (worldCache[id]) return worldCache[id];
@@ -2582,6 +2759,7 @@
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     g.fillStyle = map.base; g.fillRect(0, 0, cssW, cssH);
     if (!run) { var mw = worldFor(selMap); camX = mw.w/2 + Math.sin(t*0.05)*140; camY = mw.h/2 + Math.sin(t*0.037)*160; }
+    var hubBlocks = !run;
     // 0.86: a little more street in view. Spawns key off VW/VH so they stay
     // off-screen at any zoom.
     zoom = run ? 0.86*(1 - 0.1*Math.sin(Math.PI*run.zoomK)) : 1; VW = cssW/zoom; VH = cssH/zoom;
@@ -2589,7 +2767,7 @@
     var ox = cssW/2 - camX + sx, oy = cssH/2 - camY + sy, i;
     g.save(); worldXf(g, ox, oy);
     drawGround(g, map, t);
-    if (!run) { g.restore(); if (settings.lighting) { drawLights(g, map, t, ox, oy); g.globalCompositeOperation = 'multiply'; g.drawImage(lightCv, 0, 0, cssW, cssH); g.globalCompositeOperation = 'source-over'; }
+    if (!run) { drawBlocks(g, t); g.restore(); if (settings.lighting) { drawLights(g, map, t, ox, oy); g.globalCompositeOperation = 'multiply'; g.drawImage(lightCv, 0, 0, cssW, cssH); g.globalCompositeOperation = 'source-over'; }
       if (settings.weather) drawWeather(g, map, t); vignette(g, 0); return; }
 
     // Blood on the ground stays.
@@ -2629,12 +2807,12 @@
 
     // Foes, sorted nowhere: the shadow is baked into the sprite so overlap reads.
     for (i = 0; i < foes.length; i++) { var f = foes[i]; if (f.dead || f.x < vx0-60 || f.x > vx1+60 || f.y < vy0-60 || f.y > vy1+60) continue;
-      var fs = foeSprite(f, Math.floor(t*7 + f.wob) % 2), fw = fs.s, bob = Math.sin(t*7 + f.wob)*1.2, sq = 1 + 0.07*Math.sin(t*9 + f.wob) + f.flash*0.14, dw = fw*sq, dh = fw*(2 - sq);
+      var fs = figSprite(f, Math.floor(t*7 + f.wob) % 2), fw = fs.s, bob = Math.sin(t*7 + f.wob)*1.2, sq = 1 + 0.07*Math.sin(t*9 + f.wob) + f.flash*0.14, dw = fw*sq, dh = fw*(2 - sq), fo = f.r*0.6;
       if (f.born > 0) { var bk = 1 - f.born/(f.boss ? 0.9 : 0.4); dw *= bk; dh *= bk*bk; g.fillStyle = 'rgba(5,2,3,.6)'; g.beginPath(); g.ellipse(f.x, f.y + f.r*0.6, f.r*1.3*(1 - bk*0.5), f.r*0.5, 0, 0, 6.283); g.fill(); }
       if (f.alpha < 1) g.globalAlpha = f.alpha;
       if (f.act && f.act.k === 'dash') { g.strokeStyle = f.def.eye; g.lineWidth = f.r; g.globalAlpha = 0.25; g.beginPath(); g.moveTo(f.x, f.y); g.lineTo(f.x - f.act.dx*40, f.y - f.act.dy*40); g.stroke(); g.globalAlpha = f.alpha; }
-      g.drawImage(fs.c, f.x - dw/2, f.y - dh/2 + bob, dw, dh);
-      if (f.flash > 0.02) { g.globalAlpha = f.flash*0.8; g.globalCompositeOperation = 'lighter'; g.drawImage(fs.c, f.x - dw/2, f.y - dh/2 + bob, dw, dh); g.globalCompositeOperation = 'source-over'; }
+      g.drawImage(fs.c, f.x - dw/2, f.y - dh/2 - fo + bob, dw, dh);
+      if (f.flash > 0.02) { g.globalAlpha = f.flash*0.8; g.globalCompositeOperation = 'lighter'; g.drawImage(fs.c, f.x - dw/2, f.y - dh/2 - fo + bob, dw, dh); g.globalCompositeOperation = 'source-over'; }
       g.globalAlpha = 1;
       if (f.act && f.act.k === 'windup') { g.strokeStyle = f.def.eye; g.lineWidth = 1.5; g.globalAlpha = 0.4 + 0.5*Math.abs(Math.sin(t*18)); g.beginPath(); g.arc(f.x, f.y, f.r + 6, 0, 6.283); g.stroke(); g.globalAlpha = 1; }
       if (f.scream) { g.strokeStyle = 'rgba(126,156,196,.35)'; g.lineWidth = 1; for (var sc = 0; sc < 2; sc++) { var sk = (t*2 + sc*0.5) % 1; g.globalAlpha = (1-sk)*0.4; g.beginPath(); g.arc(f.x, f.y, f.r + sk*170, 0, 6.283); g.stroke(); } g.globalAlpha = 1; }
@@ -2686,6 +2864,10 @@
 
     drawPlayer(g, t);
     g.strokeStyle = 'rgba(233,216,197,.07)'; g.lineWidth = 1; g.beginPath(); g.arc(P.x, P.y, magnetR(), 0, 6.283); g.stroke();
+    var pls = placesOf(); settlePlaces();
+    for (i = 0; i < pls.landmarks.length; i++) { var lmk = pls.landmarks[i]; if (lmk.x > vx0 - 60 && lmk.x < vx1 + 60 && lmk.y > vy0 - 60 && lmk.y < vy1 + 60) drawLandmarkMark(g, lmk, t); }
+    for (i = 0; i < pls.npcs.length; i++) { var npc = pls.npcs[i]; if (npc.x > vx0 - 60 && npc.x < vx1 + 60 && npc.y > vy0 - 60 && npc.y < vy1 + 60) drawNpc(g, npc, t); }
+    drawBlocks(g, t);
     // Weather on the ground: rain rings on the Street, fog drifting where it is thick.
     if (settings.weather && map.weather === 'rain') { g.strokeStyle = 'rgba(233,216,197,.16)'; g.lineWidth = 1;
       for (i = 0; i < 14; i++) { var rk = (t*1.6 + i*0.37) % 1, rh = hash2(i*131 + Math.floor((t + i*0.37)/0.625)*7, i*17), rx = camX - VW/2 + (rh % 1000)/1000*VW, ry = camY - VH/2 + ((rh>>>10) % 1000)/1000*VH;
@@ -2705,7 +2887,7 @@
     g.save(); worldXf(g, ox, oy);
     // Eyes again, unlit, so the dark is full of them.
     for (i = 0; i < foes.length; i++) { var fe = foes[i]; if (fe.dead || fe.x < vx0-60 || fe.x > vx1+60 || fe.y < vy0-60 || fe.y > vy1+60) continue;
-      var es = eyeSprite(fe); if (fe.alpha < 1) g.globalAlpha = fe.alpha; g.drawImage(es.c, fe.x - es.s/2, fe.y - es.s/2 + Math.sin(t*7 + fe.wob)*1.2, es.s, es.s); g.globalAlpha = 1; }
+      var es = figEyes(fe); if (fe.alpha < 1) g.globalAlpha = fe.alpha; g.drawImage(es.c, fe.x - es.s/2, fe.y - es.s/2 - fe.r*0.6 + Math.sin(t*7 + fe.wob)*1.2, es.s, es.s); g.globalAlpha = 1; }
     g.textAlign = 'center'; g.textBaseline = 'middle';
     for (i = 0; i < nums.length; i++) { var n = nums[i]; var nk = 1 - n.t/0.7, pop = 1 + 0.7*Math.max(0, 1 - n.t/0.12); g.globalAlpha = nk;
       if (n.big) { g.font = '400 ' + Math.round(20*pop) + 'px Georgia, serif'; g.fillStyle = INK.gold; g.shadowColor = INK.gold; g.shadowBlur = 12; g.fillText(String(n.v), n.x, n.y); g.shadowBlur = 0; continue; }
@@ -2714,6 +2896,8 @@
     g.globalAlpha = 1;
     g.restore();
 
+    var qt = questTarget(); if (qt) { var qx = (qt.x - camX)*zoom, qy = (qt.y - camY)*zoom; if (Math.abs(qx) > cssW/2 - 30 || Math.abs(qy) > cssH/2 - 30) { var qa = Math.atan2(qy, qx), qk = Math.min((cssW/2 - 26)/Math.abs(Math.cos(qa) || 0.01), (cssH/2 - 26)/Math.abs(Math.sin(qa) || 0.01));
+      g.save(); g.translate(cssW/2 + Math.cos(qa)*qk, cssH/2 + Math.sin(qa)*qk); g.rotate(qa); g.strokeStyle = INK.bone; g.lineWidth = 1.5; g.globalAlpha = 0.8; g.beginPath(); g.moveTo(10, 0); g.lineTo(-6, -7); g.lineTo(-6, 7); g.closePath(); g.stroke(); g.globalAlpha = 1; g.restore(); } }
     // Chests and relics off screen: a small gold diamond at the edge.
     var mk = 0;
     for (i = 0; i < motes.length && mk < 6; i++) { var mo = motes[i]; if (mo.kind !== 'chest' && mo.kind !== 'relic') continue; var mxs = (mo.x - camX)*zoom, mys = (mo.y - camY)*zoom;
@@ -2757,7 +2941,7 @@
     bossBarEl.classList.add('on'); bossName.textContent = b.def.n + (run.bosses.length > 1 ? ' +' + (run.bosses.length-1) : '');
   }
   // One rule for pausing: the run is paused while any sheet is up.
-  function syncPause() { if (!run) return; run.paused = luEl.classList.contains('on') || chestEl.classList.contains('on') || pauseEl.classList.contains('on') || overEl.classList.contains('on') || mainEl.classList.contains('on'); }
+  function syncPause() { if (!run) return; run.paused = luEl.classList.contains('on') || chestEl.classList.contains('on') || pauseEl.classList.contains('on') || overEl.classList.contains('on') || mainEl.classList.contains('on') || $('talk').classList.contains('on') || $('mapSheet').classList.contains('on'); }
   var lastHudT = -1, ringT = 0, ringEls = [];
   function paintHud(force) {
     if (!run) return;
@@ -2768,7 +2952,8 @@
     var sec = Math.floor(run.t);
     if (sec !== lastHudT || force) { lastHudT = sec; var left = run.dur - run.t; clockEl.textContent = fmtTime(left); clockEl.classList.toggle('late', left <= 60); clockEl.classList.toggle('last', left <= 10);
       lvNum.textContent = run.lv; killNum.textContent = run.kills; goldNum.textContent = run.gold;
-      var ne = run.nextEv; nextEvEl.innerHTML = ne ? '<b>' + (ne.ev === 'lord' ? 'Lord' : ne.ev === 'mini' ? 'Champion' : { wall:'Wall', ring:'Ring', elites:'Champions', swarm:'Swarm', bloodmoon:'Blood moon', fog:'Fog', courier:'Courier', harvest:'Harvest', eclipse:'Eclipse' }[ne.ev]) + '</b> ' + fmtTime(ne.t - run.t) : ''; }
+      var qs = run.wq ? '<div class="questline">' + (run.wq.done ? '§ ' : '') + esc(questText()) + '</div>' : '';
+      var ne = run.nextEv; nextEvEl.innerHTML = qs + (ne ? '<b>' + (ne.ev === 'lord' ? 'Lord' : ne.ev === 'mini' ? 'Champion' : { wall:'Wall', ring:'Ring', elites:'Champions', swarm:'Swarm', bloodmoon:'Blood moon', fog:'Fog', courier:'Courier', harvest:'Harvest', eclipse:'Eclipse' }[ne.ev]) + '</b> ' + fmtTime(ne.t - run.t) : ''); }
     paintFlask(); comboEl.classList.toggle('on', run.combo >= 8); comboN.textContent = '×' + run.combo; comboN.classList.toggle('hot', run.combo >= 40);
     var hk = Math.max(0, P.hp/P.maxHp); hpFill.style.width = (hk*100) + '%'; hpNum.textContent = Math.ceil(P.hp); hpWrap.classList.toggle('low', hk < 0.3);
     hurtEl.style.opacity = Math.max(P.hurtT*0.9, hk < 0.3 ? 0.35 : 0); hurtEl.classList.toggle('low', hk < 0.3);
@@ -2950,6 +3135,47 @@
   $('bSigilCopy').addEventListener('click', function () { var s = sigilOut(); $('sigilOut').textContent = s;
     if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(s).then(function () { toast('Sigil copied'); }, function () { toast('Select the text and copy it'); }); else toast('Select the text and copy it'); });
   $('bSigilLoad').addEventListener('click', function () { var err = sigilIn($('sigilIn').value); if (err) { toast(err); return; } $('sigilIn').value = ''; applySettings(); paintHub(); toast('Sigil loaded'); Snd.quest(); });
+
+
+  /* ---------------- talk, map ---------------- */
+  var talkEl = $('talk'), mapEl = $('mapSheet'), mapCv = $('mapCv');
+  function openTalk(np) {
+    $('talkName').textContent = np.n; var q = np.quest, have = run.wq && run.wq.npc === np;
+    $('talkLine').textContent = have && run.wq.done ? np.done : (have ? 'Still on it? ' + q.d + '.' : np.line);
+    $('talkQuest').textContent = have ? questText() : q.d + ' — ' + (q.reward.gold ? '+' + q.reward.gold + ' gold ' : '') + (q.reward.flask ? '· a flask ' : '') + (q.reward.relic ? '· a relic' : '');
+    $('bAccept').style.display = run.wq ? 'none' : '';
+    talkEl.dataset.npc = np.id; talkEl.classList.add('on'); syncPause(); Snd.banner();
+  }
+  $('bAccept').addEventListener('click', function () { var pl = placesOf(), np = null; for (var i = 0; i < pl.npcs.length; i++) if (pl.npcs[i].id === talkEl.dataset.npc) np = pl.npcs[i];
+    if (np && !run.wq) { var q = np.quest; run.wq = { npc: np, kind: q.kind, ids: q.ids, kinds: q.kinds, n: q.n, t: q.t, reward: q.reward, d: q.d, have: 0, seen: {}, done: false }; toast('Quest: ' + q.d); Snd.quest(); }
+    talkEl.classList.remove('on'); syncPause(); });
+  $('bLater').addEventListener('click', function () { talkEl.classList.remove('on'); syncPause(); Snd.tick(); });
+  talkEl.addEventListener('click', function (e) { if (e.target === talkEl) $('bLater').click(); });
+  function openMap() { paintMap(); mapEl.classList.add('on'); syncPause(); Snd.tick(); }
+  $('bMap').addEventListener('click', openMap);
+  $('bMapClose').addEventListener('click', function () { mapEl.classList.remove('on'); syncPause(); });
+  mapEl.addEventListener('click', function (e) { if (e.target === mapEl) $('bMapClose').click(); });
+  function paintMap() {
+    var w = world || worldFor(run ? run.mapId : selMap), S = 720, k = S/Math.max(w.w, w.h), d = mapDims(), e = exploredStr(), pl = placesOf(), q = mapCv.getContext('2d'), i;
+    mapCv.height = Math.round(w.h*k); mapCv.width = Math.round(w.w*k);
+    q.setTransform(1, 0, 0, 1, 0, 0); q.fillStyle = '#0b0609'; q.fillRect(0, 0, mapCv.width, mapCv.height);
+    q.fillStyle = '#1a0d12'; for (var cy = 0; cy < d.ny; cy++) for (var cx = 0; cx < d.nx; cx++) if (e[cy*d.nx + cx] === '1') q.fillRect(cx*CELL_MAP*k, cy*CELL_MAP*k, CELL_MAP*k + 0.5, CELL_MAP*k + 0.5);
+    q.save(); q.beginPath(); for (cy = 0; cy < d.ny; cy++) for (cx = 0; cx < d.nx; cx++) if (e[cy*d.nx + cx] === '1') q.rect(cx*CELL_MAP*k, cy*CELL_MAP*k, CELL_MAP*k + 0.5, CELL_MAP*k + 0.5); q.clip();
+    q.scale(k, k);
+    for (i = 0; i < w.zones.length; i++) { var z = w.zones[i]; q.fillStyle = z.tex === 'water' ? '#0d1a1e' : z.tex === 'grass' || z.tex === 'moss' ? 'rgba(38,64,44,.6)' : 'rgba(233,216,197,.05)'; if (z.r !== undefined) { q.beginPath(); q.arc(z.cx, z.cy, z.r, 0, 6.283); q.fill(); } else q.fillRect(z.x, z.y, z.w, z.h); }
+    q.strokeStyle = 'rgba(233,216,197,.12)'; q.lineCap = 'butt'; for (i = 0; i < w.roads.length; i++) { var rd = w.roads[i]; q.lineWidth = rd.w; q.beginPath(); for (var pi = 0; pi < rd.pts.length; pi++) q[pi ? 'lineTo' : 'moveTo'](rd.pts[pi][0], rd.pts[pi][1]); q.stroke(); }
+    for (i = 0; i < w.blocks.length; i++) { var b = w.blocks[i]; q.fillStyle = b.kind === 'rock' ? '#1c2626' : b.kind === 'wall' ? '#3a3040' : '#4a3138'; q.fillRect(b.x, b.y, b.w, b.h); }
+    for (i = 0; i < pl.landmarks.length; i++) { var lm = pl.landmarks[i]; if (!meta.seenLm[lm.id]) continue; q.fillStyle = lm.kind === 'gate' ? INK.blood : lm.kind === 'lamp' ? INK.gold : INK.bone; q.beginPath(); q.arc(lm.x, lm.y, 18, 0, 6.283); q.fill(); }
+    for (i = 0; i < pl.npcs.length; i++) { var np = pl.npcs[i]; if (!meta.metNpc[np.id]) continue; q.fillStyle = INK.gold; q.beginPath(); q.moveTo(np.x, np.y - 24); q.lineTo(np.x + 20, np.y); q.lineTo(np.x, np.y + 24); q.lineTo(np.x - 20, np.y); q.closePath(); q.fill(); }
+    q.restore();
+    q.font = '500 9px ui-monospace, Menlo, monospace'; q.textAlign = 'center'; q.textBaseline = 'top'; q.fillStyle = INK.bone;
+    for (i = 0; i < pl.landmarks.length; i++) { var l2 = pl.landmarks[i]; if (meta.seenLm[l2.id]) q.fillText(l2.n, l2.x*k, l2.y*k + 5); }
+    q.fillStyle = INK.gold; for (i = 0; i < pl.npcs.length; i++) { var n2 = pl.npcs[i]; if (meta.metNpc[n2.id]) q.fillText(n2.n, n2.x*k, n2.y*k + 6); }
+    if (run) { var tg = questTarget(); if (tg) { q.strokeStyle = INK.gold; q.lineWidth = 1.5; q.beginPath(); q.arc(tg.x*k, tg.y*k, 8, 0, 6.283); q.stroke(); }
+      for (i = 0; i < run.bosses.length; i++) { var bz = run.bosses[i]; q.fillStyle = INK.blood; q.beginPath(); q.arc(bz.x*k, bz.y*k, 4, 0, 6.283); q.fill(); }
+      q.fillStyle = INK.bone; q.shadowColor = INK.bone; q.shadowBlur = 8; q.beginPath(); q.arc(P.x*k, P.y*k, 3.5, 0, 6.283); q.fill(); q.shadowBlur = 0; }
+    $('mapTitle').textContent = (run ? run.map.n : MAPS[selMap].n); $('mapPct').textContent = Math.round(exploredFrac()*100) + '% walked'; $('mapQuest').textContent = run && run.wq ? (run.wq.done ? 'Done: ' : 'Quest: ') + questText() : 'No errand taken. The people here have work.';
+  }
 
   /* ---------------- the Sanctum ---------------- */
   var hubNew = 0;
