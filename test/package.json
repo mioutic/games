@@ -1,0 +1,6 @@
+{
+  "name": "games-test",
+  "private": true,
+  "description": "Headless checks for the arcade. npm install once, then node <file>.",
+  "devDependencies": { "playwright": "^1.47.0" }
+}

@@ -2,6 +2,26 @@
 
 A pocket arcade, hosted on GitHub Pages and installed to an iPhone home screen.
 
+## The two links
+
+| | |
+| --- | --- |
+| **Live** (what the phone has installed) | https://mioutic.github.io/games/play/ |
+| **Local** (source build, no deploy needed) | http://100.93.221.36:8123/arcade/ or http://desktop-2nm2pol.tail9e6fa0.ts.net:8123/arcade/ |
+
+The local one is `arcade/tools/serve.py` on the tailnet, started from the
+Helios tray/phone panel (app id `arcade`) or by `python3 arcade/tools/serve.py`.
+It serves `arcade/` straight from the working tree with `no-store`, so an edit
+shows on the phone on refresh. It is only up while the server is running;
+`GET /api/status` on it says. The live link updates a minute or so after a
+push to `main`; confirm with `CACHE_VERSION` in
+https://mioutic.github.io/games/play/sw.js.
+
+**Both are how work gets checked.** The owner reads these sessions from a
+phone, often away from the desk, so every change that is meant to be seen gets
+pushed to `main` and the live link is where it is tried. "Push so I can test"
+is the standing instruction, not a request to be waited for.
+
 ## Design — read this before touching anything visual
 
 **The house style is Sanguine, and it is binding.** The full brief lives in
@@ -57,6 +77,70 @@ rebuilds both on push; to do it locally:
 python3 arcade/tools/build-index.py    # rescan arcade/games/ -> games.json
 python3 arcade/tools/build-pwa.py      # regenerate play/
 ```
+
+## A new game — the contract
+
+"Make a new arcade game" means a folder under `arcade/games/<slug>/` holding
+one self-contained `index.html` (plus optional `game.json`) that:
+
+1. **Follows Sanguine** (DESIGN.md) — bone accent, oxblood surfaces, serif
+   display, 0–4px corners, no emoji, motion 120–200ms.
+2. **Has one `#stage`** sized in JS from `visualViewport` with the standalone
+   floor, everything else `position:absolute` inside it, re-measured on
+   `resize`, `visualViewport` resize/scroll and `orientationchange` (several
+   times over ~600ms). Caps `dpr` at 2. Works at 380px of height.
+3. **Speaks the launcher contract** over `postMessage`: answers
+   `{type:'arcade:spec?'}` with `{type:'arcade:spec', name, win, doc, vv,
+   stage, canvas, ins, fps, scale}`; posts `{type:'arcade:fullscreen', on}`
+   when it goes full screen and sets its own `--safe-t` to `0px` when framed
+   and not fullscreen; posts `{type:'arcade:exit'}` from a **Leave to Arcade**
+   button in its settings sheet, which is the only way out in fullscreen.
+4. **Settings sheet** capped `max-height:100%; overflow-y:auto`, closable by
+   tapping the scrim, with sound / haptics / fullscreen switches (the audio
+   context is built on the first user gesture, never at boot, or iOS ships it
+   mute).
+5. **Touch first.** Sticks or drag in the bottom corners, repositioned (not
+   shrunk) in landscape; a keyboard mapping (WASD + arrows, space) for desktop
+   testing.
+6. **Saves** in `localStorage`, mirrored to `caches.open('<slug>-save')`
+   because Safari and the home-screen app do not share storage; export as
+   text from settings if progress matters.
+7. **Self-contained:** no CDNs, no ES modules, no fetches. `build-pwa.py`
+   inlines it into the offline build.
+8. **Ships the same way every time:** branch → check on the local link →
+   `build-index.py` + `build-pwa.py` → bump `arcade/VERSION` → commit → push
+   the branch → merge to `main` (the repo's habit is a `--no-ff` merge) → push
+   → confirm `sw.js` on the live link → give the owner the link.
+
+The launcher tile takes `game.json` (`name`, `glyph`, `description`, `ink`,
+`stat`); see `arcade/README.md`. Thirst (`arcade/games/thirst/`) is the fullest
+reference for all of the above: a designed bounded world baked into chunks, a
+flow-field nav grid, an upgrade pool, a save mirror, a diagnostics readout.
+
+## Testing without the phone
+
+`test/` holds the Playwright harness (`npm install` in `test/` once; it pulls
+Playwright and Chromium). It runs headless with SwiftShader, which is good for
+**exceptions, layout geometry and a screenshot** and worthless for **frame rate
+or feel** — never report a performance conclusion from it, only a relative
+before/after on the same machine, and send the owner to the game's own fps
+readout for the real number.
+
+```
+cd test
+node audit.js              # every game: stage 430x932, dpr, cover, arcade:spec answers
+node sw.test.js            # the service worker's network-first-with-timeout logic
+node audio.test.js [slug]  # no AudioContext before a gesture; mute really mutes
+node thirst/pool.test.js   # the upgrade pool never degrades to gold
+node thirst/world.test.js  # collision, wall ejection, spawn placement on all maps
+node thirst/path.test.js   # a foe behind a wall reaches the player
+node thirst/probe.js       # a kiting bot plays 3-4 minutes and reports pacing
+```
+
+To look at something that normally needs play (a boss, a level-up sheet), the
+pattern is: copy the game to a scratch path, splice a `window.__hook` in at the
+`/* ---- loop ---- */` anchor, drive it, screenshot, and never ship the hook.
+`test/thirst/probe.js` is the worked example.
 
 ## Working notes
 

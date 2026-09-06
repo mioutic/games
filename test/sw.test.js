@@ -1,25 +1,23 @@
-// Service worker behaviour, checked against a fake network and cache.
-//
-//     node test/sw.test.js          (no dependencies, run it after build-pwa.py)
-//
-// This is not the Playwright harness — it needs no browser. It pins the two
-// properties the arcade actually depends on: a weak signal must never hang the
-// launch when a cached copy exists, and bumping arcade/VERSION must still force
-// every phone onto the new build.
-//
-// The timeout is rewritten to 60ms so the suite runs fast; the logic is unchanged.
+// Exercise the generated play/sw.js fetch handler against a fake network and
+// cache. The timeout is rewritten to 60ms so the suite runs fast; the logic
+// under test is unchanged.
 const fs = require('fs');
 const vm = require('vm');
-const path = require('path');
 
+const path = require('path');
 const SW_PATH = path.join(__dirname, '..', 'play', 'sw.js');
 const TIMEOUT = 60;
-const ORIGIN = 'https://mioutic.github.io';
-// Read the cache name out of the worker rather than hard-coding it, so bumping
-// arcade/VERSION never fails this suite for the wrong reason.
+// The version the worker actually ships with. Restating it here as a literal is
+// what rotted this suite: after a VERSION bump the seeded cache no longer
+// matched CACHE_VERSION, every 'cached copy' case silently became a cache-MISS
+// case, and three assertions failed for a reason that had nothing to do with
+// the worker. Read it from the source so a bump can never do that again.
 const CACHE = (fs.readFileSync(SW_PATH, 'utf8').match(/CACHE_VERSION = '([^']+)'/) || [])[1];
-if (!CACHE) throw new Error('CACHE_VERSION not found in sw.js');
-const OLDER = 'arcade-vOLD';   // any cache name that is not the current one
+if (!CACHE) throw new Error('could not read CACHE_VERSION out of ' + SW_PATH);
+// A plausible older build, for the eviction cases.
+const OLD_CACHE = CACHE.replace(/(\d+)\.(\d+)\.(\d+)$/, (m, a, b) => a + '.' + (Number(b) - 1) + '.0');
+if (OLD_CACHE === CACHE) throw new Error('could not derive an older cache name from ' + CACHE);
+const ORIGIN = 'https://mioutic.github.io';
 
 class Res {
   constructor(tag, { ok = true, type = 'basic' } = {}) {
@@ -188,16 +186,16 @@ const check = (name, cond, got) => {
   console.log('\n[G] a version bump still evicts the old build');
   {
     const { listeners, caches } = loadSW(() => Promise.resolve(new Res('net')));
-    (await caches.open(OLDER)).put(req(PAGE), new Res('stale'));
+    (await caches.open(OLD_CACHE)).put(req(PAGE), new Res('stale'));
     const ev = { waitUntil: (p) => { ev._p = p; } };
     listeners.activate.forEach((fn) => fn(ev));
     await ev._p;
-    check('old caches deleted on activate', !(await caches.keys()).includes(OLDER),
+    check('old caches deleted on activate', !(await caches.keys()).includes(OLD_CACHE),
           await caches.keys());
 
     const c = await caches.open(CACHE);
     await c.put(req(PAGE), new Res('current'));
-    (await caches.open(OLDER)).put(req(PAGE), new Res('stale'));
+    (await caches.open(OLD_CACHE)).put(req(PAGE), new Res('stale'));
     const out = await fire(listeners, req(PAGE))._res;
     check('a leftover cache can never answer for the current build',
           out.tag !== 'stale', out.tag);
