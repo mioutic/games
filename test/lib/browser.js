@@ -11,11 +11,16 @@ const FLAGS = ['--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--ignore-
 
 async function launch(extraArgs) {
   const args = FLAGS.concat(extraArgs || []);
-  const order = process.env.PW_CHANNEL ? [process.env.PW_CHANNEL] : ['msedge', 'chrome', 'chromium'];
+  // PW_EXECUTABLE names a browser binary outright. The channel list below is
+  // for a Windows desktop; a Linux box (a remote session, CI) has no Edge and
+  // may carry a Chromium build that does not match the pinned Playwright, so
+  // there has to be a way to point at the one that is actually installed.
+  const order = process.env.PW_EXECUTABLE ? ['exe'] : process.env.PW_CHANNEL ? [process.env.PW_CHANNEL] : ['msedge', 'chrome', 'chromium'];
   let lastErr = null;
   for (const ch of order) {
     try {
-      const b = ch === 'chromium' ? await chromium.launch({ args }) : await chromium.launch({ channel: ch, args });
+      const b = ch === 'exe' ? await chromium.launch({ executablePath: process.env.PW_EXECUTABLE, args })
+        : ch === 'chromium' ? await chromium.launch({ args }) : await chromium.launch({ channel: ch, args });
       // A launch can succeed and the first page still crash (that is exactly
       // what the bundled build does), so prove a page before handing it over.
       const probe = await b.newContext(); const p = await probe.newPage(); await p.setContent('<b>ok</b>'); await probe.close();
