@@ -46,12 +46,14 @@
   .need .bar i.on { background: var(--accent); }
   .need.low .bar i.on { background: var(--error); box-shadow: 0 0 6px rgba(255,84,112,.5); }
   .need.low .k { color: var(--error); }
+  .need.rel { grid-template-columns: 90px 1fr; margin: -4px 0 8px; } .need.rel .k { text-transform: none; letter-spacing: .04em; font-size: 10px; color: var(--t-2); }
   .clockbox { position: absolute; right: calc(var(--safe-r) + 10px); top: calc(var(--safe-t) + 10px); padding: 7px 10px 6px; text-align: right; min-width: 118px; }
   .clock { font: 500 24px/1 var(--font-mono); color: var(--t-0); font-variant-numeric: tabular-nums; letter-spacing: .02em; }
   .clock small { font-size: 11px; color: var(--t-2); margin-left: 3px; }
   .day { font: 400 11px/1 var(--font-display); color: var(--t-1); letter-spacing: .06em; margin-top: 5px; }
   .creds { font: 500 11px/1 var(--font-mono); color: var(--warning); margin-top: 5px; font-variant-numeric: tabular-nums; }
   .creds::before { content: "◆ "; font-size: 8px; }
+  .place.want { top: calc(var(--safe-t) + 138px); color: var(--warning); opacity: .85; }
   .place { position: absolute; left: 50%; top: calc(var(--safe-t) + 124px); transform: translateX(-50%); font: 500 8px/1 var(--font-ui); letter-spacing: .24em;
            text-transform: uppercase; color: var(--t-3); white-space: nowrap; }
   .toast { position: absolute; left: 50%; bottom: calc(var(--safe-b) + 150px); transform: translateX(-50%); max-width: 300px; padding: 8px 12px; text-align: center;
@@ -67,6 +69,9 @@
           border: 1px solid var(--line-2); background: rgba(11,6,9,.72); color: var(--accent); display: grid; place-items: center; text-align: center;
           transition: opacity 160ms var(--ease), transform 160ms var(--ease); opacity: .35; transform: scale(.9); }
   .verb.on { opacity: 1; transform: none; border-color: var(--accent); box-shadow: var(--bloom); }
+  .verb2 { position: absolute; width: 104px; margin: -128px 0 0 -52px; z-index: 3; pointer-events: none; appearance: none; padding: 8px 6px; border: 1px solid var(--line-2); border-radius: var(--radius);
+           background: rgba(11,6,9,.78); color: var(--brand); font: 500 8.5px/1 var(--font-ui); letter-spacing: .18em; text-transform: uppercase; opacity: 0; transition: opacity 160ms var(--ease); }
+  .verb2.on { opacity: 1; pointer-events: auto; border-color: var(--brand); }
   .verb.busy { border-color: var(--accent-2); }
   .verb .w { font: 500 11px/1 var(--font-ui); letter-spacing: .2em; text-transform: uppercase; }
   .verb .o { font: 400 9px/1.3 var(--font-display); color: var(--t-2); margin-top: 4px; letter-spacing: .04em; max-width: 78px; }
@@ -167,9 +172,10 @@
   <div class="stick" id="stickL"><div class="knob"></div><div class="lab">Walk</div></div>
   <div class="hud off" id="hud">
     <div class="panel needs" id="needs"></div>
-    <div class="place" id="place">Level 41 · Corridor</div>
+    <div class="place" id="place">Level 41 · Corridor</div><div class="place want" id="want"></div>
     <div class="panel clockbox"><div class="clock" id="clock">22:00</div><div class="day" id="day">Night one</div><div class="creds" id="creds">0</div></div>
     <button class="gear" id="bGear" aria-label="Settings"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="8" cy="18" r="1.6"/></svg></button>
+    <button class="verb2" id="verb2"></button>
     <button class="verb" id="verb"><svg class="ring" viewBox="0 0 100 100"><circle cx="50" cy="50" r="48"/></svg><div><div class="w" id="verbW">—</div><div class="o" id="verbO"></div></div><div class="lab">Act</div></button>
     <div class="panel toast" id="toast"></div>
   </div>
@@ -184,6 +190,14 @@
     <div class="kv"><span>Credits earned</span><b id="kEarned">0</b></div>
     <div class="kv"><span>Shifts worked</span><b id="kShifts">0</b></div>
     <div class="kv"><span>Conversations</span><b id="kTalks">0</b></div>
+    <div class="kv"><span>Rent, 90, due</span><b id="kRent">day 4</b></div>
+    <div class="kv"><span>Stock in the cold box</span><b id="kStock">1</b></div>
+    <div class="rule"></div>
+    <div class="micro" style="margin-bottom:6px">Today</div><div id="kWants"></div>
+    <div class="rule"></div>
+    <div class="micro" style="margin-bottom:6px">Skills</div><div id="kSkills"></div>
+    <div class="rule"></div>
+    <div class="micro" style="margin-bottom:6px">People</div><div id="kRel"></div>
     <div class="rule"></div>
     <div class="opt" id="rowFs"><div><div class="optk">Fullscreen</div><div class="optd">Hide the Arcade bar. Leave, below, still gets you out.</div></div><button class="sw" id="swFs" role="switch" aria-checked="false"><span></span></button></div>
     <div class="opt"><div><div class="optk">Sound</div></div><button class="sw" id="swSound" role="switch" aria-checked="true"><span></span></button></div>
@@ -213,6 +227,7 @@
 
   <div class="sheet" id="talk"><div class="panel card">
     <div class="cardhead"><span class="ornament">‡</span><h2 style="margin:0;text-align:left;font-size:20px" id="talkName">—</h2></div>
+    <div class="need rel" id="talkRel"></div>
     <p class="lede" id="talkLine" style="text-align:left;font-family:var(--font-display);font-size:14.5px;color:var(--t-0)"></p>
     <div id="talkOpts"></div>
   </div></div>
@@ -238,9 +253,9 @@
   function saveSettings() { try { localStorage.setItem(SKEY, JSON.stringify(settings)); } catch (e) {} mirrorSave(); }
   function buzz(p) { if (settings.haptics && navigator.vibrate) navigator.vibrate(p); }
   // The tenancy: everything that persists between sessions.
-  function freshMeta() { return { v: 1, savedAt: 0, day: 1, min: 22*60, creds: 40, needs: { rest: 62, hunger: 55, hygiene: 70, spirit: 58 }, own: {}, px: 0, py: 0, earned: 0, shifts: 0, talks: 0, met: {}, seen: {} }; }
+  function freshMeta() { return { v: 1, savedAt: 0, day: 1, min: 22*60, creds: 40, needs: { rest: 62, hunger: 55, hygiene: 70, spirit: 58, warmth: 66 }, own: {}, px: 0, py: 0, earned: 0, shifts: 0, talks: 0, met: {}, seen: {}, skills: { focus: 0, cooking: 0, charm: 0, fitness: 0 }, rel: { vesna: 0, ohm: 0, warden: 0, kid: 0 }, stock: 1, wants: [], wantDay: 0, rentDay: 4, owed: 0, evPlan: null, cooked: 0 }; }
   var meta = freshMeta();
-  function absorb(m) { if (!m || m.v !== 1) return false; var f = freshMeta(); for (var k in f) if (m[k] !== undefined) meta[k] = m[k]; return true; }
+  function absorb(m) { if (!m || m.v !== 1) return false; var f = freshMeta(); for (var k in f) if (m[k] !== undefined) meta[k] = m[k]; if (meta.needs.warmth === undefined) meta.needs.warmth = 66; for (k in f.skills) if (meta.skills[k] === undefined) meta.skills[k] = 0; for (k in f.rel) if (meta.rel[k] === undefined) meta.rel[k] = 0; return true; }
   try { absorb(JSON.parse(localStorage.getItem(MKEY) || 'null')); } catch (e) {}
   var onMetaLoaded = null, mirrorT = null;
   function saveMeta() { meta.savedAt = Date.now(); try { localStorage.setItem(MKEY, JSON.stringify(meta)); } catch (e) {} mirrorSave(); }
@@ -288,8 +303,8 @@
   if (window.visualViewport) { window.visualViewport.addEventListener('resize', resize); window.visualViewport.addEventListener('scroll', resize); }
 
   /* ---------------- input ---------------- */
-  var stick = { x: 0, y: 0, active: false }, keys = {}, STICK_R = 42, KNOB_MAX = 30, verbTapped = false;
-  function homeControls() { var y = cssH - INS.b - 70; stickL.style.left = (INS.l + 66) + 'px'; stickL.style.top = y + 'px'; verbEl.style.left = (cssW - INS.r - 66) + 'px'; verbEl.style.top = y + 'px'; }
+  var stick = { x: 0, y: 0, active: false }, keys = {}, STICK_R = 42, KNOB_MAX = 30, verbTapped = false, verb2Tapped = false;
+  function homeControls() { var y = cssH - INS.b - 70; stickL.style.left = (INS.l + 66) + 'px'; stickL.style.top = y + 'px'; verbEl.style.left = (cssW - INS.r - 66) + 'px'; verbEl.style.top = y + 'px'; $('verb2').style.left = (cssW - INS.r - 66) + 'px'; $('verb2').style.top = y + 'px'; }
   (function makeStick(zone, el, S) {
     var id = null, ox = 0, oy = 0, knob = el.querySelector('.knob');
     function from(cx, cy) { var r = stageEl.getBoundingClientRect(); var dx = (cx - r.left) - ox, dy = (cy - r.top) - oy, d = Math.hypot(dx, dy);
@@ -308,7 +323,9 @@
   $('zoneR').addEventListener('touchstart', function (e) { e.preventDefault(); }, { passive: false });
   verbEl.addEventListener('touchstart', function (e) { e.preventDefault(); e.stopPropagation(); verbTapped = true; }, { passive: false });
   verbEl.addEventListener('mousedown', function (e) { e.preventDefault(); verbTapped = true; });
-  window.addEventListener('keydown', function (e) { var k = e.key.toLowerCase(); keys[k] = true; if (e.key.indexOf('Arrow') === 0) e.preventDefault(); if (k === 'e' || k === ' ' || k === 'enter') { verbTapped = true; e.preventDefault(); } });
+  $('verb2').addEventListener('touchstart', function (e) { e.preventDefault(); e.stopPropagation(); verb2Tapped = true; }, { passive: false });
+  $('verb2').addEventListener('mousedown', function (e) { e.preventDefault(); verb2Tapped = true; });
+  window.addEventListener('keydown', function (e) { var k = e.key.toLowerCase(); keys[k] = true; if (e.key.indexOf('Arrow') === 0) e.preventDefault(); if (k === 'e' || k === ' ' || k === 'enter') { verbTapped = true; e.preventDefault(); } if (k === 'q') verb2Tapped = true; });
   window.addEventListener('keyup', function (e) { keys[e.key.toLowerCase()] = false; });
 
   /* ---------------- sound ----------------
@@ -365,7 +382,7 @@
   function PX(x, y) { return (x - y)*32; }
   function PY(x, y) { return (x + y)*16; }
   var floor = new Uint8Array(MW*MH), wallN = new Uint8Array(MW*MH), wallW = new Uint8Array(MW*MH), roomOf = new Uint8Array(MW*MH), solid = new Uint8Array(MW*MH), outdoor = new Uint8Array(MW*MH);
-  var decoN = {}, decoW = {}, rooms = [], objs = [], lightsStatic = [], npcs = [];
+  var decoN = {}, decoW = {}, rooms = [], objs = [], lightsStatic = [], npcs = [], liftOpen = 0;
   function T(x, y) { return y*MW + x; }
   function inMap(x, y) { return x >= 0 && y >= 0 && x < MW && y < MH; }
   // Floor materials. 0 is the void: nothing under it but the city.
@@ -401,7 +418,7 @@
     obj('sofa', 9, 12, { w: 2, h: 1, use: { verb: 'Rest', what: 'for an hour', kind: 'rest' }, f: 1 });
     obj('lamp', 11, 8, { light: '#d9a441' }); obj('plant', 5, 13, { walk: 0 });
     obj('fridge', 8, 8, { use: { verb: 'Eat', what: 'what is in the cold box', kind: 'eat', cost: 0 } });
-    obj('counter', 9, 8, { w: 1, h: 1 });
+    obj('counter', 9, 8, { w: 1, h: 1, use: { verb: 'Cook', what: 'with what is in the cold box · 30 min', kind: 'cook' } });
     obj('shower', 5, 14, { use: { verb: 'Wash', what: 'twenty minutes of hot water', kind: 'wash' } });
     obj('toilet', 7, 17, { use: { verb: 'Use', what: 'the necessary', kind: 'toilet' } });
     obj('sink', 5, 17, { use: { verb: 'Wash', what: 'hands and face', kind: 'sink' } });
@@ -416,20 +433,24 @@
       lines: [['Forty-one floors up and the rain still finds the corridor. Mind the drip by the lift.', 'You are the new one in 4107. I am next door. I keep odd hours; forgive the music.'],
               ['The commissary noodles are the only honest thing on this level.', 'The deck at the south end. Go at night. The city looks like it forgives you.'],
               ['Ohm says the warden is checking permits again. Keep yours on you.', 'Sleep. You look like the corridor.']],
+      deep: [['I used to live on 90. I am not going to tell you why I am on 41. You would not believe the reason and the truth is worse.', 'It was the quiet. There is no quiet on 90.'], ['The tree on the roof. Tam thinks it climbed. I think somebody carried it, one floor a year, and died before it was done.', 'Somebody should finish the job.']],
+      idle: ['Mind the drip.', 'Odd hours, forgive me.', 'The broth is honest.', 'You look like the corridor.'],
       sched: [{ from: 7*60, to: 9*60, wp: [[19.5, 11.5], [16.5, 10.5], [13.5, 10.5], [13.5, 24.5], [13.5, 10.5], [16.5, 10.5], [19.5, 11.5]] }, { from: 18*60, to: 22*60, wp: [[19.5, 11.5], [21.5, 10.5], [18.5, 9.5], [19.5, 11.5]] }] });
     // The commissary: a counter, stools, a shop terminal and a neon sign. Ohm runs it.
     room('Commissary', 16, 16, 9, 8, FL.terrazzo, WM.shutter, { light: 0.55, lightCol: '#e9d8c5' });
     door('W', 16, 18); door('W', 16, 19); deco('N', 19, 16, 'neon', { text: 'NOODLE', ink: 'pink' }); deco('N', 22, 16, 'menu'); deco('W', 25, 18, 'window'); deco('W', 25, 19, 'window'); deco('W', 25, 20, 'window'); deco('N', 17, 16, 'vent');
-    obj('noodle', 20, 17, { w: 3, h: 1, use: { verb: 'Eat', what: 'a bowl from Ohm · 12', kind: 'eat', cost: 12, hot: 1 } });
+    obj('noodle', 20, 17, { w: 3, h: 1, use: { verb: 'Eat', what: 'a bowl from Ohm · 12', kind: 'eat', cost: 12, hot: 1, reach: 2.5 } });
     obj('stool', 20, 18); obj('stool', 21, 18); obj('stool', 22, 18); obj('table', 18, 21); obj('stool', 17, 21); obj('stool', 19, 21); obj('table', 22, 21); obj('stool', 23, 21); obj('stool', 21, 21);
     obj('vend', 24, 22, { use: { verb: 'Buy', what: 'a can of something · 4', kind: 'eat', cost: 4, small: 1 }, light: '#6fb3ab' });
     obj('shopterm', 17, 22, { use: { verb: 'Browse', what: 'the commissary catalogue', kind: 'shop' }, light: '#8a8fc9' });
-    obj('bin', 24, 17); obj('plant', 16, 23);
+    obj('bin', 24, 17); obj('plant', 16, 23); obj('crate', 24, 20, { use: { verb: 'Buy', what: 'stock for the cold box · 15', kind: 'stock' } });
     light(20.5, 16.6, '#c96a8e', 150, { neon: 1 }); light(24.5, 19, '#7e9cc4', 130, { win: 1 });
-    npc('ohm', 'Ohm', { coat: '#241119', trim: '#c96a8e', hair: '#5c434a', apron: 1 }, 21, 16, { fixed: 1, face: 1, reach: 1.6,
+    npc('ohm', 'Ohm', { coat: '#241119', trim: '#c96a8e', hair: '#5c434a', apron: 1 }, 21, 16, { fixed: 1, face: 1, reach: 2.4,
       lines: [['Sit. The broth has been on since the shift change; it knows things.', 'Twelve credits. Or tell me something about 4107 I do not know, and eight.'],
               ['The warden came through with a scanner. I gave him a bowl and he forgot what he was scanning.', 'Vesna talks about you. Not badly.'],
-              ['Rain again on the deck. The planters like it. Nobody else does.', 'Eat before your shift. Working hungry is how the tower gets you.']] });
+              ['Rain again on the deck. The planters like it. Nobody else does.', 'Eat before your shift. Working hungry is how the tower gets you.']],
+      deep: [['I fed the whole level for a week once, when the lift was out for a month. Nobody paid. Nobody asked me to.', 'It is the only week I remember properly.'], ['You cook now. I can smell it on you. Good. A tower with one cook is a tower with a problem.', 'Stock is fifteen. For you, still fifteen. I am not a charity, I am a counter.']],
+      idle: ['Broth is on.', 'Sit. Eat.', 'Twelve credits.', 'The Warden ate. He forgot to scan.'] });
     // Laundry alcove and the lift lobby on the spine.
     room('Laundry', 16, 26, 4, 3, FL.tile, WM.tile, { light: 0.5, lightCol: '#c3d9e0' });
     door('W', 16, 27); obj('washer', 18, 26, { use: { verb: 'Wash', what: 'the coat · 30 min', kind: 'laundry' } }); obj('washer', 19, 26); obj('bin', 16, 28); deco('N', 17, 26, 'pipes');
@@ -444,10 +465,12 @@
     deco('N', 9, 32, 'billboard'); deco('N', 17, 32, 'neon', { text: 'TRANSIT', ink: 'teal' }); deco('N', 20, 32, 'poster', { ink: 'rose' });
     obj('gate', 18, 33, { w: 2, h: 1, use: { verb: 'Ride', what: 'the rail to work · 8h', kind: 'commute' }, light: '#6fb3ab' });
     obj('bench', 9, 35, { w: 2, h: 1, use: { verb: 'Sit', what: 'over the city', kind: 'rest', short: 1, view: 1 } }); obj('bench', 14, 35, { w: 2, h: 1, use: { verb: 'Sit', what: 'over the city', kind: 'rest', short: 1, view: 1 } });
-    obj('lamppost', 12, 34, { light: '#d9a441', tall: 1 }); obj('lamppost', 17, 36, { light: '#d9a441', tall: 1 }); obj('bin', 8, 37); obj('planter', 20, 35, { w: 1, h: 2 });
+    obj('lamppost', 12, 34, { light: '#d9a441', tall: 1 }); obj('vent', 11, 36, { walk: 1 }); obj('lamppost', 17, 36, { light: '#d9a441', tall: 1 }); obj('bin', 8, 37); obj('planter', 20, 35, { w: 1, h: 2 });
     light(10.5, 32.8, '#8a8fc9', 170, { screen: 1 }); light(18, 32.8, '#6fb3ab', 120, { neon: 1 });
     npc('warden', 'The Warden', { coat: '#1a2330', trim: '#8a8fc9', hair: '#0b0609', cap: 1 }, 13, 34, {
       lines: [['Permit.', 'Fine. Keep off the rail; the wind takes people and the paperwork takes me.'], ['The rail is running. It is always running. That is the one thing that is.', 'Go home. It is not a good hour for anything but going home.']],
+      deep: [['Twenty years on this deck. I have seen four people go over. Two jumped. Two were pushed by the wind. I write the same form for both.', 'Keep off the rail. I mean that as a kindness.'], ['I had a flat on 41 once. 4107, as it happens.', 'Keep the window shut in the small hours. That is all I will say about it.']],
+      idle: ['Permit.', 'Off the rail.', 'Rail is running.', 'Not a good hour.'],
       sched: [{ from: 0, to: 24*60, wp: [[13.5, 34.5], [10.5, 34.5], [10.5, 36.5], [19.5, 36.5], [19.5, 34.5], [13.5, 34.5]] }], wait: 40 });
     // The roof garden at the north end: planters, a tree that should not be alive up here, a shrine of sorts.
     room('Roof garden', 9, 1, 10, 5, FL.deck, WM.rail, { open: 1 });
@@ -458,9 +481,31 @@
     obj('lamppost', 10, 5, { light: '#d9a441', tall: 1 }); obj('lamppost', 17, 5, { light: '#d9a441', tall: 1 });
     npc('kid', 'Tam', { coat: '#2a1a3a', trim: '#a884c9', hair: '#0b0609', hood: 1, small: 1 }, 15, 3, {
       lines: [['The tree is older than the tower. My mother says they built around it. I say it climbed.', 'If you stand right here the rain misses you. Right here. No, here.'], ['I saw a bird once. Not a drone. A bird.', 'Do you have credits? Not for me. For the shrine. It likes them.']],
+      deep: [['The Warden pretends he does not know me. He knew my mother. He wrote her form.', 'I put a light on the shrine for her. You can too, if you want. It counts.'], ['When I am tall I am going to carry the tree up one more floor. Vesna says somebody has to.', 'You can help. You are already tall.']],
+      idle: ['The bird was real.', 'Stand here. The rain misses.', 'It climbed.', 'The shrine likes credits.'],
       sched: [{ from: 6*60, to: 20*60, wp: [[15.5, 3.5], [12.5, 4.5], [16.5, 2.5], [15.5, 3.5]] }], wait: 90 });
     // Where you start: the corridor outside your door.
     meta.px = meta.px || 13.5; meta.py = meta.py || 10.5;
+  }
+  /* ---- finding a way ----
+     A* over tiles. A step is legal only if the tile is floor, holds no
+     furniture, and no wall stands on the edge between the two tiles. The
+     people on the level route every leg of their day through this, so nobody
+     walks through a wall or a bench again. */
+  function passable(i, j) { return inMap(i, j) && floor[T(i, j)] !== 0 && solid[T(i, j)] !== 1; }
+  function edgeOpen(i0, j0, i1, j1) { // orthogonal neighbours only
+    if (i1 > i0) return !wallW[T(i1, j0)]; if (i1 < i0) return !wallW[T(i0, j0)]; if (j1 > j0) return !wallN[T(i0, j1)]; if (j1 < j0) return !wallN[T(i0, j0)]; return true; }
+  function findPath(x0, y0, x1, y1) {
+    var s0 = T(Math.floor(x0), Math.floor(y0)), s1 = T(Math.floor(x1), Math.floor(y1)); if (s0 === s1) return [[x1, y1]];
+    var open = [s0], came = {}, gs = {}, fs = {}, i; gs[s0] = 0; fs[s0] = 0; var tx = s1 % MW, ty = Math.floor(s1/MW), guard = 0;
+    while (open.length && guard++ < 4000) {
+      var bi = 0; for (i = 1; i < open.length; i++) if (fs[open[i]] < fs[open[bi]]) bi = i; var cur = open[bi]; open.splice(bi, 1);
+      if (cur === s1) { var path = [[x1, y1]], c = cur; while (came[c] !== undefined) { c = came[c]; if (c !== s0) path.push([c % MW + 0.5, Math.floor(c/MW) + 0.5]); } path.reverse(); return path; }
+      var cx = cur % MW, cy = Math.floor(cur/MW), nb = [[cx + 1, cy], [cx - 1, cy], [cx, cy + 1], [cx, cy - 1]];
+      for (i = 0; i < 4; i++) { var nx = nb[i][0], ny = nb[i][1]; if (!passable(nx, ny) || !edgeOpen(cx, cy, nx, ny)) continue; var n = T(nx, ny), g = gs[cur] + 1;
+        if (gs[n] === undefined || g < gs[n]) { gs[n] = g; fs[n] = g + Math.abs(nx - tx) + Math.abs(ny - ty); came[n] = cur; if (open.indexOf(n) < 0) open.push(n); } }
+    }
+    return null;
   }
   function roomAt(x, y) { var i = Math.floor(x), j = Math.floor(y); return inMap(i, j) ? rooms[roomOf[T(i, j)] - 1] || null : null; }
   function isOutdoor(x, y) { var i = Math.floor(x), j = Math.floor(y); return inMap(i, j) && outdoor[T(i, j)] === 1; }
@@ -512,6 +557,11 @@
       if (wallW[T(x, y)]) { gr = g.createLinearGradient(PX(x, y), PY(x, y), PX(x + 0.45, y), PY(x + 0.45, y)); gr.addColorStop(0, ao); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(PX(x, y) - 40, PY(x, y) - 2, 80, 40); }
       if (inMap(x, y + 1) && wallN[T(x, y + 1)]) { gr = g.createLinearGradient(PX(x, y + 1), PY(x, y + 1), PX(x, y + 0.62), PY(x, y + 0.62)); gr.addColorStop(0, 'rgba(0,0,0,.28)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(PX(x, y) - 40, PY(x, y) - 2, 80, 40); }
       if (inMap(x + 1, y) && wallW[T(x + 1, y)]) { gr = g.createLinearGradient(PX(x + 1, y), PY(x + 1, y), PX(x + 0.62, y), PY(x + 0.62, y)); gr.addColorStop(0, 'rgba(0,0,0,.28)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(PX(x, y) - 40, PY(x, y) - 2, 80, 40); }
+      // Marks on the floor: a lane down the corridor, drains on the decks, a mat at every door, leaves in the garden.
+      if (name === 'concrete' && x === 13 && (y % 2 === 0)) { g.fillStyle = 'rgba(217,164,65,.14)'; g.beginPath(); g.moveTo(PX(x + 0.95, y + 0.4), PY(x + 0.95, y + 0.4)); g.lineTo(PX(x + 1.05, y + 0.4), PY(x + 1.05, y + 0.4)); g.lineTo(PX(x + 1.05, y + 1), PY(x + 1.05, y + 1)); g.lineTo(PX(x + 0.95, y + 1), PY(x + 0.95, y + 1)); g.closePath(); g.fill(); }
+      if (name === 'wet' && h % 11 === 0) { g.fillStyle = '#0b0609'; g.beginPath(); g.ellipse(PX(x + 0.5, y + 0.5), PY(x + 0.5, y + 0.5), 9, 4.5, 0, 0, 6.283); g.fill(); g.strokeStyle = 'rgba(233,216,197,.25)'; g.lineWidth = 1; g.stroke(); g.beginPath(); for (var gi = -6; gi <= 6; gi += 3) { g.moveTo(PX(x + 0.5, y + 0.5) + gi, PY(x + 0.5, y + 0.5) - 3.5); g.lineTo(PX(x + 0.5, y + 0.5) + gi - 1, PY(x + 0.5, y + 0.5) + 3.5); } g.stroke(); }
+      if (name === 'deck' && h % 4 === 0) { g.fillStyle = (h >> 5) % 2 ? '#3d7a4a' : '#5a4234'; g.globalAlpha = 0.6; for (var li = 0; li < 3; li++) g.beginPath(), g.ellipse(PX(x + 0.5, y + 0.5) + ((h >> (li*3)) % 30) - 15, PY(x + 0.5, y + 0.5) + ((h >> (li*2 + 1)) % 12) - 6, 3, 1.4, li, 0, 6.283), g.fill(); g.globalAlpha = 1; }
+      var dN = decoN[T(x, y)], dW = decoW[T(x, y)]; if ((dN && dN.kind === 'door') || (dW && dW.kind === 'door')) { g.fillStyle = '#2a1a20'; g.beginPath(); var mx = dN && dN.kind === 'door' ? x + 0.5 : x + 0.25, my = dN && dN.kind === 'door' ? y + 0.25 : y + 0.5; g.moveTo(PX(mx - 0.3, my - 0.18), PY(mx - 0.3, my - 0.18)); g.lineTo(PX(mx + 0.3, my - 0.18), PY(mx + 0.3, my - 0.18)); g.lineTo(PX(mx + 0.3, my + 0.18), PY(mx + 0.3, my + 0.18)); g.lineTo(PX(mx - 0.3, my + 0.18), PY(mx - 0.3, my + 0.18)); g.closePath(); g.fill(); g.strokeStyle = 'rgba(233,216,197,.16)'; g.lineWidth = 1; g.stroke(); }
       g.restore();
       // A hairline where two different floors meet, and the edge of the slab over the void.
       var nb = [[x, y - 1, 0], [x - 1, y, 1]]; for (var k = 0; k < 2; k++) { var nx = nb[k][0], ny = nb[k][1], nm = inMap(nx, ny) ? floor[T(nx, ny)] : 0;
@@ -548,8 +598,11 @@
     else if (mat === WM.brick) { g.strokeStyle = 'rgba(11,6,9,.42)'; g.lineWidth = 1; g.beginPath(); var row = 0; for (v = -hgt + 10; v < 0; v += 10, row++) { g.moveTo(0, v); g.lineTo(64, v); for (u = (row % 2)*10; u < 64; u += 20) { g.moveTo(u, v); g.lineTo(u, v - 10); } } g.stroke(); }
     else { // plaster: a wash, faint stains
       var hh = hash2(x*3 + side, y*7); g.fillStyle = 'rgba(0,0,0,' + (0.04 + (hh % 5)*0.02).toFixed(2) + ')'; g.fillRect((hh >> 3) % 40, -hgt + (hh >> 6) % 30, 22, 30); }
-    // baseboard and cap
+    // baseboard, corner posts where runs meet, and the cap
     g.fillStyle = 'rgba(11,6,9,.6)'; g.fillRect(0, -7, 64, 7); g.fillStyle = 'rgba(233,216,197,.06)'; g.fillRect(0, -7, 64, 1);
+    var pc = side === 0 ? [(inMap(x, y - 1) && wallW[T(x, y - 1)]) || wallW[T(x, y)], (inMap(x + 1, y - 1) && wallW[T(x + 1, y - 1)]) || (inMap(x + 1, y) && wallW[T(x + 1, y)])]
+                        : [(inMap(x - 1, y + 1) && wallN[T(x - 1, y + 1)]) || (inMap(x, y + 1) && wallN[T(x, y + 1)]), (inMap(x - 1, y) && wallN[T(x - 1, y)]) || wallN[T(x, y)]];
+    g.fillStyle = 'rgba(11,6,9,.5)'; if (pc[0]) g.fillRect(0, -hgt, 3, hgt); if (pc[1]) g.fillRect(61, -hgt, 3, hgt); g.fillStyle = 'rgba(233,216,197,.14)'; if (pc[0]) g.fillRect(3, -hgt, 1, hgt); if (pc[1]) g.fillRect(60, -hgt, 1, hgt);
     if (hgt >= WH - 1) { g.fillStyle = 'rgba(233,216,197,.28)'; g.fillRect(0, -hgt, 64, 1.5); g.fillStyle = 'rgba(0,0,0,.35)'; g.fillRect(0, -hgt + 1.5, 64, 2.5); }
     else { g.fillStyle = mixh(base, '#e9d8c5', 0.3); g.fillRect(0, -hgt - 3, 64, 3); g.fillStyle = 'rgba(233,216,197,.5)'; g.fillRect(0, -hgt - 3, 64, 1); }
     // decals, only on a wall standing at full height
@@ -558,15 +611,18 @@
   }
   function drawDeco(g, d, lit, t, hgt) {
     var k = d.kind, ink = INK[d.ink] || INK.bone;
-    if (k === 'door') { // a doorframe on a wall run left open: only the jambs
-      g.fillStyle = '#1a0d12'; g.fillRect(0, -hgt + 4, 5, hgt - 4); g.fillRect(59, -hgt + 4, 5, hgt - 4); g.fillRect(0, -hgt + 4, 64, 5); g.fillStyle = 'rgba(233,216,197,.2)'; g.fillRect(5, -hgt + 8, 1, hgt - 12); }
+    if (k === 'door') { // a frame, and a leaf that swings when someone comes through
+      g.fillStyle = '#1a0d12'; g.fillRect(0, -hgt + 4, 5, hgt - 4); g.fillRect(59, -hgt + 4, 5, hgt - 4); g.fillRect(0, -hgt + 4, 64, 5); g.fillStyle = 'rgba(233,216,197,.2)'; g.fillRect(5, -hgt + 8, 1, hgt - 12);
+      var a = d.open || 0, lw = 54*Math.cos(a*1.2), lg2 = g.createLinearGradient(5, 0, 5 + lw, 0); lg2.addColorStop(0, lit ? '#3a262c' : '#2c1c22'); lg2.addColorStop(1, lit ? '#2a1a20' : '#1e1216');
+      g.fillStyle = lg2; g.globalAlpha = 1 - a*0.35; g.fillRect(5, -hgt + 9, lw, hgt - 9); g.globalAlpha = 1; g.strokeStyle = 'rgba(11,6,9,.6)'; g.lineWidth = 1; g.strokeRect(5.5, -hgt + 9.5, lw, hgt - 10);
+      g.fillStyle = 'rgba(233,216,197,.1)'; g.fillRect(8, -hgt + 14, Math.max(0, lw - 6), 22); g.fillStyle = INK.gold; g.fillRect(5 + lw - 7, -hgt/2, 3, 1.5); }
     else if (k === 'window') { g.fillStyle = '#0b0609'; g.fillRect(9, -76, 46, 48);
       var sk = g.createLinearGradient(0, -76, 0, -28); sk.addColorStop(0, '#12101c'); sk.addColorStop(1, '#2a1a26'); g.fillStyle = sk; g.fillRect(11, -74, 42, 44);
       g.fillStyle = 'rgba(233,216,197,.55)'; var hh = hash2(d.kind.length, 3); for (var i = 0; i < 9; i++) { var wx = 13 + (hh*(i + 1) >>> 3) % 38, wy = -70 + ((hh*(i + 3)) >>> 5) % 38; if ((hh >> i) & 1) g.fillRect(wx, wy, 1.5, 1.5); }
       g.strokeStyle = 'rgba(126,156,196,.18)'; g.lineWidth = 1; g.beginPath(); for (i = 0; i < 6; i++) { var rx = 14 + i*7 + (t*40 % 7); g.moveTo(rx, -72); g.lineTo(rx - 2, -32); } g.stroke();
       g.strokeStyle = 'rgba(233,216,197,.16)'; g.lineWidth = 1.5; g.strokeRect(9.75, -75.25, 44.5, 46.5); g.beginPath(); g.moveTo(32, -76); g.lineTo(32, -28); g.stroke();
       g.fillStyle = 'rgba(233,216,197,.07)'; g.beginPath(); g.moveTo(12, -74); g.lineTo(30, -74); g.lineTo(12, -50); g.closePath(); g.fill(); }
-    else if (k === 'screen') { g.fillStyle = '#0b0609'; g.fillRect(8, -70, 48, 30); var on = Math.floor(t*0.5) % 6 !== 5; if (on) { var sg = g.createLinearGradient(0, -70, 0, -40); sg.addColorStop(0, '#3a3a6a'); sg.addColorStop(1, '#1a1a3a'); g.fillStyle = sg; g.fillRect(10, -68, 44, 26);
+    else if (k === 'screen') { g.fillStyle = '#0b0609'; g.fillRect(8, -70, 48, 30); var on = Math.floor(t*0.5) % 6 !== 5 && !(ev && ev.kind === 'blackout'); if (on) { var sg = g.createLinearGradient(0, -70, 0, -40); sg.addColorStop(0, '#3a3a6a'); sg.addColorStop(1, '#1a1a3a'); g.fillStyle = sg; g.fillRect(10, -68, 44, 26);
         g.fillStyle = 'rgba(138,143,201,.55)'; for (var r = 0; r < 4; r++) g.fillRect(14, -64 + r*6, 12 + ((t*3 + r) % 3)*8, 2); g.fillStyle = 'rgba(233,216,197,.15)'; g.fillRect(10, -68 + ((t*30) % 26), 44, 1); } }
     else if (k === 'panelscreen') { g.fillStyle = '#0b0609'; g.fillRect(14, -72, 36, 44); g.fillStyle = '#132020'; g.fillRect(16, -70, 32, 40); g.fillStyle = 'rgba(111,179,171,.7)'; g.save(); g.scale(0.5, 1); g.font = '500 7px ui-monospace, Menlo, monospace'; g.fillText('LVL 41', 38, -60); g.fillText('LIFT ' + (Math.floor(t) % 2 ? 'UP' : '··'), 38, -50); g.restore(); g.fillRect(19, -44, 10 + (Math.floor(t*2) % 4)*5, 2); }
     else if (k === 'poster') { g.fillStyle = mixh(ink, '#0b0609', 0.6); g.fillRect(18, -66, 28, 36); g.fillStyle = ink; g.globalAlpha = 0.8; g.fillRect(20, -64, 24, 8); g.globalAlpha = 0.4; g.fillRect(20, -52, 24, 3); g.fillRect(20, -46, 18, 3); g.fillRect(20, -40, 22, 3); g.globalAlpha = 1; g.strokeStyle = 'rgba(233,216,197,.2)'; g.lineWidth = 1; g.strokeRect(18.5, -66.5, 28, 36); }
@@ -576,7 +632,8 @@
     else if (k === 'pipes') { g.strokeStyle = '#3d1f28'; g.lineWidth = 4; g.beginPath(); g.moveTo(0, -80); g.lineTo(64, -80); g.moveTo(0, -20); g.lineTo(64, -20); g.moveTo(50, -80); g.lineTo(50, -20); g.stroke(); g.strokeStyle = 'rgba(233,216,197,.18)'; g.lineWidth = 1; g.beginPath(); g.moveTo(0, -82); g.lineTo(64, -82); g.moveTo(0, -22); g.lineTo(64, -22); g.stroke(); g.fillStyle = '#5c434a'; g.fillRect(12, -84, 4, 8); g.fillRect(34, -24, 4, 8); }
     else if (k === 'vent') { g.fillStyle = '#12080c'; g.fillRect(20, -78, 24, 14); g.strokeStyle = 'rgba(233,216,197,.25)'; g.lineWidth = 1; g.beginPath(); for (var vv = -76; vv < -64; vv += 3) { g.moveTo(22, vv); g.lineTo(42, vv); } g.stroke(); }
     else if (k === 'mirror') { g.fillStyle = '#1a2028'; g.fillRect(16, -68, 32, 28); g.fillStyle = 'rgba(233,216,197,.12)'; g.beginPath(); g.moveTo(18, -66); g.lineTo(30, -66); g.lineTo(18, -48); g.closePath(); g.fill(); g.strokeStyle = 'rgba(233,216,197,.3)'; g.strokeRect(16.5, -68.5, 32, 28); }
-    else if (k === 'lift') { g.fillStyle = '#2a2a30'; g.fillRect(4, -84, 56, 84); g.fillStyle = '#1a1a20'; g.fillRect(8, -80, 24, 80); g.fillRect(34, -80, 22, 80); g.fillStyle = 'rgba(233,216,197,.16)'; g.fillRect(8, -80, 1, 80); g.fillRect(34, -80, 1, 80); g.fillStyle = INK.gold; g.globalAlpha = 0.6 + 0.4*Math.sin(t*2); g.fillRect(28, -90, 8, 3); g.globalAlpha = 1; }
+    else if (k === 'lift') { g.fillStyle = '#2a2a30'; g.fillRect(4, -84, 56, 84); var lo = liftOpen*20; if (lo > 1) { var cg2 = g.createLinearGradient(0, -80, 0, 0); cg2.addColorStop(0, '#3a2a20'); cg2.addColorStop(1, '#1a1410'); g.fillStyle = cg2; g.fillRect(8, -80, 48, 80); g.fillStyle = 'rgba(217,164,65,.35)'; g.fillRect(12, -78, 40, 3); }
+      g.fillStyle = '#1a1a20'; g.fillRect(8 - lo, -80, 24, 80); g.fillRect(34 + lo, -80, 22, 80); g.fillStyle = 'rgba(233,216,197,.16)'; g.fillRect(8, -80, 1, 80); g.fillRect(34, -80, 1, 80); g.fillStyle = INK.gold; g.globalAlpha = 0.6 + 0.4*Math.sin(t*2); g.fillRect(28, -90, 8, 3); g.globalAlpha = 1; }
     else if (k === 'billboard') { g.fillStyle = '#0b0609'; g.fillRect(2, -88, 60, 40); var bg = g.createLinearGradient(0, -88, 60, -48); bg.addColorStop(0, '#2a1a3a'); bg.addColorStop(1, '#1a2a3a'); g.fillStyle = bg; g.fillRect(4, -86, 56, 36);
       g.save(); g.scale(0.5, 1); g.fillStyle = INK.peri; g.shadowColor = INK.peri; g.shadowBlur = 8; g.font = '400 13px Georgia, serif'; g.textAlign = 'center'; var ph = Math.floor(t/4) % 3; g.fillText(['ASCEND', 'LEVEL 90', 'APPLY'][ph], 64, -64); g.restore();
       g.fillStyle = 'rgba(233,216,197,.4)'; g.fillRect(8, -56, 20 + ph*12, 1.5); g.fillStyle = 'rgba(233,216,197,.1)'; g.fillRect(4, -86 + ((t*24) % 36), 56, 1); }
@@ -642,6 +699,9 @@
     bin: function (g, ob) { box(g, 0.3, 0.3, 0, 0.4, 0.4, 24, '#2a2a30', { top: '#1a1a20' }); g.fillStyle = '#12080c'; g.beginPath(); g.ellipse(PX(0.5, 0.5), PY(0.5, 0.5) - 24, 8, 4, 0, 0, 6.283); g.fill(); },
     washer: function (g, ob) { box(g, 0.1, 0.1, 0, 0.8, 0.8, 40, '#c3a9ad', { top: '#d9c8b5', ef: '#8f7078' }); g.fillStyle = '#1a2028'; g.beginPath(); g.ellipse(PX(0.5, 0.9), PY(0.5, 0.9) - 20, 11, 8, 0, 0, 6.283); g.fill(); g.strokeStyle = 'rgba(233,216,197,.4)'; g.lineWidth = 1.5; g.stroke(); g.fillStyle = INK.teal; g.fillRect(PX(0.2, 0.9) - 2, PY(0.2, 0.9) - 37, 3, 2); },
     liftcall: function () {},
+    crate: function (g, ob) { box(g, 0.15, 0.15, 0, 0.7, 0.7, 26, '#3a2a22', { top: '#5a4234' }); box(g, 0.2, 0.2, 26, 0.6, 0.6, 14, '#3a2a22', { top: '#4a3628' }); g.strokeStyle = 'rgba(11,6,9,.5)'; g.lineWidth = 1; g.beginPath(); g.moveTo(PX(0.15, 0.85), PY(0.15, 0.85) - 13); g.lineTo(PX(0.85, 0.85), PY(0.85, 0.85) - 13); g.stroke(); g.fillStyle = INK.gold; g.globalAlpha = 0.7; g.fillRect(PX(0.5, 0.85) - 5, PY(0.5, 0.85) - 22, 10, 4); g.globalAlpha = 1; },
+    vent: function (g, ob) { g.fillStyle = '#12080c'; g.beginPath(); g.moveTo(PX(0.25, 0.25), PY(0.25, 0.25)); g.lineTo(PX(0.75, 0.25), PY(0.75, 0.25)); g.lineTo(PX(0.75, 0.75), PY(0.75, 0.75)); g.lineTo(PX(0.25, 0.75), PY(0.25, 0.75)); g.closePath(); g.fill(); g.strokeStyle = 'rgba(233,216,197,.3)'; g.lineWidth = 1; g.stroke(); g.beginPath(); for (var i = 1; i < 5; i++) { g.moveTo(PX(0.25 + i*0.1, 0.25), PY(0.25 + i*0.1, 0.25)); g.lineTo(PX(0.25 + i*0.1, 0.75), PY(0.25 + i*0.1, 0.75)); } g.stroke(); },
+    parcel: function (g, ob) { box(g, 0.3, 0.3, 0, 0.4, 0.4, 14, '#5a4234', { top: '#7a5a44' }); g.strokeStyle = INK.pink; g.lineWidth = 1.5; g.beginPath(); g.moveTo(PX(0.3, 0.5), PY(0.3, 0.5) - 14); g.lineTo(PX(0.7, 0.5), PY(0.7, 0.5) - 14); g.moveTo(PX(0.5, 0.3), PY(0.5, 0.3) - 14); g.lineTo(PX(0.5, 0.7), PY(0.5, 0.7) - 14); g.stroke(); },
     bench: function (g, ob) { var w = ob.w, d = ob.h; box(g, 0.1, 0.35, 0, 0.1, 0.3, 16, '#2a2a30', { noline: 1 }); box(g, w - 0.2, 0.35, 0, 0.1, 0.3, 16, '#2a2a30', { noline: 1 }); box(g, 0, 0.3, 16, w, 0.45, 3, '#3a2a22', { top: '#5a4234' }); box(g, 0, 0.3, 19, w, 0.08, 16, '#3a2a22', { top: '#5a4234' }); g.strokeStyle = 'rgba(11,6,9,.5)'; g.lineWidth = 1; for (var i = 1; i < 4; i++) { g.beginPath(); g.moveTo(PX(0, 0.3 + i*0.11), PY(0, 0.3 + i*0.11) - 19); g.lineTo(PX(w, 0.3 + i*0.11), PY(w, 0.3 + i*0.11) - 19); g.stroke(); } },
     lamppost: function (g, ob) { box(g, 0.4, 0.4, 0, 0.2, 0.2, 4, '#2a2a30'); g.strokeStyle = '#3d3a40'; g.lineWidth = 3; g.lineCap = 'round'; g.beginPath(); g.moveTo(PX(0.5, 0.5), PY(0.5, 0.5) - 4); g.lineTo(PX(0.5, 0.5), PY(0.5, 0.5) - 110); g.lineTo(PX(0.5, 0.5) + 14, PY(0.5, 0.5) - 118); g.stroke();
       var col = ob.light || INK.gold, lx = PX(0.5, 0.5) + 16, ly = PY(0.5, 0.5) - 114; g.fillStyle = '#1a1a20'; g.fillRect(lx - 8, ly - 4, 16, 6); g.fillStyle = col; g.shadowColor = col; g.shadowBlur = 10; g.fillRect(lx - 6, ly + 2, 12, 2); g.shadowBlur = 0; glow(g, lx, ly + 4, col, 34); },
@@ -671,32 +731,57 @@
      Small figures in long coats, four facings from two drawings mirrored, a
      four-frame walk. The key light is the same one the walls use. */
   var FIGC = {};
-  function figSprite(look, face, frame) {
-    var key = (look.id || JSON.stringify(look)) + '|' + face + '|' + frame + '@' + dpr;
+  function figSprite(look, face, frame, pose) {
+    pose = pose || ''; var key = (look.id || JSON.stringify(look)) + '|' + face + '|' + frame + '|' + pose + '@' + dpr;
     if (FIGC[key]) return FIGC[key];
-    var W = 40, H = 64, c = document.createElement('canvas'); c.width = W*dpr; c.height = H*dpr; var g = c.getContext('2d');
+    var W = 64, H = 72, c = document.createElement('canvas'); c.width = W*dpr; c.height = H*dpr; var g = c.getContext('2d');
     var mirror = face === 1 || face === 3, back = face >= 2, sc = look.small ? 0.8 : 1;
     g.setTransform(dpr*(mirror ? -1 : 1), 0, 0, dpr, (mirror ? W : 0)*dpr, 0); g.translate(W/2, H - 6); g.scale(sc, sc);
     var coat = look.coat || '#3d1f28', trim = look.trim || INK.bone, skin = look.skin || '#d9c8b5', hair = look.hair || '#0b0609';
-    var cl = mixh(coat, '#e9d8c5', 0.18), cd = mixh(coat, '#0b0609', 0.45), sw = frame === 0 ? 0 : Math.sin(frame/4*6.283), bob = frame === 0 ? 0 : Math.abs(Math.cos(frame/4*6.283))*1.2;
+    var cl = mixh(coat, '#e9d8c5', 0.18), cd = mixh(coat, '#0b0609', 0.45), idle = frame === 5, walk = frame >= 1 && frame <= 4;
+    var sw = walk ? Math.sin(frame/4*6.283) : 0, bob = walk ? Math.abs(Math.cos(frame/4*6.283))*1.2 : idle ? -0.7 : 0;
     g.lineJoin = 'round'; g.lineCap = 'round';
-    shadowEllipse(g, 0, 2, 12, 5, 0.5);
-    // legs
-    g.strokeStyle = '#1a0d12'; g.lineWidth = 4.5; g.beginPath(); g.moveTo(-3.5, -18); g.lineTo(-3.5 - sw*3, -1); g.moveTo(3.5, -18); g.lineTo(3.5 + sw*3, -1); g.stroke();
-    g.strokeStyle = '#2a1c22'; g.lineWidth = 2; g.beginPath(); g.moveTo(-3.5 - sw*3, -1); g.lineTo(-5.5 - sw*3, 0); g.moveTo(3.5 + sw*3, -1); g.lineTo(5.5 + sw*3, 0); g.stroke();
-    // coat: a long tapered body, darker on the shaded side
-    g.beginPath(); g.moveTo(-8, -16 + bob); g.lineTo(-7, -38 + bob); g.quadraticCurveTo(0, -44 + bob, 7, -38 + bob); g.lineTo(9, -16 + bob); g.quadraticCurveTo(0, -13 + bob, -8, -16 + bob); g.closePath();
+    if (pose === 'lie') { // under the cover, head on the pillow: drawn over the bed
+      var d = [0.894, 0.447], nx = -d[1], ny = d[0], i; g.save(); g.translate(0, -6);
+      g.beginPath(); for (i = 0; i <= 12; i++) { var tt = -26 + i*4.6, wv = 11 + Math.sin(i*1.3)*1.2; g.lineTo(d[0]*tt + nx*wv, d[1]*tt + ny*wv); } for (i = 12; i >= 0; i--) { tt = -26 + i*4.6; wv = 11 + Math.sin(i*1.1)*1.2; g.lineTo(d[0]*tt - nx*wv, d[1]*tt - ny*wv); } g.closePath();
+      var bg = g.createLinearGradient(-20, -10, 20, 14); bg.addColorStop(0, '#5c2e3c'); bg.addColorStop(0.5, '#4a2632'); bg.addColorStop(1, '#2e1620'); g.fillStyle = bg; g.fill(); g.strokeStyle = 'rgba(11,6,9,.6)'; g.lineWidth = 1; g.stroke();
+      g.strokeStyle = 'rgba(233,216,197,.16)'; g.beginPath(); g.moveTo(d[0]*-10 + nx*10, d[1]*-10 + ny*10); g.lineTo(d[0]*20 + nx*8, d[1]*20 + ny*8); g.stroke();
+      g.fillStyle = skin; g.beginPath(); g.ellipse(d[0]*-33, d[1]*-33 - 3, 6, 5.2, 0.46, 0, 6.283); g.fill(); g.fillStyle = hair; g.beginPath(); g.ellipse(d[0]*-35, d[1]*-35 - 5, 6, 4, 0.46, 3.3, 6.1); g.fill();
+      g.strokeStyle = 'rgba(11,6,9,.45)'; g.beginPath(); g.ellipse(d[0]*-33, d[1]*-33 - 3, 6, 5.2, 0.46, 0, 6.283); g.stroke(); g.restore();
+      FIGC[key] = { c: c, w: W, h: H, ax: W/2, ay: H - 6 }; return FIGC[key]; }
+    var seated = pose === 'sit' || pose === 'work' || pose === 'floor' || pose === 'eatsit', lift = seated ? 9 : 0;
+    shadowEllipse(g, 0, 2, 12, 5, seated ? 0.35 : 0.5);
+    if (pose === 'work') { g.fillStyle = '#2a2a30'; g.fillRect(-7, -30, 14, 3); g.fillStyle = '#1a1a20'; g.fillRect(-7, -30, 14, 16); } // a chair back behind
+    // legs: walking, standing, or folded for a seat
+    g.strokeStyle = '#1a0d12'; g.lineWidth = 4.5; g.beginPath();
+    if (seated) { var fl = pose === 'floor'; g.moveTo(-3.5, -18 + lift); g.lineTo(-7, -12 + lift); g.lineTo(-7, fl ? -8 : -1); g.moveTo(3.5, -18 + lift); g.lineTo(7, -12 + lift); g.lineTo(7, fl ? -8 : -1); }
+    else { g.moveTo(-3.5, -18); g.lineTo(-3.5 - sw*3, -1); g.moveTo(3.5, -18); g.lineTo(3.5 + sw*3, -1); } g.stroke();
+    g.strokeStyle = '#2a1c22'; g.lineWidth = 2.4; g.beginPath(); if (seated) { g.moveTo(-7, -1); g.lineTo(-9.5, 0); g.moveTo(7, -1); g.lineTo(9.5, 0); } else { g.moveTo(-3.5 - sw*3, -1); g.lineTo(-6 - sw*3, 0); g.moveTo(3.5 + sw*3, -1); g.lineTo(6 + sw*3, 0); } g.stroke();
+    // coat: a long tapered body with lapels, darker on the shaded side
+    var yb = bob + lift, hem = seated ? -14 : -16;
+    g.beginPath(); g.moveTo(-8.5, hem + yb); g.lineTo(-7.5, -38 + yb); g.quadraticCurveTo(0, -44.5 + yb, 7.5, -38 + yb); g.lineTo(9.5, hem + yb); g.quadraticCurveTo(0, hem + 3 + yb, -8.5, hem + yb); g.closePath();
     var cg = g.createLinearGradient(-8, 0, 9, 0); cg.addColorStop(0, cl); cg.addColorStop(0.5, coat); cg.addColorStop(1, cd); g.fillStyle = cg; g.fill(); g.strokeStyle = 'rgba(11,6,9,.7)'; g.lineWidth = 1; g.stroke();
-    if (!back) { g.strokeStyle = 'rgba(11,6,9,.5)'; g.beginPath(); g.moveTo(0, -37 + bob); g.lineTo(0, -17 + bob); g.stroke(); g.fillStyle = trim; g.fillRect(-1, -36 + bob, 2, 5); }
-    else { g.strokeStyle = 'rgba(233,216,197,.12)'; g.beginPath(); g.moveTo(-5, -36 + bob); g.lineTo(-4, -18 + bob); g.stroke(); }
-    if (look.apron && !back) { g.fillStyle = '#c3a9ad'; g.beginPath(); g.moveTo(-5, -34 + bob); g.lineTo(5, -34 + bob); g.lineTo(6, -18 + bob); g.lineTo(-6, -18 + bob); g.closePath(); g.fill(); }
-    // arms
-    g.strokeStyle = coat; g.lineWidth = 3.6; g.beginPath(); g.moveTo(-8, -36 + bob); g.lineTo(-10 + sw*2.5, -22 + bob); g.moveTo(8, -36 + bob); g.lineTo(10 - sw*2.5, -22 + bob); g.stroke();
-    g.fillStyle = skin; g.beginPath(); g.arc(-10 + sw*2.5, -21 + bob, 2, 0, 6.283); g.arc(10 - sw*2.5, -21 + bob, 2, 0, 6.283); g.fill();
-    if (look.scarf) { g.strokeStyle = trim; g.lineWidth = 3; g.beginPath(); g.moveTo(-6, -40 + bob); g.quadraticCurveTo(0, -36 + bob, 6, -40 + bob); g.stroke(); if (!back) { g.beginPath(); g.moveTo(3, -38 + bob); g.lineTo(5, -26 + bob); g.stroke(); } }
-    if (look.bag) { g.fillStyle = mixh('#d9a441', '#0b0609', 0.4); g.fillRect(6, -28 + bob, 6, 8); g.strokeStyle = 'rgba(217,164,65,.6)'; g.lineWidth = 1; g.beginPath(); g.moveTo(-4, -42 + bob); g.lineTo(9, -28 + bob); g.stroke(); }
+    if (!back) { g.strokeStyle = 'rgba(11,6,9,.5)'; g.beginPath(); g.moveTo(0, -36 + yb); g.lineTo(0, hem - 1 + yb); g.stroke();
+      g.fillStyle = 'rgba(11,6,9,.35)'; g.beginPath(); g.moveTo(-1, -38 + yb); g.lineTo(-6.5, -33 + yb); g.lineTo(-1, -29 + yb); g.closePath(); g.moveTo(1, -38 + yb); g.lineTo(6.5, -33 + yb); g.lineTo(1, -29 + yb); g.closePath(); g.fill();
+      g.fillStyle = trim; g.fillRect(-0.8, -31 + yb, 1.6, 1.6); g.fillRect(-0.8, -26 + yb, 1.6, 1.6); g.fillStyle = 'rgba(11,6,9,.5)'; g.fillRect(-7, -24 + yb, 14, 1.5); }
+    else { g.strokeStyle = 'rgba(233,216,197,.12)'; g.beginPath(); g.moveTo(-5, -36 + yb); g.lineTo(-4, -18 + yb); g.stroke(); g.fillStyle = 'rgba(11,6,9,.35)'; g.fillRect(-6, -30 + yb, 12, 1); }
+    if (look.apron && !back) { g.fillStyle = '#c3a9ad'; g.beginPath(); g.moveTo(-5, -34 + yb); g.lineTo(5, -34 + yb); g.lineTo(6, hem - 2 + yb); g.lineTo(-6, hem - 2 + yb); g.closePath(); g.fill(); g.fillStyle = 'rgba(11,6,9,.25)'; g.fillRect(-5, -33 + yb, 10, 1); }
+    // arms, by what the hands are doing
+    g.strokeStyle = coat; g.lineWidth = 3.6; g.beginPath();
+    if (pose === 'work' || pose === 'cook') { var tj = pose === 'work' ? (frame % 2) : 0; g.moveTo(-8, -36 + yb); g.lineTo(-9, -27 + yb); g.lineTo(-4, -22 + tj + yb); g.moveTo(8, -36 + yb); g.lineTo(9, -27 + yb); g.lineTo(4, -22 - tj + yb); }
+    else if (pose === 'eat' || pose === 'eatsit') { g.moveTo(-8, -36 + yb); g.lineTo(-9, -28 + yb); g.lineTo(-3, -27 + yb); g.moveTo(8, -36 + yb); g.lineTo(9, -28 + yb); g.lineTo(3, -27 + yb); }
+    else if (pose === 'shower') { g.moveTo(-8, -36 + yb); g.lineTo(-11, -44 + yb); g.lineTo(-5, -48 + yb); g.moveTo(8, -36 + yb); g.lineTo(11, -44 + yb); g.lineTo(5, -48 + yb); }
+    else if (pose === 'talk') { var up = frame % 2 ? 4 : 0; g.moveTo(-8, -36 + yb); g.lineTo(-10, -22 + yb); g.moveTo(8, -36 + yb); g.lineTo(13, -30 - up + yb); }
+    else if (seated) { g.moveTo(-8, -36 + yb); g.lineTo(-9, -22 + yb); g.moveTo(8, -36 + yb); g.lineTo(9, -22 + yb); }
+    else { g.moveTo(-8, -36 + yb); g.lineTo(-10 + sw*2.5, -22 + yb); g.moveTo(8, -36 + yb); g.lineTo(10 - sw*2.5, -22 + yb); }
+    g.stroke();
+    var hands = (pose === 'work' || pose === 'cook') ? [[-4, -22 + (pose === 'work' ? frame % 2 : 0)], [4, -22 - (pose === 'work' ? frame % 2 : 0)]] : (pose === 'eat' || pose === 'eatsit') ? [[-3, -27], [3, -27]] : pose === 'shower' ? [[-5, -48], [5, -48]] : pose === 'talk' ? [[-10, -22], [13, -30 - (frame % 2 ? 4 : 0)]] : seated ? [[-9, -22], [9, -22]] : [[-10 + sw*2.5, -22], [10 - sw*2.5, -22]];
+    g.fillStyle = skin; g.beginPath(); g.arc(hands[0][0], hands[0][1] + yb, 2.1, 0, 6.283); g.arc(hands[1][0], hands[1][1] + yb, 2.1, 0, 6.283); g.fill();
+    if (pose === 'eat' || pose === 'eatsit') { g.fillStyle = '#c3a9ad'; g.beginPath(); g.ellipse(0, -26 + yb, 5.5, 2.6, 0, 0, 6.283); g.fill(); g.strokeStyle = 'rgba(11,6,9,.5)'; g.lineWidth = 1; g.stroke(); }
+    if (look.scarf) { g.strokeStyle = trim; g.lineWidth = 3; g.beginPath(); g.moveTo(-6, -40 + yb); g.quadraticCurveTo(0, -36 + yb, 6, -40 + yb); g.stroke(); if (!back) { g.beginPath(); g.moveTo(3, -38 + yb); g.lineTo(5, -26 + yb); g.stroke(); } }
+    if (look.bag) { g.fillStyle = mixh('#d9a441', '#0b0609', 0.4); g.fillRect(6, -28 + yb, 6, 8); g.strokeStyle = 'rgba(217,164,65,.6)'; g.lineWidth = 1; g.beginPath(); g.moveTo(-4, -42 + yb); g.lineTo(9, -28 + yb); g.stroke(); }
     // head
-    var hy = -48 + bob; g.fillStyle = skin; g.beginPath(); g.ellipse(0, hy, 5.2, 6, 0, 0, 6.283); g.fill();
+    var bob2 = bob; bob = yb; var hy = -48 + bob + (pose === 'floor' ? 3 : 0); g.fillStyle = skin; g.beginPath(); g.ellipse(0, hy, 5.2, 6, 0, 0, 6.283); g.fill();
     var hg = g.createRadialGradient(-2, hy - 2, 1, 0, hy, 7); hg.addColorStop(0, 'rgba(255,255,255,.18)'); hg.addColorStop(1, 'rgba(60,20,30,.35)'); g.fillStyle = hg; g.fill();
     if (look.hood) { g.fillStyle = coat; g.beginPath(); g.moveTo(-7, hy + 2); g.quadraticCurveTo(-7, hy - 9, 0, hy - 9); g.quadraticCurveTo(7, hy - 9, 7, hy + 2); g.lineTo(6, hy + 4); g.quadraticCurveTo(0, hy + 1, -6, hy + 4); g.closePath(); g.fill(); g.strokeStyle = 'rgba(11,6,9,.6)'; g.lineWidth = 1; g.stroke(); if (back) { g.fillStyle = cd; g.beginPath(); g.ellipse(0, hy - 1, 5, 6.5, 0, 0, 6.283); g.fill(); } }
     else { g.fillStyle = hair; g.beginPath(); if (back) g.ellipse(0, hy - 0.5, 5.4, 6.2, 0, 0, 6.283); else { g.moveTo(-5.4, hy); g.quadraticCurveTo(-5.4, hy - 7.5, 0, hy - 7); g.quadraticCurveTo(5.4, hy - 7.5, 5.4, hy - 1); g.quadraticCurveTo(3, hy - 4, 0, hy - 3.5); g.quadraticCurveTo(-3, hy - 4, -5.4, hy); } g.fill(); }
@@ -707,6 +792,21 @@
     g.strokeStyle = 'rgba(126,156,196,.35)'; g.lineWidth = 1.2; g.beginPath(); g.moveTo(8, -34 + bob); g.lineTo(9.4, -18 + bob); g.stroke();
     FIGC[key] = { c: c, w: W, h: H, ax: W/2, ay: H - 6 }; return FIGC[key];
   }
+
+  /* ---- particles: steam, embers, dust in the light ---- */
+  var parts = [];
+  function spawnPart(x, y, z, kind) { if (parts.length > 160) return; var pa = { x: x, y: y, z: z, kind: kind, t: 0 };
+    if (kind === 'steam') { pa.life = 1.6 + Math.random(); pa.vx = (Math.random() - 0.5)*0.05; pa.vy = (Math.random() - 0.5)*0.05; pa.vz = 14 + Math.random()*10; pa.r = 2 + Math.random()*2; }
+    else if (kind === 'ember') { pa.life = 1.2 + Math.random()*0.8; pa.vx = (Math.random() - 0.5)*0.08; pa.vy = (Math.random() - 0.5)*0.08; pa.vz = 10 + Math.random()*14; pa.r = 0.9; }
+    else if (kind === 'mote') { pa.life = 3 + Math.random()*3; pa.vx = (Math.random() - 0.5)*0.04; pa.vy = (Math.random() - 0.5)*0.04; pa.vz = (Math.random() - 0.5)*3; pa.r = 0.8; }
+    else if (kind === 'drip') { pa.life = 0.5; pa.vx = 0; pa.vy = 0; pa.vz = -90; pa.r = 0.8; }
+    parts.push(pa); }
+  function updateParts(dt) { for (var i = parts.length - 1; i >= 0; i--) { var pa = parts[i]; pa.t += dt; pa.x += pa.vx*dt; pa.y += pa.vy*dt; pa.z += pa.vz*dt; if (pa.kind === 'steam') { pa.vz *= 0.985; pa.r += dt*3; } if (pa.t > pa.life) parts.splice(i, 1); } }
+  function drawParts(g) { for (var i = 0; i < parts.length; i++) { var pa = parts[i], k = pa.t/pa.life, sx = PX(pa.x, pa.y), sy = PY(pa.x, pa.y) - pa.z;
+      if (pa.kind === 'steam') { g.fillStyle = 'rgba(233,216,197,' + (0.16*(1 - k)).toFixed(3) + ')'; g.beginPath(); g.arc(sx, sy, pa.r, 0, 6.283); g.fill(); }
+      else if (pa.kind === 'ember') { g.fillStyle = k < 0.6 ? INK.gold : INK.rose; g.globalAlpha = 1 - k; g.fillRect(sx - 0.8, sy - 0.8, 1.6, 1.6); g.globalAlpha = 1; }
+      else if (pa.kind === 'mote') { g.fillStyle = 'rgba(233,216,197,' + (0.28*Math.sin(k*3.1416)).toFixed(3) + ')'; g.fillRect(sx, sy, 1.2, 1.2); }
+      else { g.strokeStyle = 'rgba(126,156,196,.5)'; g.lineWidth = 1; g.beginPath(); g.moveTo(sx, sy - 4); g.lineTo(sx, sy); g.stroke(); } } }
 
   /* ---- the city below ----
      Three parallax layers of towers with lit windows, baked once at load and
@@ -736,20 +836,53 @@
      One real second is one minute of the level's day. Needs fall by the hour;
      what you do with the things around you fills them. Sleeping, working and
      riding the rail skip time under a fade, with the clock running. */
-  var P = { x: 13.5, y: 10.5, face: 0, frame: 0, ph: 0, vx: 0, vy: 0, moving: false, act: null, r: 0.28 };
+  var P = { x: 13.5, y: 10.5, face: 0, frame: 0, ph: 0, vx: 0, vy: 0, moving: false, act: null, r: 0.28, pose: '', onObj: null, actT: 0, say: null, sayT: 0 };
   var camX = 0, camY = 0, zoom = 1, running = false, paused = false, skipping = null, lastSave = 0, dirty = false, flash = 0, toastT = 0, wallCut = new Float32Array(MW*MH*2), near = null, nearNpc = null, verbShown = '';
-  var storm = { wx: 0, ph: 0, sp: [], acc: 0, boltT: 50 }, bedKey = -1;
-  var DECAY = { rest: 4.2, hunger: 5.5, hygiene: 3.2, spirit: 2.6 };  // per game hour
-  var NEEDN = { rest: 'Rest', hunger: 'Hunger', hygiene: 'Hygiene', spirit: 'Spirit' };
-  function needAvg() { var n = meta.needs; return (n.rest + n.hunger + n.hygiene + n.spirit)/4; }
+  var storm = { wx: 0, ph: 0, sp: [], acc: 0, boltT: 50 }, bedKey = -1, partT = 0;
+  var DECAY = { rest: 4.2, hunger: 5.5, hygiene: 3.2, spirit: 2.6, warmth: 1.4 };  // per game hour
+  var NEEDN = { rest: 'Rest', hunger: 'Hunger', hygiene: 'Hygiene', spirit: 'Spirit', warmth: 'Warmth' };
+  function needAvg() { var n = meta.needs; return (n.rest + n.hunger + n.hygiene + n.spirit + n.warmth)/5; }
+  function skillLv(k) { return Math.min(10, Math.floor(Math.sqrt((meta.skills[k] || 0)/6))); }
+  function gainSkill(k, xp) { var b = skillLv(k); meta.skills[k] = (meta.skills[k] || 0) + xp; var a = skillLv(k); if (a > b) { toast('', SKILLN[k] + ' ' + a + '. ' + SKILLD[k]); Snd.done(); } dirty = true; }
+  var SKILLN = { focus: 'Focus', cooking: 'Cooking', charm: 'Charm', fitness: 'Fitness' }, SKILLD = { focus: 'Shifts pay better.', cooking: 'What you cook does more.', charm: 'People warm to you faster.', fitness: 'You walk quicker and feel the cold less.' };
   function bump(k, v) { meta.needs[k] = clamp(meta.needs[k] + v, 0, 100); dirty = true; }
-  function advance(min) { // game minutes pass: decay, the day rolls, the hour chimes
-    var before = meta.min; meta.min += min; var h = min/60;
-    for (var k in DECAY) meta.needs[k] = clamp(meta.needs[k] - DECAY[k]*h, 0, 100);
-    while (meta.min >= 1440) { meta.min -= 1440; meta.day++; meta.seen.shrine = 0; }
+  function advance(min) { // game minutes pass: decay, the day rolls, the hour chimes, rent falls due
+    var before = meta.min, out = isOutdoor(P.x, P.y), h = min/60; meta.min += min;
+    for (var k in DECAY) { var r = DECAY[k]; if (k === 'warmth') r = out ? (6 - skillLv('fitness')*0.25)*(meta.own.coat ? 0.55 : 1)*(ev && ev.kind === 'storm' ? 1.8 : 1) : 1.4; if (k === 'spirit' && (meta.needs.hunger <= 0 || meta.needs.warmth <= 0)) r *= 2.2; meta.needs[k] = clamp(meta.needs[k] - r*h, 0, 100); }
+    if (!out && meta.needs.warmth < 60) meta.needs.warmth = clamp(meta.needs.warmth + 2.5*h, 0, 100);
+    var rolled = false; while (meta.min >= 1440) { meta.min -= 1440; meta.day++; meta.seen.shrine = 0; rolled = true; }
+    if (rolled || meta.wantDay !== meta.day) dayStart();
     if (Math.floor(before/60) !== Math.floor(meta.min/60) && running && !skipping) { var hr = Math.floor(meta.min/60); if (hr % 6 === 0) Snd.chime(hr); }
+    if (before < 8*60 && meta.min >= 8*60 && meta.day >= meta.rentDay) { meta.rentDay = meta.day + 3; if (meta.creds >= 90) { meta.creds -= 90; toast('', 'Rent taken: 90. The tower says nothing, as usual.'); } else { meta.owed += 90; bump('spirit', -15); toast('', 'Rent overdue. The tower remembers these things.'); Snd.nope(); } }
+    if (meta.evPlan && meta.evPlan.day === meta.day && meta.min >= meta.evPlan.at && !ev) startEvent(meta.evPlan.kind);
+    if (ev) { ev.left -= min; if (ev.left <= 0) endEvent(); }
     dirty = true;
   }
+  /* ---- the day's wants, and the day's event ---- */
+  var WANTS = [
+    { id: 'hot', t: 'a hot meal', d: 'Eat a bowl from Ohm, or cook one.', r: 25 }, { id: 'talk:vesna', t: 'a word with Vesna', d: 'Stay a moment with her.', r: 20 }, { id: 'talk:ohm', t: 'a word with Ohm', d: 'Stay a moment at the counter.', r: 20 },
+    { id: 'talk:warden', t: 'a word with the Warden', d: 'He is on the south deck.', r: 20 }, { id: 'talk:kid', t: 'a word with Tam', d: 'On the roof, under the tree.', r: 20 }, { id: 'shift', t: 'a shift worked', d: 'The terminal, or the rail.', r: 30 },
+    { id: 'view', t: 'the city, after dark', d: 'Sit on a deck bench after 21:00.', r: 25 }, { id: 'wash', t: 'hot water', d: 'The shower, twenty minutes.', r: 15 }, { id: 'shrine', t: 'the shrine tended', d: 'One credit, one light, on the roof.', r: 20 },
+    { id: 'cook', t: 'something cooked', d: 'Stock in the cold box, then the counter.', r: 30 }, { id: 'garden', t: 'the roof garden', d: 'Walk up to the tree.', r: 15 }, { id: 'sleepEarly', t: 'an early night', d: 'In bed before midnight.', r: 25 }, { id: 'laundry', t: 'clean clothes', d: 'The laundry alcove, thirty minutes.', r: 15 }
+  ];
+  function dayStart() {
+    meta.wantDay = meta.day; var pool = WANTS.slice(), picks = [], r = mulberry(meta.day*7919 + 3);
+    while (picks.length < 3 && pool.length) { var i = Math.floor(r()*pool.length), w = pool.splice(i, 1)[0]; if (w.id === 'listen' && !meta.own.deck) continue; picks.push({ id: w.id, done: 0 }); }
+    meta.wants = picks;
+    meta.evPlan = r() < 0.65 ? { day: meta.day, kind: ['blackout', 'storm', 'liftout', 'delivery'][Math.floor(r()*4)], at: (9 + Math.floor(r()*13))*60 } : null;
+    if (meta.rel.vesna >= 60) { meta.stock++; toast('', 'A bowl outside your door, still warm. Vesna.'); }
+    for (var k in meta.rel) meta.rel[k] = Math.max(0, meta.rel[k] - 3);
+  }
+  function wantDone(tag) { for (var i = 0; i < meta.wants.length; i++) { var w = meta.wants[i]; if (w.id === tag && !w.done) { w.done = 1; var def = WANTS.filter(function (q) { return q.id === tag; })[0]; meta.creds += def.r; meta.earned += def.r; bump('spirit', 6); toast('', 'Want met: ' + def.t + '. ' + def.r + ' credits.'); Snd.done(); buzz([6, 20, 6]); } } }
+  var ev = null;
+  function startEvent(kind) {
+    if (kind === 'blackout') { ev = { kind: kind, left: 30 }; toast('', 'The power goes. The corridor lights die one by one.'); Snd.thunder(); }
+    else if (kind === 'storm') { ev = { kind: kind, left: 90 }; toast('', 'The rain turns to a storm. The decks are no place to be.'); }
+    else if (kind === 'liftout') { ev = { kind: kind, left: 1440 - meta.min }; toast('', 'The lift is out. The rail is running. It is always running.'); }
+    else if (kind === 'delivery') { ev = { kind: kind, left: 1440 - meta.min }; if (!objs.some(function (o) { return o.kind === 'parcel'; })) obj('parcel', 10, 9, { use: { verb: 'Open', what: 'the parcel at your door', kind: 'parcel' } }); toast('', 'Something was left at your door.'); Snd.open(); }
+  }
+  function endEvent() { if (!ev) return; if (ev.kind === 'blackout') toast('', 'The lights come back, in no particular order.'); if (ev.kind === 'storm') toast('', 'The storm moves on to bother another tower.'); ev = null; }
+  function removeObj(ob) { var i = objs.indexOf(ob); if (i >= 0) objs.splice(i, 1); for (var yy = ob.y; yy < ob.y + ob.h; yy++) for (var xx = ob.x; xx < ob.x + ob.w; xx++) solid[T(xx, yy)] = 0; }
   function fmtClock(m) { m = ((m % 1440) + 1440) % 1440; var h = Math.floor(m/60), mm = Math.floor(m % 60); return (h < 10 ? '0' : '') + h + ':' + (mm < 10 ? '0' : '') + mm; }
   function dayName() { var h = meta.min/60, w = h < 5 ? 'small hours' : h < 8 ? 'dawn' : h < 12 ? 'morning' : h < 17 ? 'afternoon' : h < 21 ? 'evening' : 'night'; return 'Day ' + meta.day + ' · ' + w; }
   // Ambient light for the hour, as a multiply colour. The tower is never bright.
@@ -778,64 +911,102 @@
     var m = Math.hypot(ix, iy); if (m > 1) { ix /= m; iy /= m; }
     // screen right = +x -y ; screen down = +x +y
     var wx = (ix + iy*2)*0.5, wy = (iy*2 - ix)*0.5, spd = (2.9 - (meta.needs.rest < 15 ? 0.9 : 0) - (meta.needs.hunger < 10 ? 0.4 : 0))*dt;
-    if (m > 0.08 && !P.act) { var mv = Math.hypot(wx, wy); wx /= mv; wy /= mv; var k = Math.min(1, m*1.3);
-      var moved = tryMove(wx*spd*k, 0); moved = tryMove(0, wy*spd*k) || moved; P.moving = moved; if (moved) { P.face = faceFrom(wx, wy); P.ph += dt*7.5*k; P.frame = 1 + Math.floor(P.ph) % 4; if (Math.floor(P.ph*2) !== Math.floor((P.ph - dt*7.5*k)*2)) Snd.step(isOutdoor(P.x, P.y)); } }
-    else { P.moving = false; P.frame = 0; P.ph = 0; }
+    if (m > 0.08 && !P.act && !P.freeze) { var mv = Math.hypot(wx, wy); wx /= mv; wy /= mv; var k = Math.min(1, m*1.3);
+      var sx = wx*spd*k, sy = wy*spd*k, n = Math.max(1, Math.ceil(Math.max(Math.abs(sx), Math.abs(sy))/0.12)), moved = false;
+      for (var si = 0; si < n; si++) { moved = tryMove(sx/n, 0) || moved; moved = tryMove(0, sy/n) || moved; }
+      for (si = 0; si < npcs.length; si++) { var nn = npcs[si], ddx = P.x - nn.x, ddy = P.y - nn.y, dd = Math.hypot(ddx, ddy); if (dd < 0.5 && dd > 0.001) { tryMove(ddx/dd*(0.5 - dd), 0); tryMove(0, ddy/dd*(0.5 - dd)); } }
+      P.moving = moved; if (moved) { P.face = faceFrom(wx, wy); P.ph += dt*7.5*k; P.frame = 1 + Math.floor(P.ph) % 4; if (Math.floor(P.ph*2) !== Math.floor((P.ph - dt*7.5*k)*2)) Snd.step(isOutdoor(P.x, P.y)); } }
+    else { P.moving = false; P.frame = P.act ? (Math.floor(P.actT*3) % 2) : (Math.floor(performance.now()/1300) % 2 ? 5 : 0); P.ph = 0; }
     meta.px = P.x; meta.py = P.y;
   }
   function updateNpcs(dt) {
     for (var i = 0; i < npcs.length; i++) { var n = npcs[i]; if (n.fixed) continue; var s = null;
       for (var j = 0; j < n.sched.length; j++) if (meta.min >= n.sched[j].from && meta.min < n.sched[j].to) s = n.sched[j];
       var wp = s ? s.wp : [n.home]; if (n.route !== wp) { n.route = wp; n.wi = 0; }
-      if (n.wait > 0) { n.wait -= dt; n.frame = 0; continue; }
-      var tg = wp[n.wi % wp.length], dx = tg[0] - n.x, dy = tg[1] - n.y, d = Math.hypot(dx, dy);
-      if (n.talking) { n.frame = 0; continue; }
-      if (d < 0.05) { n.wi++; n.wait = (n.wi % wp.length === 0 ? (n.pause || 20) : 1.5 + hash2(n.wi, i) % 4); n.frame = 0; continue; }
+      if (n.say) { n.sayT -= dt; if (n.sayT <= 0) n.say = null; }
+      if (n.wait > 0) { n.wait -= dt; n.frame = Math.floor(performance.now()/1400 + i*300) % 2 ? 5 : 0; continue; }
+      if (n.talking) { n.frame = Math.floor(performance.now()/450) % 2; n.pose = 'talk'; continue; } n.pose = '';
+      if (!n.say && n.idle && Math.hypot(P.x - n.x, P.y - n.y) < 2.4 && Math.random() < dt*0.12) { n.say = n.idle[Math.floor(Math.random()*n.idle.length)]; n.sayT = 2.8; }
+      var tg = wp[n.wi % wp.length];
+      if (!n.path || n.pathTo !== tg) { n.path = findPath(n.x, n.y, tg[0], tg[1]) || [[tg[0], tg[1]]]; n.pathTo = tg; n.pi = 0; }
+      if (n.pi >= n.path.length) { n.wi++; n.path = null; n.wait = (n.wi % wp.length === 0 ? (n.pause || 20) : 1.5 + hash2(n.wi, i) % 4); n.frame = 0; continue; }
+      var pt = n.path[n.pi], dx = pt[0] - n.x, dy = pt[1] - n.y, d = Math.hypot(dx, dy);
+      if (d < 0.06) { n.pi++; continue; }
+      if (Math.hypot(P.x - n.x, P.y - n.y) < 0.55 && (P.x - n.x)*dx + (P.y - n.y)*dy > 0) { n.frame = 0; continue; } // you are in the way; they wait
       var st = Math.min(d, n.spd*dt); n.x += dx/d*st; n.y += dy/d*st; n.ph += dt*7; n.frame = 1 + Math.floor(n.ph) % 4; var f = faceFrom(dx, dy); if (f !== undefined) n.face = f; }
+  }
+  function updateDoors(dt) {
+    var k, i, sets = [decoN, decoW];
+    for (var sd = 0; sd < 2; sd++) for (k in sets[sd]) { var d = sets[sd][k]; if (d.kind !== 'door') continue; var idx = +k, dx = idx % MW + (sd === 0 ? 0.5 : 0), dy = Math.floor(idx/MW) + (sd === 0 ? 0 : 0.5), want = 0;
+      if (Math.hypot(P.x - dx, P.y - dy) < 0.9) want = 1; for (i = 0; i < npcs.length && !want; i++) if (Math.hypot(npcs[i].x - dx, npcs[i].y - dy) < 0.9) want = 1;
+      var cur = d.open || 0; if (want && cur < 0.05) Snd.door(); d.open = cur + (want - cur)*Math.min(1, dt*6); }
+    if (liftOpen > 0 && !P.act && !skipping) liftOpen = Math.max(0, liftOpen - dt*1.5);
   }
   /* ---- the nearest thing you can use ---- */
   function objDist(ob) { var cx = clamp(P.x, ob.x, ob.x + ob.w), cy = clamp(P.y, ob.y, ob.y + ob.h); return Math.hypot(P.x - cx, P.y - cy); }
   function findNear() {
     var best = null, bd = 1.25, i;
-    for (i = 0; i < objs.length; i++) { var ob = objs[i]; if (!ob.use) continue; var d = objDist(ob); if (d < bd && (!ob.use.room || roomAt(P.x, P.y) === roomAt(ob.x + 0.5, ob.y + 0.5))) { bd = d; best = ob; } }
+    for (i = 0; i < objs.length; i++) { var ob = objs[i]; if (!ob.use) continue; var d = objDist(ob) - ((ob.use.reach || 1.25) - 1.25); if (d < bd) { bd = d; best = ob; } }
     var bn = null, bnd = 1.5; for (i = 0; i < npcs.length; i++) { var d2 = Math.hypot(npcs[i].x - P.x, npcs[i].y - P.y) - (npcs[i].reach || 0); if (d2 < bnd) { bnd = d2; bn = npcs[i]; } }
-    if (bn && bnd < bd + 0.3) { near = null; nearNpc = bn; } else { near = best; nearNpc = null; }
+    near = best; nearNpc = bn;
   }
-  function verbText() { if (P.act) return [P.act.verb, P.act.what, 'busy']; if (nearNpc) return ['Talk', 'to ' + nearNpc.n, 'on']; if (near) { var u = near.use; if (u.cost && meta.creds < u.cost) return [u.verb, u.what + ' · short ' + (u.cost - meta.creds), 'off']; return [u.verb, u.what, 'on']; } return ['—', '', 'off']; }
-  function paintVerb() { var v = verbText(), s = v.join('|'); if (s === verbShown) return; verbShown = s; $('verbW').textContent = v[0]; $('verbO').textContent = v[1]; verbEl.classList.toggle('on', v[2] === 'on'); verbEl.classList.toggle('busy', v[2] === 'busy'); }
+  function verbText() { if (P.act) return [P.act.verb, P.act.what, 'busy']; if (nearNpc && !near) return ['Talk', 'to ' + nearNpc.n, 'on']; if (near) { var u = near.use; if (u.cost && meta.creds < u.cost) return [u.verb, u.what + ' · short ' + (u.cost - meta.creds), 'off']; if (u.kind === 'commute' && ev && ev.kind === 'liftout' && near.kind === 'liftcall') return ['Out', 'of order · the rail runs', 'off']; if (u.kind === 'cook') return [u.verb, u.what + ' · stock ' + meta.stock, meta.stock > 0 ? 'on' : 'off']; return [u.verb, u.what, 'on']; } return ['—', '', 'off']; }
+  var verb2Shown = '';
+  function paintVerb() { var v = verbText(), s = v.join('|'); if (s !== verbShown) { verbShown = s; $('verbW').textContent = v[0]; $('verbO').textContent = v[1]; verbEl.classList.toggle('on', v[2] === 'on'); verbEl.classList.toggle('busy', v[2] === 'busy'); }
+    var v2 = nearNpc && near && !P.act ? 'Talk · ' + nearNpc.n : ''; if (v2 !== verb2Shown) { verb2Shown = v2; $('verb2').textContent = v2; $('verb2').classList.toggle('on', !!v2); } }
   function ring(k) { verbEl.querySelector('circle').style.strokeDashoffset = (301*(1 - clamp(k, 0, 1))).toFixed(1); }
 
   /* ---- doing things ---- */
   function toast(who, line, secs) { toastEl.innerHTML = (who ? '<span class="who">' + who + '</span>' : '') + line; toastEl.classList.add('on'); toastT = secs || 3.2; }
-  function startAct(verb, what, mins, done) { P.act = { verb: verb, what: what, mins: mins, t: 0, done: done }; P.moving = false; P.frame = 0; Snd.open(); buzz(8); }
+  function setPose(pose, ob, seat, face) { if (seat && !P.sx) { P.sx = P.x; P.sy = P.y; } P.pose = pose || ''; P.onObj = ob || null; if (seat) { P.x = seat[0]; P.y = seat[1]; } if (face !== undefined) P.face = face; }
+  function clearPose() { P.pose = ''; P.onObj = null; if (P.sx) { P.x = P.sx; P.y = P.sy; P.sx = 0; P.sy = 0; } P.freeze = false; }
+  function seatOf(ob) { return [ob.x + ob.w/2, ob.y + ob.h/2 + (ob.kind === 'bed' ? 0 : 0.1)]; }
+  function startAct(verb, what, mins, done, pose, ob, seat, face) { P.act = { verb: verb, what: what, mins: mins, t: 0, done: done }; P.actT = 0; P.moving = false; P.frame = 0; setPose(pose, ob, seat, face); Snd.open(); buzz(8); }
+  function moment(pose, ob, seat, face, secs, then) { P.freeze = true; setPose(pose, ob, seat, face); P.momT = secs; P.momFn = then; }
   function skip(mins, what, done) { skipping = { mins: mins, t: 0, dur: 1.8 + Math.min(2.2, mins/240), from: meta.min, what: what, done: done }; $('fadeWhat').textContent = what; $('fadeClock').textContent = fmtClock(meta.min); fadeEl.classList.add('on'); Snd.lift(); }
   function untilMorning() { var m = meta.min, target = 7*60; return m < target ? target - m : 1440 - m + target; }
   function act() {
     if (P.act || skipping) return;
-    if (nearNpc) { openTalk(nearNpc); return; }
+    if (nearNpc && !near) { openTalk(nearNpc); return; }
     if (!near) { Snd.nope(); return; }
     var ob = near, u = ob.use, k = u.kind;
     if (u.cost && meta.creds < u.cost) { Snd.nope(); toast('', 'Not enough credits. The tower does not run tabs.'); return; }
     P.face = ob.x + ob.w/2 > P.x + 0.2 ? (ob.y + ob.h/2 > P.y ? 0 : 2) : (ob.y + ob.h/2 > P.y + 0.2 ? 1 : 3);
-    if (k === 'sleep') { var mins = untilMorning(); skip(mins, 'sleeping', function () { advance(mins); meta.needs.rest = 100; bump('hunger', -18); bump('hygiene', -8); if (meta.own.bed2) bump('spirit', 10); toast('', 'Morning. The rain kept going without you.'); Snd.done(); }); }
-    else if (k === 'work') { skip(8*60, 'working', function () { advance(8*60); var pay = 80 + (needAvg() > 60 ? 30 : 0); meta.creds += pay; meta.earned += pay; meta.shifts++; bump('rest', -28); bump('hunger', -28); bump('spirit', -12); toast('', 'Shift logged. ' + pay + ' credits, and a headache.'); Snd.done(); }); }
-    else if (k === 'commute') { skip(9*60, 'riding the rail', function () { advance(9*60); var pay = 110 + (needAvg() > 60 ? 30 : 0); meta.creds += pay; meta.earned += pay; meta.shifts++; bump('rest', -32); bump('hunger', -32); bump('hygiene', -14); bump('spirit', -5); P.x = 13.5; P.y = 20.5; toast('', 'Back on 41. ' + pay + ' credits. The city went by twice.'); Snd.done(); }); }
-    else if (k === 'eat') { if (u.cost) { meta.creds -= u.cost; Snd.buy(); } startAct(u.verb, u.what, u.hot ? 25 : u.small ? 3 : 15, function () { bump('hunger', u.hot ? 60 : u.small ? 18 : 36); bump('spirit', u.hot ? 10 : u.small ? 1 : -1); toast('', u.hot ? 'The broth knows things. You feel like one of them.' : u.small ? 'Sweet, cold, gone.' : 'Cold noodles again. They do the job.'); }); }
-    else if (k === 'wash') { startAct('Wash', u.what, 20, function () { meta.needs.hygiene = 100; bump('spirit', 4); toast('', 'Hot water, for once. You stay under it longer than you meant to.'); }); }
-    else if (k === 'sink') { startAct('Wash', u.what, 5, function () { bump('hygiene', 15); toast('', 'Better.'); }); }
-    else if (k === 'toilet') { startAct('Use', u.what, 5, function () { bump('spirit', 2); }); }
-    else if (k === 'change') { startAct('Change', u.what, 6, function () { bump('hygiene', meta.own.coat ? 18 : 8); bump('spirit', meta.own.coat ? 8 : 3); toast('', meta.own.coat ? 'The dry coat. It still smells of the shop.' : 'The other coat. It is the same coat.'); }); }
-    else if (k === 'laundry') { startAct('Wash', u.what, 30, function () { bump('hygiene', 20); bump('spirit', 3); toast('', 'Clean, warm, and yours for another week.'); }); }
-    else if (k === 'rest') { var mins2 = u.short ? 30 : 60; startAct(u.verb, u.what, mins2, function () { bump('rest', u.short ? 5 : 14); bump('spirit', u.view ? 14 : u.short ? 8 : 6); toast('', u.view ? 'Forty-one floors of rain and light, and none of it asks anything of you.' : 'You sit. That is all that happens, and it is enough.'); }); }
+    var seat = seatOf(ob), pay;
+    if (k === 'sleep') { var mins = untilMorning(); if (meta.min < 1440 && meta.min >= 20*60) wantDone('sleepEarly');
+      moment('lie', ob, seat, 0, 1.0, function () { skip(mins, 'sleeping', function () { advance(mins); meta.needs.rest = 100; meta.needs.warmth = 100; bump('hunger', -18); bump('hygiene', -8); if (meta.own.bed2) bump('spirit', 10);
+        moment('lie', ob, seat, 0, 0.8, function () { clearPose(); toast('', 'Morning. The rain kept going without you.'); Snd.done(); }); }); }); }
+    else if (k === 'work') { if (meta.needs.spirit < 15) { Snd.nope(); toast('', 'You cannot face the terminal. Not like this.'); return; }
+      moment('work', null, [ob.x + 0.75, ob.y + 1.45], 2, 1.1, function () { skip(8*60, 'working', function () { advance(8*60); pay = Math.round((80 + (needAvg() > 60 ? 30 : 0))*(1 + skillLv('focus')*0.06)); meta.creds += pay; meta.earned += pay; meta.shifts++; bump('rest', -28); bump('hunger', -28); bump('spirit', -12); gainSkill('focus', 14); wantDone('shift');
+        moment('work', null, null, 2, 0.6, function () { clearPose(); toast('', 'Shift logged. ' + pay + ' credits, and a headache.'); Snd.done(); }); }); }); }
+    else if (k === 'commute') { if (ev && ev.kind === 'liftout' && ob.kind === 'liftcall') { Snd.nope(); toast('', 'Out of order. The rail runs from the south deck.'); return; } if (meta.needs.spirit < 15) { Snd.nope(); toast('', 'You cannot face the rail. Not like this.'); return; }
+      if (ob.kind === 'liftcall') { liftOpen = 1; Snd.lift(); }
+      moment('', null, null, ob.kind === 'liftcall' ? 3 : 2, 1.0, function () { skip(9*60, 'riding the rail', function () { advance(9*60); pay = Math.round((110 + (needAvg() > 60 ? 30 : 0) + (meta.rel.warden >= 60 ? 15 : 0))*(1 + skillLv('focus')*0.06)); meta.creds += pay; meta.earned += pay; meta.shifts++; bump('rest', -32); bump('hunger', -32); bump('hygiene', -14); bump('spirit', -5); bump('warmth', -20); gainSkill('focus', 10); gainSkill('fitness', 6); wantDone('shift');
+        clearPose(); P.x = 13.5; P.y = ob.kind === 'liftcall' ? 20.5 : 34.5; liftOpen = ob.kind === 'liftcall' ? 1 : 0; toast('', 'Back on 41. ' + pay + ' credits. The city went by twice.'); Snd.done(); }); }); }
+    else if (k === 'eat') { var cost = u.cost && u.hot && meta.rel.ohm >= 60 ? 8 : u.cost; if (cost) { meta.creds -= cost; Snd.buy(); } var stool = null;
+      if (u.hot) for (var si = 0; si < objs.length; si++) if (objs[si].kind === 'stool' && Math.hypot(objs[si].x + 0.5 - P.x, objs[si].y + 0.5 - P.y) < 1.6) { stool = objs[si]; break; }
+      startAct(u.verb, u.what, u.hot ? 25 : u.small ? 3 : 15, function () { bump('hunger', u.hot ? 60 : u.small ? 18 : 36); bump('spirit', u.hot ? 10 : u.small ? 1 : -1); bump('warmth', u.hot ? 20 : 0); if (u.hot) wantDone('hot'); toast('', u.hot ? 'The broth knows things. You feel like one of them.' : u.small ? 'Sweet, cold, gone.' : 'Cold noodles again. They do the job.'); },
+        stool ? 'eatsit' : 'eat', stool, stool ? seatOf(stool) : null, stool ? 2 : undefined); }
+    else if (k === 'cook') { if (meta.stock <= 0) { Snd.nope(); toast('', 'Nothing in the cold box to cook. Ohm sells stock.'); return; } meta.stock--;
+      startAct('Cook', u.what, 30, function () { var q = skillLv('cooking'); bump('hunger', 50 + q*3); bump('spirit', 6 + q); bump('warmth', 15); gainSkill('cooking', 12); meta.cooked++; wantDone('cook'); wantDone('hot'); toast('', q < 3 ? 'Edible. Hot. Yours.' : q < 7 ? 'Better than Ohm’s, and he knows it.' : 'The flat smells like somewhere people live.'); }, 'cook'); }
+    else if (k === 'stock') { if (meta.creds < 15) { Snd.nope(); toast('', 'Not enough credits.'); return; } meta.creds -= 15; meta.stock += 3; Snd.buy(); toast('', 'Three days of stock, for the cold box.'); }
+    else if (k === 'parcel') { var roll = Math.random(); removeObj(ob); near = null; if (roll < 0.4) { meta.creds += 30; toast('', 'A refund from a place you do not remember. 30 credits.'); } else if (roll < 0.75) { meta.stock += 3; toast('', 'Groceries. No note. Vesna, probably.'); } else { bump('spirit', 14); toast('', 'A letter, on paper. You read it twice.'); } Snd.done(); }
+    else if (k === 'wash') { startAct('Wash', u.what, 20, function () { meta.needs.hygiene = 100; bump('spirit', 4); bump('warmth', 30); wantDone('wash'); toast('', 'Hot water, for once. You stay under it longer than you meant to.'); }, 'shower', ob, seat, 0); }
+    else if (k === 'sink') { startAct('Wash', u.what, 5, function () { bump('hygiene', 15); toast('', 'Better.'); }, 'cook'); }
+    else if (k === 'toilet') { startAct('Use', u.what, 5, function () { bump('spirit', 2); }, 'sit', ob, [ob.x + 0.5, ob.y + 0.62], 0); }
+    else if (k === 'change') { startAct('Change', u.what, 6, function () { bump('hygiene', meta.own.coat ? 18 : 8); bump('spirit', meta.own.coat ? 8 : 3); bump('warmth', meta.own.coat ? 20 : 5); toast('', meta.own.coat ? 'The dry coat. It still smells of the shop.' : 'The other coat. It is the same coat.'); }); }
+    else if (k === 'laundry') { startAct('Wash', u.what, 30, function () { bump('hygiene', 20); bump('spirit', 3); wantDone('laundry'); toast('', 'Clean, warm, and yours for another week.'); }, 'cook'); }
+    else if (k === 'rest') { var mins2 = u.short ? 30 : 60, late = meta.min >= 21*60 || meta.min < 5*60; startAct(u.verb, u.what, mins2, function () { bump('rest', u.short ? 5 : 14); bump('spirit', u.view ? 14 : u.short ? 8 : 6); if (u.view && late) wantDone('view'); toast('', u.view ? 'Forty-one floors of rain and light, and none of it asks anything of you.' : 'You sit. That is all that happens, and it is enough.'); }, 'sit', ob, seat, ob.f === 3 ? 1 : 0); }
     else if (k === 'listen') { startAct('Listen', u.what, 40, function () { bump('spirit', 16); toast('', 'Someone else’s record, from before the tower. It holds up.'); }); }
-    else if (k === 'shrine') { if (meta.seen.shrine) { toast('', 'The lights are lit. Someone was here before you.'); Snd.nope(); return; } if (meta.creds < 1) { Snd.nope(); return; } meta.creds -= 1; meta.seen.shrine = 1; startAct('Tend', u.what, 10, function () { bump('spirit', 12); toast('', 'One credit, one light. The tree does not notice. You do.'); }); }
+    else if (k === 'shrine') { if (meta.seen.shrine) { toast('', 'The lights are lit. Someone was here before you.'); Snd.nope(); return; } if (meta.creds < 1) { Snd.nope(); return; } meta.creds -= 1; meta.seen.shrine = 1; startAct('Tend', u.what, 10, function () { bump('spirit', 12); wantDone('shrine'); toast('', 'One credit, one light. The tree does not notice. You do.'); }, 'cook'); }
     else if (k === 'shop') { openShop(); }
     dirty = true;
   }
   function updateAct(dt) {
+    if (P.freeze && P.momT > 0) { P.momT -= dt; if (P.momT <= 0) { var f = P.momFn; P.momFn = null; if (f) f(); } }
     if (!P.act) return; var a = P.act, rate = 6; // six game minutes a second while you are busy
-    var step = Math.min(rate*dt, a.mins - a.t); a.t += step; advance(step); ring(a.t/a.mins);
-    if (a.t >= a.mins - 1e-6) { var d = a.done; P.act = null; ring(0); Snd.done(); buzz([6, 20, 6]); d(); dirty = true; }
+    P.actT += dt; var step = Math.min(rate*dt, a.mins - a.t); a.t += step; advance(step); ring(a.t/a.mins);
+    if (a.t >= a.mins - 1e-6) { var d = a.done; P.act = null; ring(0); Snd.done(); buzz([6, 20, 6]); clearPose(); d(); dirty = true; }
   }
   function updateSkip(dt) {
     if (!skipping) return; var s = skipping; s.t += dt; var k = clamp((s.t - 0.4)/(s.dur - 0.8), 0, 1);
@@ -845,15 +1016,16 @@
 
   /* ---- talk ---- */
   function openTalk(n) {
-    var idx = (meta.met[n.id] || 0) % n.lines.length, pair = n.lines[idx]; n.talking = true; P.face = n.x > P.x + 0.1 ? (n.y > P.y ? 0 : 2) : (n.y > P.y + 0.1 ? 1 : 3);
-    $('talkName').textContent = n.n; $('talkLine').textContent = pair[0]; var ops = $('talkOpts'); ops.innerHTML = '';
+    var lines = n.lines.concat(meta.rel[n.id] >= 40 && n.deep ? n.deep : []), idx = (meta.met[n.id] || 0) % lines.length, pair = lines[idx]; n.talking = true; P.face = n.x > P.x + 0.1 ? (n.y > P.y ? 0 : 2) : (n.y > P.y + 0.1 ? 1 : 3); P.pose = 'talk'; P.freeze = true; n.face = P.x > n.x + 0.1 ? (P.y > n.y ? 0 : 2) : (P.y > n.y + 0.1 ? 1 : 3);
+    var rl = Math.round(meta.rel[n.id]), segs = ''; for (var si = 0; si < 10; si++) segs += '<i' + (si < rl/10 ? ' class="on"' : '') + '></i>';
+    $('talkName').textContent = n.n; $('talkRel').innerHTML = '<span class="bar">' + segs + '</span><span class="k">' + (rl < 30 ? 'a neighbour' : rl < 60 ? 'someone you know' : 'a friend') + '</span>'; $('talkLine').textContent = pair[0]; var ops = $('talkOpts'); ops.innerHTML = '';
     var rep = document.createElement('button'); rep.className = 'item'; rep.innerHTML = '<div class="t"><span class="n">Stay a moment</span><span class="d">Hear the rest of it.</span></div>';
     rep.addEventListener('click', function () { $('talkLine').textContent = pair[1]; ops.innerHTML = ''; var fresh = !meta.seen['talk' + n.id] || meta.min - meta.seen['talk' + n.id] > 240 || meta.min < meta.seen['talk' + n.id];
-      if (fresh) { bump('spirit', 12); meta.talks++; meta.seen['talk' + n.id] = meta.min; } meta.met[n.id] = idx + 1; Snd.talk(); dirty = true;
+      if (fresh) { var ch = skillLv('charm'); bump('spirit', 12 + ch); meta.talks++; meta.seen['talk' + n.id] = meta.min; meta.rel[n.id] = clamp(meta.rel[n.id] + 10 + ch*1.5 - (meta.needs.hygiene < 20 ? 6 : 0), 0, 100); gainSkill('charm', 9); wantDone('talk:' + n.id); if (meta.rel[n.id] >= 60 && !meta.seen['friend' + n.id]) { meta.seen['friend' + n.id] = 1; toast(n.n, n.id === 'vesna' ? 'I will leave a bowl out for you, mornings. Do not mention it.' : n.id === 'ohm' ? 'Eight credits, for you. Do not tell the Warden.' : n.id === 'warden' ? 'Show this at the gate. The fare is between us.' : 'You can stand under the tree with me. That is the rule.', 5); } } meta.met[n.id] = idx + 1; Snd.talk(); dirty = true;
       var lv = document.createElement('button'); lv.className = 'go ghost wide'; lv.textContent = 'Go'; lv.addEventListener('click', closeTalk); ops.appendChild(lv); });
     var lv0 = document.createElement('button'); lv0.className = 'go ghost wide'; lv0.textContent = 'Not now'; lv0.addEventListener('click', closeTalk);
     ops.appendChild(rep); ops.appendChild(lv0); talkEl.classList.add('on'); paused = true; Snd.talk(); buzz(6);
-    function closeTalk() { talkEl.classList.remove('on'); paused = false; n.talking = false; Snd.tick(); }
+    function closeTalk() { talkEl.classList.remove('on'); paused = false; n.talking = false; n.pose = ''; clearPose(); Snd.tick(); }
   }
   /* ---- the catalogue ---- */
   var CATALOGUE = [
@@ -903,6 +1075,7 @@
       if (wallW[ti] || decoW[ti]) items.push({ k: x + y - 0.5, w: 1, x: x, y: y, m: wallW[ti] });
       if (wallN[ti] || decoN[ti]) items.push({ k: x + y - 0.49, w: 0, x: x, y: y, m: wallN[ti] }); }
     for (i = 0; i < objs.length; i++) { var ob = objs[i]; if (ob.x + ob.w < vr.x0 || ob.x > vr.x1 || ob.y + ob.h < vr.y0 || ob.y > vr.y1) continue; items.push({ k: ob.kind === 'rug' ? ob.x + ob.y - 0.45 : ob.x + ob.w - 1 + ob.y + ob.h - 1 + 0.9, ob: ob }); }
+    if (P.onObj) { var ok = P.onObj.x + P.onObj.w - 1 + P.onObj.y + P.onObj.h - 1 + 0.9; pk = ok + (P.pose === 'shower' ? -0.05 : 0.05); }
     items.push({ k: pk, ch: P }); for (i = 0; i < npcs.length; i++) items.push({ k: npcs[i].x + npcs[i].y, ch: npcs[i] });
     items.sort(function (a, b) { return a.k - b.k; });
     var psx = PX(P.x, P.y), psy = PY(P.x, P.y), ctr = Math.max(1, dt*9);
@@ -914,32 +1087,49 @@
       else if (it.ob) { var s = objSprite(it.ob), ox = PX(it.ob.x, it.ob.y) - s.ox, oy = PY(it.ob.x, it.ob.y) - s.oy, a = 1;
         if (it.k > pkey && it.ob.kind !== 'rug') { if (psx > ox + 10 && psx < ox + s.w - 10 && psy > oy + s.oy - 60 && psy < oy + s.h) a = 0.42; } // something between you and the camera goes to glass
         if (a < 1) g.globalAlpha = a; g.drawImage(s.c, ox, oy, s.w, s.h); if (a < 1) g.globalAlpha = 1; }
-      else { var c = it.ch, fs = figSprite(c.look || PLAYER_LOOK, c.face, c.frame), fx = PX(c.x, c.y), fy = PY(c.x, c.y); g.drawImage(fs.c, fx - fs.ax, fy - fs.ay, fs.w, fs.h);
-        if (c === P && P.act) { g.strokeStyle = INK.bone; g.globalAlpha = 0.5; g.lineWidth = 1; g.beginPath(); g.arc(fx, fy - 56, 5, -1.57, -1.57 + 6.283*(P.act.t/P.act.mins)); g.stroke(); g.globalAlpha = 1; } }
+      else { var c = it.ch, fs = figSprite(c.look || PLAYER_LOOK, c.face, c.frame, c.pose), fx = PX(c.x, c.y), fy = PY(c.x, c.y); g.drawImage(fs.c, fx - fs.ax, fy - fs.ay, fs.w, fs.h);
+        if (c.pose === 'shower') { g.strokeStyle = 'rgba(126,156,196,.35)'; g.lineWidth = 1; g.beginPath(); for (var wi = 0; wi < 7; wi++) { var wx = fx - 9 + wi*3, wy = fy - 62 + ((t*160 + wi*11) % 44); g.moveTo(wx, wy); g.lineTo(wx, wy + 5); } g.stroke(); }
+        if (c.say && c.sayT > 0) { g.font = '400 8px Georgia, serif'; var tw = g.measureText(c.say).width + 12; g.fillStyle = 'rgba(11,6,9,.82)'; g.fillRect(fx - tw/2, fy - 76, tw, 15); g.strokeStyle = 'rgba(61,31,40,1)'; g.lineWidth = 1; g.strokeRect(fx - tw/2 + 0.5, fy - 75.5, tw, 15); g.fillStyle = INK.bone; g.textAlign = 'center'; g.fillText(c.say, fx, fy - 65); g.textAlign = 'left'; }
+        if (c === P && P.act && P.pose !== 'lie') { g.strokeStyle = INK.bone; g.globalAlpha = 0.5; g.lineWidth = 1; g.beginPath(); g.arc(fx, fy - 58, 5, -1.57, -1.57 + 6.283*(P.act.t/P.act.mins)); g.stroke(); g.globalAlpha = 1; } }
     }
+    drawParts(g);
   }
   var PLAYER_LOOK = { id: 'you', coat: '#4a1420', trim: '#e9d8c5', hair: '#0b0609', skin: '#e9d8c5', eye: '#ff8fa3' };
   function drawLights(g, t) {
     var lw = Math.ceil(cssW*LS), lh = Math.ceil(cssH*LS);
     if (!lightCv) { lightCv = document.createElement('canvas'); lightCv.width = lw; lightCv.height = lh; L = lightCv.getContext('2d'); }
-    var amb = ambientAt(meta.min), dk = darkness(), i;
+    var amb = ambientAt(meta.min), dk = darkness(), i, bo = ev && ev.kind === 'blackout' ? 0.12 : 1;
+    if (bo < 1) amb = [amb[0]*0.55, amb[1]*0.55, amb[2]*0.7];
     L.setTransform(1, 0, 0, 1, 0, 0); L.globalCompositeOperation = 'source-over'; L.fillStyle = 'rgb(' + Math.round(amb[0]) + ',' + Math.round(amb[1]) + ',' + Math.round(amb[2]) + ')'; L.fillRect(0, 0, lw, lh);
     if (flash > 0) { L.fillStyle = 'rgba(233,216,197,' + (0.4*flash).toFixed(2) + ')'; L.fillRect(0, 0, lw, lh); }
     L.setTransform(LS*zoom, 0, 0, LS*zoom, (cssW/2 - camX*zoom)*LS, (cssH/2 - camY*zoom)*LS); L.globalCompositeOperation = 'lighter';
     function lamp(x, y, col, r, a) { var sp = lightSprite(col); L.globalAlpha = a; L.drawImage(sp.c, x - r, y - r*0.62, r*2, r*1.24); L.globalAlpha = 1; }
     // rooms are lit from the ceiling: one soft pool each
-    for (i = 0; i < rooms.length; i++) { var rm = rooms[i]; if (!rm.light) continue; var cx = rm.x + rm.w/2, cy = rm.y + rm.h/2; lamp(PX(cx, cy), PY(cx, cy) - 10, rm.lightCol || INK.bone, Math.max(rm.w, rm.h)*44, rm.light*0.9); }
-    for (i = 0; i < lightsStatic.length; i++) { var l = lightsStatic[i], a = 0.85; if (l.win) a = 0.25 + 0.6*dk; if (l.neon) a = 0.7 + 0.3*Math.sin(t*9 + i); lamp(PX(l.x, l.y), PY(l.x, l.y) - (l.ceil ? 70 : 30), l.col, l.r, a); }
-    for (i = 0; i < objs.length; i++) { var ob = objs[i]; if (!ob.light) continue; var lx = ob.x + ob.w/2, ly = ob.y + ob.h/2; lamp(PX(lx, ly) + (ob.tall ? 14 : 0), PY(lx, ly) - (ob.tall ? 110 : ob.kind === 'lamp' ? 56 : 30), ob.light, ob.tall ? 150 : 95, ob.tall ? 0.95 : 0.8); }
-    // the wet decks throw the lamps back
+    for (i = 0; i < rooms.length; i++) { var rm = rooms[i]; if (!rm.light) continue; var cx = rm.x + rm.w/2, cy = rm.y + rm.h/2; lamp(PX(cx, cy), PY(cx, cy) - 10, rm.lightCol || INK.bone, Math.max(rm.w, rm.h)*44, rm.light*0.9*bo); }
+    for (i = 0; i < lightsStatic.length; i++) { var l = lightsStatic[i], a = 0.85; if (l.win) a = 0.25 + 0.6*dk; if (l.neon) a = 0.7 + 0.3*Math.sin(t*9 + i); if (l.ceil || l.screen) a *= bo; lamp(PX(l.x, l.y), PY(l.x, l.y) - (l.ceil ? 70 : 30), l.col, l.r, a); }
+    var emis = [];
+    for (i = 0; i < objs.length; i++) { var ob = objs[i]; if (!ob.light) continue; var lx = ob.x + ob.w/2, ly = ob.y + ob.h/2, ex = PX(lx, ly) + (ob.tall ? 14 : 0), ey = PY(lx, ly) - (ob.tall ? 110 : ob.kind === 'lamp' ? 56 : 30);
+      lamp(ex, ey, ob.light, ob.tall ? 150 : 95, ob.tall ? 0.95 : 0.8); emis.push([ex, ey, ob.light, ob.tall ? 30 : 22]);
+      // the wet deck throws the lamp back as a smear under it
+      if (isOutdoor(lx, ly)) { var sp2 = lightSprite(ob.light); L.globalAlpha = 0.32; L.drawImage(sp2.c, ex - 18, ey + 30, 36, 190); L.globalAlpha = 1; } }
+    for (i = 0; i < lightsStatic.length; i++) { var l2 = lightsStatic[i]; if (l2.neon || l2.screen) emis.push([PX(l2.x, l2.y), PY(l2.x, l2.y) - 30, l2.col, l2.neon ? 34 : 22]); }
     L.globalCompositeOperation = 'source-over'; L.setTransform(1, 0, 0, 1, 0, 0);
     g.globalCompositeOperation = 'multiply'; g.drawImage(lightCv, 0, 0, cssW, cssH); g.globalCompositeOperation = 'source-over';
+    // bloom: the emitters again, small and soft, added on top
+    var bw = Math.ceil(cssW/4), bh = Math.ceil(cssH/4); if (!bloomCv) { bloomCv = document.createElement('canvas'); bloomCv.width = bw; bloomCv.height = bh; B = bloomCv.getContext('2d'); }
+    B.setTransform(1, 0, 0, 1, 0, 0); B.globalCompositeOperation = 'source-over'; B.clearRect(0, 0, bw, bh); B.setTransform(zoom/4, 0, 0, zoom/4, (cssW/2 - camX*zoom)/4, (cssH/2 - camY*zoom)/4); B.globalCompositeOperation = 'lighter';
+    for (i = 0; i < emis.length; i++) { var e = emis[i], sp3 = lightSprite(e[2]); B.globalAlpha = 0.55; B.drawImage(sp3.c, e[0] - e[3]*2, e[1] - e[3]*1.4, e[3]*4, e[3]*2.8); } B.globalAlpha = 1;
+    g.globalCompositeOperation = 'lighter'; g.globalAlpha = 0.5; g.drawImage(bloomCv, 0, 0, cssW, cssH); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
   }
+  var bloomCv = null, B = null, grainCv = null;
+  function drawGrain(g, t) { if (!grainCv) { grainCv = document.createElement('canvas'); grainCv.width = 192; grainCv.height = 192; var q = grainCv.getContext('2d'), im = q.createImageData(192, 192), d = im.data; for (var i = 0; i < d.length; i += 4) { var v = 96 + Math.random()*64; d[i] = d[i+1] = d[i+2] = v; d[i+3] = 255; } q.putImageData(im, 0, 0); }
+    var ox = (Math.floor(t*17) % 7)*23, oy = (Math.floor(t*13) % 5)*31; g.globalCompositeOperation = 'overlay'; g.globalAlpha = 0.09; for (var y = -oy; y < cssH; y += 192) for (var x = -ox; x < cssW; x += 192) g.drawImage(grainCv, x, y); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over'; }
   function drawRain(g, t) {
-    var W = cssW + 140, H = cssH + 100, k = 0.7, i; g.strokeStyle = 'rgba(233,216,197,.07)'; g.lineWidth = 1; g.beginPath();
-    for (i = 0; i < 120; i++) { var fx = ((storm.wx*0.6 + i*97.3) % W + W) % W - 70, fy = ((storm.ph*520 + i*61.7) % H + H) % H - 50; g.moveTo(fx, fy); g.lineTo(fx + 1.2, fy + 9); } g.stroke();
+    var W = cssW + 140, H = cssH + 100, k = 0.7, i; g.strokeStyle = 'rgba(233,216,197,.07)'; g.beginPath();
+    var sk = ev && ev.kind === 'storm' ? 1.8 : 1; g.lineWidth = 1;
+    for (i = 0; i < 120*sk; i++) { var fx = ((storm.wx*0.6 + i*97.3) % W + W) % W - 70, fy = ((storm.ph*520 + i*61.7) % H + H) % H - 50; g.moveTo(fx, fy); g.lineTo(fx + 1.2, fy + 9); } g.stroke();
     g.strokeStyle = 'rgba(233,216,197,.16)'; g.lineWidth = 1.3; g.beginPath();
-    for (i = 0; i < 70; i++) { var rx = ((storm.wx + i*131.7) % W + W) % W - 70, ry = ((storm.ph*900 + i*83.3) % H + H) % H - 50; g.moveTo(rx, ry); g.lineTo(rx + 2.2, ry + 22); } g.stroke();
+    for (i = 0; i < 70*sk; i++) { var rx = ((storm.wx + i*131.7) % W + W) % W - 70, ry = ((storm.ph*900 + i*83.3) % H + H) % H - 50; g.moveTo(rx, ry); g.lineTo(rx + 2.2, ry + 22); } g.stroke();
   }
   function vignette(g) { var v = g.createRadialGradient(cssW/2, cssH/2, Math.min(cssW, cssH)*0.35, cssW/2, cssH/2, Math.max(cssW, cssH)*0.75); v.addColorStop(0, 'rgba(5,2,3,0)'); v.addColorStop(1, 'rgba(5,2,3,.55)'); g.fillStyle = v; g.fillRect(0, 0, cssW, cssH); }
   function render(t, dt) {
@@ -949,20 +1139,21 @@
     if (settings.lighting) drawLights(g, t);
     if (settings.weather && isOutdoor(P.x, P.y)) drawRain(g, t);
     if (flash > 0 && isOutdoor(P.x, P.y)) { g.fillStyle = 'rgba(233,216,197,' + (0.3*flash).toFixed(2) + ')'; g.fillRect(0, 0, cssW, cssH); }
-    vignette(g);
+    vignette(g); drawGrain(g, t);
     if (settings.diag) { g.fillStyle = INK.bone; g.font = '500 9px ui-monospace, Menlo, monospace'; g.fillText(Math.round(fps) + ' fps · ' + cssW + '×' + cssH + ' · dpr ' + dpr + ' · ' + P.x.toFixed(1) + ',' + P.y.toFixed(1) + ' · ' + Object.keys(SPR).length + ' spr', INS.l + 10, cssH - INS.b - 6); }
   }
 
   /* ---------------- HUD ---------------- */
   var needRows = {};
-  (function () { var box = $('needs'); ['rest', 'hunger', 'hygiene', 'spirit'].forEach(function (k) { var r = document.createElement('div'); r.className = 'need'; var segs = ''; for (var i = 0; i < 10; i++) segs += '<i></i>'; r.innerHTML = '<span class="k">' + NEEDN[k] + '</span><span class="bar">' + segs + '</span><span class="v">0</span>'; box.appendChild(r); needRows[k] = { el: r, segs: r.querySelectorAll('i'), v: r.querySelector('.v'), last: -1 }; }); }());
+  (function () { var box = $('needs'); ['rest', 'hunger', 'hygiene', 'spirit', 'warmth'].forEach(function (k) { var r = document.createElement('div'); r.className = 'need'; var segs = ''; for (var i = 0; i < 10; i++) segs += '<i></i>'; r.innerHTML = '<span class="k">' + NEEDN[k] + '</span><span class="bar">' + segs + '</span><span class="v">0</span>'; box.appendChild(r); needRows[k] = { el: r, segs: r.querySelectorAll('i'), v: r.querySelector('.v'), last: -1 }; }); }());
   var hudShown = { clock: '', day: '', creds: -1, place: '' };
   function paintHud() {
     for (var k in needRows) { var v = Math.round(meta.needs[k]), row = needRows[k]; if (v === row.last) continue; row.last = v; row.v.textContent = v; var on = Math.round(v/10); for (var i = 0; i < 10; i++) row.segs[i].className = i < on ? 'on' : ''; row.el.classList.toggle('low', v < 20); }
     var c = fmtClock(meta.min); if (c !== hudShown.clock) { hudShown.clock = c; $('clock').textContent = c; }
     var d = dayName(); if (d !== hudShown.day) { hudShown.day = d; $('day').textContent = d; }
     if (meta.creds !== hudShown.creds) { hudShown.creds = meta.creds; $('creds').textContent = meta.creds; }
-    var rm = roomAt(P.x, P.y), pl = 'Level 41 · ' + (rm ? rm.n : 'the edge'); if (pl !== hudShown.place) { hudShown.place = pl; $('place').textContent = pl; }
+    var rm = roomAt(P.x, P.y), pl = 'Level 41 · ' + (rm ? rm.n : 'the edge'); if (pl !== hudShown.place) { hudShown.place = pl; $('place').textContent = pl; if (rm && rm.n === 'Roof garden') wantDone('garden'); }
+    var wt = ''; for (var wi = 0; wi < meta.wants.length; wi++) if (!meta.wants[wi].done) { wt = 'Want · ' + WANTS.filter(function (q) { return q.id === meta.wants[wi].id; })[0].t; break; } if (wt !== hudShown.want) { hudShown.want = wt; $('want').textContent = wt; }
     paintVerb();
   }
 
@@ -976,7 +1167,12 @@
   }
   Object.keys(SW).forEach(function (id) { $(id).addEventListener('click', function () { settings[SW[id]] = !settings[SW[id]]; applySettings(); Snd.tick(); if (id === 'swHaptic') buzz(10); }); });
   if (!navigator.vibrate) { var hr = $('swHaptic').closest('.opt'); if (hr) hr.style.display = 'none'; }
-  function openPause() { $('kDay').textContent = meta.day; $('kEarned').textContent = meta.earned; $('kShifts').textContent = meta.shifts; $('kTalks').textContent = meta.talks; $('sigilOut').textContent = '—'; pauseEl.classList.add('on'); paused = true; Snd.tick(); saveMeta(); }
+  function meter(v, label, cls) { var segs = ''; for (var i = 0; i < 10; i++) segs += '<i' + (i < v/10 ? ' class="on"' : '') + '></i>'; return '<div class="need' + (cls || '') + '"><span class="k">' + label + '</span><span class="bar">' + segs + '</span><span class="v">' + Math.round(v) + '</span></div>'; }
+  function openPause() { $('kDay').textContent = meta.day; $('kEarned').textContent = meta.earned; $('kShifts').textContent = meta.shifts; $('kTalks').textContent = meta.talks; $('kRent').textContent = 'day ' + meta.rentDay + (meta.owed ? ' · owed ' + meta.owed : ''); $('kStock').textContent = meta.stock;
+    $('kWants').innerHTML = meta.wants.map(function (w) { var d = WANTS.filter(function (q) { return q.id === w.id; })[0]; return '<div class="kv"><span>' + (w.done ? '✦ ' : '◇ ') + d.t + '<br><small style="color:var(--t-3)">' + d.d + '</small></span><b>' + (w.done ? 'done' : d.r) + '</b></div>'; }).join('');
+    $('kSkills').innerHTML = Object.keys(SKILLN).map(function (k) { return meter(skillLv(k)*10, SKILLN[k]); }).join('');
+    $('kRel').innerHTML = [['vesna', 'Vesna'], ['ohm', 'Ohm'], ['warden', 'Warden'], ['kid', 'Tam']].map(function (r) { return meter(meta.rel[r[0]], r[1]); }).join('');
+    $('sigilOut').textContent = '—'; pauseEl.classList.add('on'); paused = true; Snd.tick(); saveMeta(); }
   function closePause() { pauseEl.classList.remove('on'); paused = false; Snd.tick(); }
   $('bGear').addEventListener('click', openPause); $('bResume').addEventListener('click', closePause);
   pauseEl.addEventListener('click', function (e) { if (e.target === pauseEl) closePause(); });
@@ -1006,28 +1202,41 @@
     if (skipping) { updateSkip(dt); return; }
     if (paused) return;
     advance(dt); // one real second, one minute
-    updatePlayer(dt); updateAct(dt); updateNpcs(dt); findNear();
+    updatePlayer(dt); updateAct(dt); updateNpcs(dt); findNear(); updateDoors(dt);
     if (verbTapped) { verbTapped = false; if (running) act(); }
+    if (verb2Tapped) { verb2Tapped = false; if (running && nearNpc && !P.act && !skipping) openTalk(nearNpc); }
     // weather runs on the decks whether you are out there or not
     storm.wx += 60*dt; storm.ph += dt; storm.acc += dt*30; var vr = visibleRange();
     while (storm.acc >= 1) { storm.acc -= 1; if (storm.sp.length < 40) { var qx = vr.x0 + Math.random()*(vr.x1 - vr.x0), qy = vr.y0 + Math.random()*(vr.y1 - vr.y0); if (isOutdoor(qx, qy)) storm.sp.push({ x: qx, y: qy, t: 0 }); } }
     for (var i = storm.sp.length - 1; i >= 0; i--) { storm.sp[i].t += dt; if (storm.sp[i].t > 0.5) storm.sp.splice(i, 1); }
-    storm.boltT -= dt; if (storm.boltT <= 0) { storm.boltT = 40 + Math.random()*70; flash = 1; if (isOutdoor(P.x, P.y) || roomAt(P.x, P.y)) setTimeout(function () { Snd.thunder(); }, 400 + Math.random()*1200); }
+    storm.boltT -= dt*(ev && ev.kind === 'storm' ? 6 : 1); if (storm.boltT <= 0) { storm.boltT = 40 + Math.random()*70; flash = 1; if (isOutdoor(P.x, P.y) || roomAt(P.x, P.y)) setTimeout(function () { Snd.thunder(); }, 400 + Math.random()*1200); }
     if (flash > 0) flash -= dt*3;
+    updateParts(dt); partT += dt;
+    if (partT > 0.08) { partT = 0; var vr2 = visibleRange();
+      for (var oi = 0; oi < objs.length; oi++) { var so = objs[oi]; if (so.x < vr2.x0 || so.x > vr2.x1 || so.y < vr2.y0 || so.y > vr2.y1) continue;
+        if (so.kind === 'noodle') { spawnPart(so.x + 0.5, so.y + 0.5, 46, 'steam'); if (Math.random() < 0.5) spawnPart(so.x + 1.4, so.y + 0.5, 46, 'steam'); }
+        else if (so.kind === 'shrine' && Math.random() < 0.5) spawnPart(so.x + 0.3 + Math.random()*0.4, so.y + 0.4 + Math.random()*0.4, 36, 'ember');
+        else if (so.kind === 'vent') spawnPart(so.x + 0.5, so.y + 0.5, 60, 'steam'); }
+      if (P.pose === 'shower') { spawnPart(P.x - 0.15 + Math.random()*0.3, P.y - 0.15 + Math.random()*0.3, 40 + Math.random()*30, 'steam'); }
+      var rm2 = roomAt(P.x, P.y); if (rm2 && rm2.indoor && Math.random() < 0.7) spawnPart(rm2.x + Math.random()*rm2.w, rm2.y + Math.random()*rm2.h, 20 + Math.random()*60, 'mote');
+      if (isOutdoor(P.x, P.y) && Math.random() < 0.3) spawnPart(P.x + (Math.random() - 0.5)*6, P.y + (Math.random() - 0.5)*6, 90, 'drip'); }
     if (toastT > 0) { toastT -= dt; if (toastT <= 0) toastEl.classList.remove('on'); }
     var bk = isOutdoor(P.x, P.y) ? 1 : (roomAt(P.x, P.y) ? 0 : 0.5); if (bk !== bedKey) { bedKey = bk; Snd.beds(bk, 1); }
     saveT += dt; if (dirty && saveT > 8) { saveT = 0; dirty = false; saveMeta(); }
-    if (meta.needs.rest <= 0 && !P.act) { toast('', 'You sit down where you are and the corridor takes an hour.'); startAct('Collapse', 'where you stand', 60, function () { bump('rest', 30); bump('spirit', -10); }); }
+    if (meta.needs.rest <= 0 && !P.act) { toast('', 'You sit down where you are and the corridor takes an hour.'); startAct('Collapse', 'where you stand', 60, function () { bump('rest', 30); bump('spirit', -10); }, 'floor'); }
+    if (meta.needs.warmth <= 0 && !P.act && isOutdoor(P.x, P.y) && Math.random() < dt*0.2) toast('', 'You cannot feel your hands. Get indoors.');
   }
   function tick(now) {
     requestAnimationFrame(tick); var dt = Math.min(0.05, (now - lastT)/1000 || 0.016), t = now/1000; lastT = now;
     fpsN++; if (now - fpsT > 500) { fps = fpsN*1000/(now - fpsT); fpsN = 0; fpsT = now; }
     if (running) update(dt);
-    var tx = PX(P.x, P.y), ty = PY(P.x, P.y) - 24; camX += (tx - camX)*Math.min(1, dt*5); camY += (ty - camY)*Math.min(1, dt*5);
+    var tx = PX(P.x, P.y), ty = PY(P.x, P.y) - 24;
+    if (!running) { tx = PX(14, 20) + Math.sin(t*0.11)*420; ty = PY(14, 20) - 60 + Math.cos(t*0.07)*260; camX += (tx - camX)*Math.min(1, dt*0.6); camY += (ty - camY)*Math.min(1, dt*0.6); }
+    else { camX += (tx - camX)*Math.min(1, dt*5); camY += (ty - camY)*Math.min(1, dt*5); }
     zoom = cssW < 500 ? 1 : 1.15;
     render(t, dt); if (running) paintHud();
   }
-  rebuild(); P.x = meta.px; P.y = meta.py; camX = PX(P.x, P.y); camY = PY(P.x, P.y) - 24;
+  rebuild(); P.x = meta.px; P.y = meta.py; camX = PX(P.x, P.y); camY = PY(P.x, P.y) - 24; if (meta.wantDay !== meta.day) dayStart();
   resize(); applySettings(); titleEl.classList.add('on'); requestAnimationFrame(tick);
 </script>
 </body>
