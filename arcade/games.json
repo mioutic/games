@@ -14,6 +14,14 @@
       }
     },
     {
+      "slug": "arcology",
+      "name": "Arcology",
+      "glyph": "grid",
+      "description": "Level 41 of a tower in the rain. A flat, a corridor, a commissary, two open decks. Sleep, eat, wash, work, talk. The clock runs whether you do or not.",
+      "ink": "#8a8fc9",
+      "entry": "index.html"
+    },
+    {
       "slug": "barrow",
       "name": "Barrow",
       "glyph": "blade",
