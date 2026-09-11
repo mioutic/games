@@ -54,6 +54,7 @@
   .creds { font: 500 11px/1 var(--font-mono); color: var(--warning); margin-top: 5px; font-variant-numeric: tabular-nums; }
   .creds::before { content: "◆ "; font-size: 8px; }
   .place.want { top: calc(var(--safe-t) + 138px); color: var(--warning); opacity: .85; }
+  .place.job { top: calc(var(--safe-t) + 152px); color: var(--cat-1); opacity: .9; }
   .place { position: absolute; left: 50%; top: calc(var(--safe-t) + 124px); transform: translateX(-50%); font: 500 8px/1 var(--font-ui); letter-spacing: .24em;
            text-transform: uppercase; color: var(--t-3); white-space: nowrap; }
   .toast { position: absolute; left: 50%; bottom: calc(var(--safe-b) + 150px); transform: translateX(-50%); max-width: 300px; padding: 8px 12px; text-align: center;
@@ -172,7 +173,7 @@
   <div class="stick" id="stickL"><div class="knob"></div><div class="lab">Walk</div></div>
   <div class="hud off" id="hud">
     <div class="panel needs" id="needs"></div>
-    <div class="place" id="place">Level 41 · Corridor</div><div class="place want" id="want"></div>
+    <div class="place" id="place">Level 41 · Corridor</div><div class="place want" id="want"></div><div class="place job" id="job"></div>
     <div class="panel clockbox"><div class="clock" id="clock">22:00</div><div class="day" id="day">Night one</div><div class="creds" id="creds">0</div></div>
     <button class="gear" id="bGear" aria-label="Settings"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="8" cy="18" r="1.6"/></svg></button>
     <button class="verb2" id="verb2"></button>
@@ -192,6 +193,7 @@
     <div class="kv"><span>Conversations</span><b id="kTalks">0</b></div>
     <div class="kv"><span>Rent, 90, due</span><b id="kRent">day 4</b></div>
     <div class="kv"><span>Stock in the cold box</span><b id="kStock">1</b></div>
+    <div class="kv"><span>Job</span><b id="kJob">none</b></div>
     <div class="rule"></div>
     <div class="micro" style="margin-bottom:6px">Today</div><div id="kWants"></div>
     <div class="rule"></div>
@@ -225,6 +227,23 @@
     <button class="go ghost wide" id="bShopClose">Close</button>
   </div></div>
 
+  <div class="sheet" id="lift"><div class="panel card">
+    <div class="cardhead"><span class="ornament">▸</span><h2 style="margin:0;text-align:left;font-size:20px">Lift</h2></div>
+    <p class="lede" style="text-align:left">The doors close. The floor counter runs.</p>
+    <div id="liftList"></div>
+    <button class="go ghost wide" id="bLiftClose">Stay</button>
+  </div></div>
+  <div class="sheet" id="jobs"><div class="panel card">
+    <div class="cardhead"><span class="ornament">§</span><h2 style="margin:0;text-align:left;font-size:20px">The board</h2></div>
+    <p class="lede" style="text-align:left" id="jobNow"></p>
+    <div id="jobList"></div>
+    <button class="go ghost wide" id="bJobsClose">Close</button>
+  </div></div>
+  <div class="sheet" id="wear"><div class="panel card">
+    <div class="cardhead"><span class="ornament">◈</span><h2 style="margin:0;text-align:left;font-size:20px">The coat rail</h2></div>
+    <div id="wearList"></div>
+    <button class="go ghost wide" id="bWearClose">Close</button>
+  </div></div>
   <div class="sheet" id="talk"><div class="panel card">
     <div class="cardhead"><span class="ornament">‡</span><h2 style="margin:0;text-align:left;font-size:20px" id="talkName">—</h2></div>
     <div class="need rel" id="talkRel"></div>
@@ -253,7 +272,7 @@
   function saveSettings() { try { localStorage.setItem(SKEY, JSON.stringify(settings)); } catch (e) {} mirrorSave(); }
   function buzz(p) { if (settings.haptics && navigator.vibrate) navigator.vibrate(p); }
   // The tenancy: everything that persists between sessions.
-  function freshMeta() { return { v: 1, savedAt: 0, day: 1, min: 22*60, creds: 40, needs: { rest: 62, hunger: 55, hygiene: 70, spirit: 58, warmth: 66 }, own: {}, px: 0, py: 0, earned: 0, shifts: 0, talks: 0, met: {}, seen: {}, skills: { focus: 0, cooking: 0, charm: 0, fitness: 0 }, rel: { vesna: 0, ohm: 0, warden: 0, kid: 0 }, stock: 1, wants: [], wantDay: 0, rentDay: 4, owed: 0, evPlan: null, cooked: 0 }; }
+  function freshMeta() { return { v: 1, savedAt: 0, day: 1, min: 22*60, creds: 40, needs: { rest: 62, hunger: 55, hygiene: 70, spirit: 58, warmth: 66 }, own: {}, px: 0, py: 0, earned: 0, shifts: 0, talks: 0, met: {}, seen: {}, skills: { focus: 0, cooking: 0, charm: 0, fitness: 0 }, rel: { vesna: 0, ohm: 0, warden: 0, kid: 0, mira: 0, sol: 0, pell: 0, w1: 0, w2: 0 }, stock: 1, wants: [], wantDay: 0, rentDay: 4, owed: 0, evPlan: null, cooked: 0, level: 'l41', job: null, jobsDone: 0, look: null }; }
   var meta = freshMeta();
   function absorb(m) { if (!m || m.v !== 1) return false; var f = freshMeta(); for (var k in f) if (m[k] !== undefined) meta[k] = m[k]; if (meta.needs.warmth === undefined) meta.needs.warmth = 66; for (k in f.skills) if (meta.skills[k] === undefined) meta.skills[k] = 0; for (k in f.rel) if (meta.rel[k] === undefined) meta.rel[k] = 0; return true; }
   try { absorb(JSON.parse(localStorage.getItem(MKEY) || 'null')); } catch (e) {}
@@ -404,7 +423,7 @@
   function npc(id, n, look, x, y, o) { var p = { id: id, n: n, look: look, x: x + 0.5, y: y + 0.5, home: [x + 0.5, y + 0.5], face: 0, frame: 0, ph: 0, wp: [], wi: 0, wait: 0, spd: 2.0, npc: true, lines: [], sched: [] }; if (o) for (var k in o) p[k] = o[k]; npcs.push(p); return p; }
 
   /* ---- Level 41 ---- */
-  function build() {
+  function build41() {
     // The slab: a corridor spine with rooms hung off it, and two open decks at the ends over the drop.
     room('Corridor', 12, 6, 4, 26, FL.concrete, WM.panel, { light: 0.55, lightCol: '#e9d8c5' });
     // Your flat: two rooms and a bathroom, on the west side of the spine.
@@ -456,7 +475,7 @@
     door('W', 16, 27); obj('washer', 18, 26, { use: { verb: 'Wash', what: 'the coat · 30 min', kind: 'laundry' } }); obj('washer', 19, 26); obj('bin', 16, 28); deco('N', 17, 26, 'pipes');
     room('Lift', 10, 20, 2, 2, FL.metal, WM.panel, { light: 0.7, lightCol: '#d9a441' });
     wallW[T(12, 20)] = 0; wallW[T(12, 21)] = 0; decoW[T(12, 20)] = { kind: 'lift', open: 0 }; decoW[T(12, 21)] = { kind: 'lift', open: 0 };
-    obj('liftcall', 10, 20, { w: 2, h: 2, walk: 1, use: { verb: 'Ride', what: 'the lift to the ground · a shift · 8h', kind: 'commute', reach: 0.35 } });
+    obj('liftcall', 10, 20, { w: 2, h: 2, walk: 1, use: { verb: 'Ride', what: 'the lift', kind: 'lift', reach: 0.35 } });
     deco('W', 16, 30, 'poster', { ink: 'violet' }); deco('W', 12, 14, 'pipes'); deco('W', 12, 24, 'poster', { ink: 'gold' }); deco('W', 16, 13, 'vent'); deco('W', 12, 8, 'panelscreen');
     obj('bench', 12, 16, { w: 1, h: 2, f: 3, use: { verb: 'Sit', what: 'and watch the corridor', kind: 'rest', short: 1 } }); obj('plant', 15, 6); obj('bin', 12, 30); obj('plant', 15, 31);
     light(13.8, 9, '#e9d8c5', 120, { ceil: 1 }); light(13.8, 16, '#e9d8c5', 120, { ceil: 1 }); light(13.8, 23, '#e9d8c5', 120, { ceil: 1 }); light(13.8, 30, '#e9d8c5', 120, { ceil: 1 }); light(12.4, 20.9, '#d9a441', 90, { lift: 1 });
@@ -489,6 +508,61 @@
     // Where you start: the corridor outside your door.
     meta.px = meta.px || 13.5; meta.py = meta.py || 10.5;
   }
+  /* ---- the ground: a lobby, a bar, and the plaza in the rain ---- */
+  function buildLobby() {
+    room('Lobby', 8, 8, 16, 12, FL.terrazzo, WM.panel, { light: 0.75, lightCol: '#e9d8c5' });
+    room('The Sump', 2, 10, 6, 8, FL.carpet, WM.brick, { light: 0.35, lightCol: '#c96a8e' }); door('W', 8, 13); door('W', 8, 14);
+    room('Lift', 24, 12, 2, 2, FL.metal, WM.panel, { light: 0.7, lightCol: '#d9a441' }); wallW[T(24, 12)] = 0; wallW[T(24, 13)] = 0; decoW[T(24, 12)] = { kind: 'lift', open: 0 }; decoW[T(24, 13)] = { kind: 'lift', open: 0 };
+    obj('liftcall', 24, 12, { w: 2, h: 2, walk: 1, use: { verb: 'Ride', what: 'the lift', kind: 'lift', reach: 0.35 } });
+    room('Plaza', 4, 20, 24, 12, FL.wet, WM.rail, { open: 1, south: WM.rail, east: WM.rail }); light(16, 26, '#7e9cc4', 420, { win: 1 });
+    for (var i = 8; i < 24; i++) wallN[T(i, 20)] = WM.panel; for (i = 24; i < 28; i++) wallN[T(i, 20)] = WM.panel; door('N', 15, 20); door('N', 16, 20);
+    deco('N', 12, 8, 'billboard'); deco('N', 18, 8, 'screen'); deco('N', 21, 8, 'panelscreen'); deco('W', 8, 9, 'poster', { ink: 'teal' }); deco('W', 8, 17, 'pipes'); deco('N', 10, 20, 'billboard'); deco('N', 24, 20, 'neon', { text: 'TRANSIT', ink: 'teal' }); deco('N', 20, 20, 'poster', { ink: 'gold' }); deco('N', 8, 20, 'vent');
+    obj('desk2', 10, 10, { w: 3, h: 1 }); obj('jobterm', 20, 9, { use: { verb: 'Browse', what: 'the job board', kind: 'jobs' }, light: '#6fb3ab' });
+    obj('pillar', 12, 15); obj('pillar', 19, 15); obj('bench', 14, 17, { w: 2, h: 1, use: { verb: 'Sit', what: 'and watch the doors', kind: 'rest', short: 1 } }); obj('bench', 17, 17, { w: 2, h: 1, use: { verb: 'Sit', what: 'and watch the doors', kind: 'rest', short: 1 } });
+    obj('plant', 9, 19); obj('plant', 22, 19); obj('bin', 23, 9); obj('stall', 21, 17, { w: 2, h: 1, use: { verb: 'Browse', what: 'the coat rail', kind: 'wear' }, light: '#c96a8e' });
+    light(16, 10, '#e9d8c5', 200, { ceil: 1 }); light(16, 16, '#e9d8c5', 200, { ceil: 1 }); light(20.5, 9.6, '#6fb3ab', 90, { screen: 1 }); light(24.4, 12.9, '#d9a441', 90, { lift: 1 });
+    npc('mira', 'Mira', { coat: '#1a2330', trim: '#e9d8c5', hair: '#3d1f28', shirt: '#e9d8c5' }, 11, 9, { fixed: 1, face: 1, reach: 2.2,
+      lines: [['Forty-one? Then you are one of mine. Everything above thirty goes through this desk.', 'Parcels, permits, complaints. Mostly parcels.'], ['The board takes couriers. It always takes couriers. Nobody stays a courier.', 'Take one. See the building. Come back with the receipt and I will remember your name.']],
+      deep: [['I have run this desk for eleven years. I know which lift sticks and which tenants lie.', 'You do not lie. Not well, anyway.']], idle: ['Name and level.', 'Parcels for 41.', 'The board is behind you.'] });
+    obj('bar', 3, 11, { w: 3, h: 1, use: { verb: 'Drink', what: 'something warm from Sol · 6', kind: 'drink', cost: 6, reach: 2.4 } }); obj('stool', 3, 12); obj('stool', 4, 12); obj('stool', 5, 12); obj('table', 3, 15); obj('stool', 2, 15); obj('stool', 4, 15); obj('table', 6, 15); obj('stool', 7, 15);
+    deco('N', 3, 10, 'shelf'); deco('N', 5, 10, 'neon', { text: 'SUMP', ink: 'pink' }); deco('N', 6, 10, 'shelf'); deco('W', 2, 12, 'poster', { ink: 'violet' }); light(4.5, 10.6, '#c96a8e', 130, { neon: 1 });
+    npc('sol', 'Sol', { coat: '#241119', trim: '#c96a8e', hair: '#0b0609', apron: 1 }, 4, 10, { fixed: 1, face: 1, reach: 2.4,
+      lines: [['Warm, or strong, or both. Both is nine.', 'Nobody comes to the Sump because it is nice. They come because it is down here.'], ['The rail workers drink at six. The night watch at seven. You drink whenever, which tells me something.', 'It tells me you are new.']],
+      deep: [['I poured for the man who built the roof garden. He drank here every night for a year and then he stopped coming.', 'The tree is his. Tam is his. Nobody tells her.']], idle: ['Warm or strong?', 'Nine for both.', 'Sit anywhere.'] });
+    obj('cart', 13, 24, { w: 2, h: 1, use: { verb: 'Eat', what: 'from the cart · 6', kind: 'eat', cost: 6, hot: 1, reach: 1.8 }, light: '#d9a441' });
+    obj('bench', 8, 27, { w: 2, h: 1, use: { verb: 'Sit', what: 'in the rain', kind: 'rest', short: 1, view: 1 } }); obj('bench', 20, 27, { w: 2, h: 1, use: { verb: 'Sit', what: 'in the rain', kind: 'rest', short: 1, view: 1 } });
+    obj('lamppost', 10, 24, { light: '#d9a441', tall: 1 }); obj('lamppost', 18, 29, { light: '#d9a441', tall: 1 }); obj('lamppost', 24, 25, { light: '#d9a441', tall: 1 });
+    obj('car', 6, 29, { w: 2, h: 1, light: '#ff5470' }); obj('car', 22, 30, { w: 2, h: 1, light: '#ff5470' }); obj('vent', 12, 30, { walk: 1 }); obj('bin', 26, 28); obj('planter', 4, 22, { w: 1, h: 3 }); obj('planter', 26, 21, { w: 1, h: 2 });
+    obj('gate', 25, 22, { w: 2, h: 1, use: { verb: 'Ride', what: 'the rail to work · 8h', kind: 'commute' }, light: '#6fb3ab' });
+    light(26, 22.8, '#6fb3ab', 120, { neon: 1 }); light(11, 20.8, '#8a8fc9', 170, { screen: 1 });
+    npc('w1', 'A commuter', { coat: '#2a2a30', trim: '#8f6f76', hair: '#0b0609', bag: 1 }, 16, 25, { spd: 2.3, wait: 2, pause: 4,
+      idle: ['Late. Late.', 'Rail is running.'], lines: [['The rail is late. It is never late. Something is happening on ninety.', 'Do not go up there today.']],
+      sched: [{ from: 0, to: 1440, wp: [[16.5, 25.5], [15.5, 19.5], [15.5, 16.5], [19.5, 12.5], [15.5, 16.5], [16.5, 21.5], [25.5, 23.5], [16.5, 25.5]] }] });
+    npc('w2', 'A commuter', { coat: '#3a3a42', trim: '#6fb3ab', hair: '#5c434a', scarf: 1 }, 24, 24, { spd: 2.1, wait: 6, pause: 5,
+      idle: ['Cold.', 'Every night.'], lines: [['Thirty years I have taken this rail and I have never once seen the ground level of the tower in daylight.', 'Nobody has. Think about that.']],
+      sched: [{ from: 0, to: 1440, wp: [[24.5, 24.5], [14.5, 25.5], [9.5, 28.5], [14.5, 25.5], [24.5, 24.5]] }] });
+    meta.px = 24.9; meta.py = 13;
+  }
+  /* ---- the roof: the top of the tower, in the weather ---- */
+  function buildRoof() {
+    room('Open air', 6, 6, 24, 20, FL.wet, WM.rail, { open: 1, south: WM.rail, east: WM.rail });
+    light(18, 16, '#7e9cc4', 520, { win: 1 }); light(11, 11, '#7e9cc4', 300, { win: 1 }); light(24, 22, '#7e9cc4', 300, { win: 1 });
+    room('Lift', 6, 22, 2, 2, FL.metal, WM.panel, { light: 0.7, lightCol: '#d9a441' }); wallW[T(8, 22)] = 0; wallW[T(8, 23)] = 0; decoW[T(8, 22)] = { kind: 'lift', open: 0 }; decoW[T(8, 23)] = { kind: 'lift', open: 0 };
+    obj('liftcall', 6, 22, { w: 2, h: 2, walk: 1, use: { verb: 'Ride', what: 'the lift', kind: 'lift', reach: 0.35 } });
+    room('Greenhouse', 20, 16, 6, 5, FL.soil, WM.glass, { light: 0.5, lightCol: '#5fa777' }); door('W', 20, 18);
+    obj('planter', 21, 16, { w: 4, h: 1, soil: 1 }); obj('planter', 21, 20, { w: 4, h: 1, soil: 1 }); obj('plant', 25, 18); obj('plant', 25, 17); obj('lamp', 21, 18, { light: '#5fa777' });
+    obj('helipad', 12, 9, { w: 5, h: 5, walk: 1 }); obj('tank', 8, 7, { w: 2, h: 2 }); obj('tank', 25, 7, { w: 2, h: 2 }); obj('mast', 28, 8, { light: '#ff5470', tall: 1 }); obj('mast', 9, 19, { light: '#ff5470', tall: 1 });
+    obj('vent', 10, 14, { walk: 1 }); obj('vent', 17, 20, { walk: 1 }); obj('vent', 26, 13, { walk: 1 }); obj('bin', 12, 24);
+    obj('beacon', 7, 7, { light: '#6fb3ab', use: { verb: 'Check', what: 'the beacon', kind: 'check' } }); obj('beacon', 28, 6, { light: '#6fb3ab', use: { verb: 'Check', what: 'the beacon', kind: 'check' } }); obj('beacon', 28, 24, { light: '#6fb3ab', use: { verb: 'Check', what: 'the beacon', kind: 'check' } }); obj('beacon', 10, 24, { light: '#6fb3ab', use: { verb: 'Check', what: 'the beacon', kind: 'check' } });
+    obj('bench', 14, 23, { w: 2, h: 1, use: { verb: 'Sit', what: 'at the top of everything', kind: 'rest', short: 1, view: 1, roof: 1 } }); obj('bench', 18, 12, { w: 2, h: 1, use: { verb: 'Sit', what: 'by the pad', kind: 'rest', short: 1, view: 1, roof: 1 } });
+    obj('lamppost', 10, 17, { light: '#d9a441', tall: 1 }); obj('lamppost', 22, 12, { light: '#d9a441', tall: 1 }); obj('lamppost', 18, 24, { light: '#d9a441', tall: 1 }); obj('lamppost', 16, 7, { light: '#d9a441', tall: 1 }); obj('lamppost', 27, 18, { light: '#d9a441', tall: 1 });
+    npc('pell', 'Old Pell', { coat: '#3a3a2a', trim: '#5fa777', hair: '#c3a9ad', hood: 1 }, 22, 18, { fixed: 1, face: 0, reach: 1.6,
+      lines: [['Nobody comes up here. That is what it is for.', 'The glass keeps the wind off the seedlings. Nothing keeps it off me.'], ['The pad has not seen a flier in six years. I sweep it anyway. Something should be ready.', 'Sit by it. It is the only flat honest thing in the city.']],
+      deep: [['I carried that tree on 41 up from the ground. One floor a year. I am not finished.', 'You are young. Carry the next one.']], idle: ['Mind the wind.', 'The glass holds.', 'Sweep the pad.'] });
+    meta.px = 6.9; meta.py = 23;
+  }
+  var LEVELS = { l41: { n: 'Level 41', build: build41, lift: [10.9, 21] }, lobby: { n: 'Ground', build: buildLobby, lift: [24.9, 13] }, roof: { n: 'Roof', build: buildRoof, lift: [6.9, 23] } };
+  var NPC_LEVEL = { vesna: 'l41', ohm: 'l41', warden: 'l41', kid: 'l41', mira: 'lobby', sol: 'lobby', pell: 'roof', w1: 'lobby', w2: 'lobby' };
   /* ---- finding a way ----
      A* over tiles. A step is legal only if the tile is floor, holds no
      furniture, and no wall stands on the edge between the two tiles. The
@@ -618,6 +692,11 @@
   function drawWall(g, x, y, side, mat, hgt, alpha, t) {
     var lit = side === 0, cols = WALLCOL[mat] || WALLCOL[1], base = lit ? cols[0] : cols[1], dk = mixh(base, '#0b0609', 0.55), d = (side === 0 ? decoN : decoW)[T(x, y)];
     g.save(); if (alpha < 1) g.globalAlpha = alpha; faceXf(g, x, y, side);
+    if (mat === WM.glass) { // a greenhouse pane: a frame, a tint, a reflection
+      g.fillStyle = 'rgba(126,156,196,.13)'; g.fillRect(0, -hgt, 64, hgt); g.fillStyle = 'rgba(233,216,197,.06)'; g.beginPath(); g.moveTo(4, -hgt + 4); g.lineTo(30, -hgt + 4); g.lineTo(4, -hgt*0.45); g.closePath(); g.fill();
+      g.strokeStyle = 'rgba(233,216,197,.35)'; g.lineWidth = 1.5; g.strokeRect(1, -hgt + 1, 62, hgt - 2); g.beginPath(); g.moveTo(32, -hgt); g.lineTo(32, 0); g.moveTo(0, -hgt/2); g.lineTo(64, -hgt/2); g.stroke(); g.fillStyle = 'rgba(11,6,9,.5)'; g.fillRect(0, -6, 64, 6); g.restore();
+      var gx0, gy0, gx1, gy1, gox = side === 0 ? 5 : -5; if (side === 0) { gx0 = PX(x, y); gy0 = PY(x, y) - hgt; gx1 = PX(x + 1, y); gy1 = PY(x + 1, y) - hgt; } else { gx0 = PX(x, y + 1); gy0 = PY(x, y + 1) - hgt; gx1 = PX(x, y); gy1 = PY(x, y) - hgt; }
+      g.save(); g.fillStyle = 'rgba(195,169,173,.7)'; g.beginPath(); g.moveTo(gx0, gy0); g.lineTo(gx1, gy1); g.lineTo(gx1 + gox, gy1 - 2.5); g.lineTo(gx0 + gox, gy0 - 2.5); g.closePath(); g.fill(); g.restore(); return; }
     if (mat === WM.rail) { // a railing: posts, a top bar, and the drop beyond it
       g.strokeStyle = '#8f6f76'; g.lineWidth = 2; g.beginPath(); g.moveTo(0, -30); g.lineTo(64, -30); g.stroke(); g.strokeStyle = 'rgba(233,216,197,.35)'; g.lineWidth = 1; g.beginPath(); g.moveTo(0, -31); g.lineTo(64, -31); g.stroke();
       g.strokeStyle = '#5c434a'; g.lineWidth = 1.5; g.beginPath(); for (var i = 0; i <= 64; i += 16) { g.moveTo(i, 0); g.lineTo(i, -30); } g.moveTo(0, -14); g.lineTo(64, -14); g.stroke(); g.restore(); return; }
@@ -640,6 +719,9 @@
     // decals, only on a wall standing at full height
     if (d && hgt > 40) drawDeco(g, d, lit, t, hgt);
     g.restore();
+    // the wall has thickness: a lit strip along its top, set back into the wall
+    var ax, ay, bx, by, ox = side === 0 ? 5 : -5, oy = -2.5; if (side === 0) { ax = PX(x, y); ay = PY(x, y) - hgt; bx = PX(x + 1, y); by = PY(x + 1, y) - hgt; } else { ax = PX(x, y + 1); ay = PY(x, y + 1) - hgt; bx = PX(x, y); by = PY(x, y) - hgt; }
+    g.save(); if (alpha < 1) g.globalAlpha = alpha; g.fillStyle = mixh(base, '#e9d8c5', hgt >= WH - 1 ? 0.3 : 0.42); g.beginPath(); g.moveTo(ax, ay); g.lineTo(bx, by); g.lineTo(bx + ox, by + oy); g.lineTo(ax + ox, ay + oy); g.closePath(); g.fill(); g.strokeStyle = 'rgba(11,6,9,.5)'; g.lineWidth = 0.8; g.stroke(); g.restore();
   }
   function drawDeco(g, d, lit, t, hgt) {
     var k = d.kind, ink = INK[d.ink] || INK.bone;
@@ -741,6 +823,31 @@
     bin: function (g, ob) { cyl(g, 0.5, 0.5, 0.26, 24, '#2a2a30', { top: '#1a1a20' }); g.fillStyle = '#0b0609'; g.beginPath(); g.ellipse(PX(0.5, 0.5), PY(0.5, 0.5) - 24, 6, 3, 0, 0, 6.283); g.fill(); g.fillStyle = 'rgba(233,216,197,.1)'; g.fillRect(PX(0.5, 0.5) - 8, PY(0.5, 0.5) - 14, 16, 1.5); },
     washer: function (g, ob) { box(g, 0.1, 0.1, 0, 0.8, 0.8, 40, '#c3a9ad', { top: '#d9c8b5', ef: '#8f7078' }); g.fillStyle = '#1a2028'; g.beginPath(); g.ellipse(PX(0.5, 0.9), PY(0.5, 0.9) - 20, 11, 8, 0, 0, 6.283); g.fill(); g.strokeStyle = 'rgba(233,216,197,.4)'; g.lineWidth = 1.5; g.stroke(); g.fillStyle = INK.teal; g.fillRect(PX(0.2, 0.9) - 2, PY(0.2, 0.9) - 37, 3, 2); },
     liftcall: function () {},
+    desk2: function (g, ob) { var w = ob.w; box(g, 0, 0.15, 0, w, 0.7, 30, '#2c2226', { top: '#8f7078', sf: '#3a3238' }); g.fillStyle = 'rgba(233,216,197,.06)'; g.fillRect(PX(0, 0.85) - 1, PY(0, 0.85) - 30, 2, 30);
+      box(g, 0.4, 0.3, 30, 0.5, 0.3, 2, '#1a1a22'); g.fillStyle = '#1c2a3a'; g.beginPath(); g.moveTo(PX(0.42, 0.32), PY(0.42, 0.32) - 54); g.lineTo(PX(0.88, 0.32), PY(0.88, 0.32) - 54); g.lineTo(PX(0.88, 0.32), PY(0.88, 0.32) - 35); g.lineTo(PX(0.42, 0.32), PY(0.42, 0.32) - 35); g.closePath(); g.fill(); g.fillStyle = 'rgba(111,179,171,.7)'; g.fillRect(PX(0.65, 0.32) - 8, PY(0.65, 0.32) - 48, 10, 1.5); g.fillRect(PX(0.65, 0.32) - 8, PY(0.65, 0.32) - 44, 6, 1.5); glow(g, PX(0.65, 0.32), PY(0.65, 0.32) - 45, INK.teal, 20);
+      g.fillStyle = '#c3a9ad'; g.fillRect(PX(1.6, 0.5) - 6, PY(1.6, 0.5) - 33, 12, 5); g.fillRect(PX(2.3, 0.5) - 5, PY(2.3, 0.5) - 33, 10, 5); g.fillStyle = INK.gold; g.fillRect(PX(2.5, 0.3) - 3, PY(2.5, 0.3) - 40, 5, 8); },
+    pillar: function (g, ob) { cyl(g, 0.5, 0.5, 0.3, 96, '#3a3238', { top: '#4a4048' }); g.fillStyle = 'rgba(233,216,197,.16)'; g.fillRect(PX(0.5, 0.5) - 9, PY(0.5, 0.5) - 60, 18, 2); g.fillStyle = INK.bone; g.globalAlpha = 0.5; g.fillRect(PX(0.5, 0.5) - 9, PY(0.5, 0.5) - 58, 18, 1); g.globalAlpha = 1; },
+    jobterm: function (g, ob) { box(g, 0.2, 0.2, 0, 0.6, 0.6, 40, '#2a2a30', { top: '#3a3a42' }); var col = ob.light || INK.teal; g.fillStyle = '#0b1a1a'; g.beginPath(); g.moveTo(PX(0.22, 0.8), PY(0.22, 0.8) - 60); g.lineTo(PX(0.78, 0.8), PY(0.78, 0.8) - 60); g.lineTo(PX(0.78, 0.8), PY(0.78, 0.8) - 28); g.lineTo(PX(0.22, 0.8), PY(0.22, 0.8) - 28); g.closePath(); g.fill(); g.strokeStyle = col; g.lineWidth = 1; g.stroke();
+      g.fillStyle = col; g.globalAlpha = 0.75; for (var r = 0; r < 4; r++) g.fillRect(PX(0.3, 0.8) - 2, PY(0.3, 0.8) - 55 + r*7, 10 + (r % 3)*5, 2); g.globalAlpha = 1; glow(g, PX(0.5, 0.8), PY(0.5, 0.8) - 44, col, 26); },
+    bar: function (g, ob) { var w = ob.w; box(g, 0, 0.15, 0, w, 0.7, 30, '#3a2a22', { top: '#5a4234', sf: '#4a3628', soft: 4 }); g.fillStyle = 'rgba(233,216,197,.08)'; g.fillRect(PX(0, 0.85) - 2, PY(0, 0.85) - 30, 2, 30);
+      var cols = [INK.pink, INK.gold, INK.teal, INK.violet, INK.bone]; for (var i = 0; i < 6; i++) { var bx = 0.25 + i*0.45, col = cols[i % 5]; g.fillStyle = col; g.globalAlpha = 0.85; g.fillRect(PX(bx, 0.4) - 2, PY(bx, 0.4) - 42, 4, 11); g.globalAlpha = 1; glow(g, PX(bx, 0.4), PY(bx, 0.4) - 38, col, 9); }
+      g.fillStyle = '#c3a9ad'; g.beginPath(); g.ellipse(PX(2.4, 0.5), PY(2.4, 0.5) - 32, 5, 2.5, 0, 0, 6.283); g.fill(); },
+    stall: function (g, ob) { var w = ob.w; box(g, 0.05, 0.15, 0, 0.1, 0.7, 60, '#2a2a30', { noline: 1 }); box(g, w - 0.15, 0.15, 0, 0.1, 0.7, 60, '#2a2a30', { noline: 1 }); g.strokeStyle = '#8f6f76'; g.lineWidth = 2; g.beginPath(); g.moveTo(PX(0.1, 0.5), PY(0.1, 0.5) - 60); g.lineTo(PX(w - 0.1, 0.5), PY(w - 0.1, 0.5) - 60); g.stroke();
+      var cs = ['#1e3a3a', '#8f7078', '#2a1a3a', '#3a3a42', '#4a1420']; for (var i = 0; i < 5; i++) { var cx = 0.25 + i*0.35, px0 = PX(cx, 0.5), py0 = PY(cx, 0.5); g.fillStyle = cs[i]; g.beginPath(); g.moveTo(px0 - 6, py0 - 56); g.lineTo(px0 + 6, py0 - 56); g.lineTo(px0 + 8, py0 - 22); g.lineTo(px0 - 8, py0 - 22); g.closePath(); g.fill(); g.strokeStyle = 'rgba(11,6,9,.6)'; g.lineWidth = 1; g.stroke(); g.fillStyle = '#c3a9ad'; g.fillRect(px0 - 1, py0 - 60, 2, 4); }
+      var col = ob.light || INK.pink; g.fillStyle = col; g.shadowColor = col; g.shadowBlur = 8; g.fillRect(PX(0.1, 0.5), PY(0.1, 0.5) - 66, 56, 2); g.shadowBlur = 0; },
+    cart: function (g, ob) { var w = ob.w; box(g, 0.1, 0.2, 6, w - 0.2, 0.6, 26, '#3a2a22', { top: '#5a4234', soft: 4 }); cyl(g, 0.3, 0.85, 0.16, 8, '#1a1a20'); cyl(g, w - 0.3, 0.85, 0.16, 8, '#1a1a20');
+      box(g, 0.35, 0.3, 32, 0.4, 0.4, 10, '#5c434a', { top: '#8f6f76' }); g.fillStyle = '#c3a9ad'; g.beginPath(); g.ellipse(PX(0.55, 0.5), PY(0.55, 0.5) - 42, 7, 3.5, 0, 0, 6.283); g.fill();
+      box(g, 0.05, 0.1, 62, w - 0.1, 0.8, 3, '#4a1420', { top: '#5c2e3c', soft: 6 }); g.strokeStyle = '#2a2a30'; g.lineWidth = 2; g.beginPath(); g.moveTo(PX(0.1, 0.9), PY(0.1, 0.9) - 32); g.lineTo(PX(0.1, 0.9), PY(0.1, 0.9) - 62); g.moveTo(PX(w - 0.1, 0.9), PY(w - 0.1, 0.9) - 32); g.lineTo(PX(w - 0.1, 0.9), PY(w - 0.1, 0.9) - 62); g.stroke();
+      var col = ob.light || INK.gold; g.fillStyle = col; g.beginPath(); g.arc(PX(1, 0.5), PY(1, 0.5) - 56, 2.5, 0, 6.283); g.fill(); glow(g, PX(1, 0.5), PY(1, 0.5) - 54, col, 22); },
+    car: function (g, ob) { var w = ob.w; box(g, 0.05, 0.1, 6, w - 0.1, 0.8, 16, '#241119', { top: '#3a2a2e', soft: 8 }); box(g, 0.5, 0.15, 22, w - 1.1, 0.7, 12, '#1a1a20', { top: '#2a2a30', soft: 7 }); g.fillStyle = 'rgba(126,156,196,.3)'; g.fillRect(PX(0.55, 0.85) - 2, PY(0.55, 0.85) - 32, 22, 8);
+      cyl(g, 0.4, 0.9, 0.14, 6, '#0b0609'); cyl(g, w - 0.4, 0.9, 0.14, 6, '#0b0609'); var col = ob.light || INK.rose; g.fillStyle = col; g.shadowColor = col; g.shadowBlur = 6; g.fillRect(PX(0.1, 0.9) - 3, PY(0.1, 0.9) - 14, 5, 2); g.shadowBlur = 0; g.fillStyle = INK.bone; g.globalAlpha = 0.6; g.fillRect(PX(w, 0.9) - 3, PY(w, 0.9) - 14, 5, 2); g.globalAlpha = 1; },
+    helipad: function (g, ob) { var c = ob.w/2, cx = PX(c, c), cy = PY(c, c); g.strokeStyle = 'rgba(233,216,197,.55)'; g.lineWidth = 3; g.beginPath(); g.ellipse(cx, cy, 62, 31, 0, 0, 6.283); g.stroke(); g.strokeStyle = 'rgba(233,216,197,.25)'; g.lineWidth = 1.5; g.beginPath(); g.ellipse(cx, cy, 44, 22, 0, 0, 6.283); g.stroke();
+      g.fillStyle = 'rgba(233,216,197,.35)'; g.beginPath(); g.moveTo(cx - 14, cy - 12); g.lineTo(cx - 8, cy - 12); g.lineTo(cx - 8, cy - 2); g.lineTo(cx + 8, cy - 2); g.lineTo(cx + 8, cy - 12); g.lineTo(cx + 14, cy - 12); g.lineTo(cx + 14, cy + 12); g.lineTo(cx + 8, cy + 12); g.lineTo(cx + 8, cy + 2); g.lineTo(cx - 8, cy + 2); g.lineTo(cx - 8, cy + 12); g.lineTo(cx - 14, cy + 12); g.closePath(); g.fill();
+      for (var i = 0; i < 8; i++) { var a = i/8*6.283; g.fillStyle = i % 2 ? INK.gold : INK.bone; g.globalAlpha = 0.8; g.fillRect(cx + Math.cos(a)*62 - 1.5, cy + Math.sin(a)*31 - 1.5, 3, 3); } g.globalAlpha = 1; },
+    tank: function (g, ob) { cyl(g, 1, 1, 0.9, 60, '#3a3a42', { top: '#4a4a52' }); g.strokeStyle = 'rgba(11,6,9,.45)'; g.lineWidth = 2; for (var i = 1; i < 4; i++) { g.beginPath(); g.ellipse(PX(1, 1), PY(1, 1) - i*15, 28.8, 14.4, 0, 0, 3.14); g.stroke(); } g.fillStyle = 'rgba(233,216,197,.12)'; g.fillRect(PX(1, 1) - 24, PY(1, 1) - 58, 6, 56); },
+    mast: function (g, ob) { cyl(g, 0.5, 0.5, 0.2, 8, '#2a2a30'); g.strokeStyle = '#3d3a40'; g.lineWidth = 3; g.lineCap = 'round'; g.beginPath(); g.moveTo(PX(0.5, 0.5), PY(0.5, 0.5) - 8); g.lineTo(PX(0.5, 0.5), PY(0.5, 0.5) - 150); g.stroke(); g.lineWidth = 1; g.strokeStyle = 'rgba(233,216,197,.3)'; g.beginPath(); for (var i = 0; i < 4; i++) { g.moveTo(PX(0.5, 0.5) - 10, PY(0.5, 0.5) - 40 - i*30); g.lineTo(PX(0.5, 0.5) + 10, PY(0.5, 0.5) - 40 - i*30); } g.moveTo(PX(0.5, 0.5), PY(0.5, 0.5) - 8); g.lineTo(PX(0.5, 0.5) - 26, PY(0.5, 0.5) + 2); g.moveTo(PX(0.5, 0.5), PY(0.5, 0.5) - 8); g.lineTo(PX(0.5, 0.5) + 26, PY(0.5, 0.5) + 2); g.stroke();
+      var col = ob.light || INK.rose; g.fillStyle = col; g.shadowColor = col; g.shadowBlur = 8; g.beginPath(); g.arc(PX(0.5, 0.5), PY(0.5, 0.5) - 152, 2.5, 0, 6.283); g.fill(); g.shadowBlur = 0; glow(g, PX(0.5, 0.5), PY(0.5, 0.5) - 150, col, 18); },
+    beacon: function (g, ob) { cyl(g, 0.5, 0.5, 0.18, 34, '#2a2a30', { top: '#3a3a42' }); var col = ob.light || INK.teal; g.fillStyle = col; g.shadowColor = col; g.shadowBlur = 8; g.beginPath(); g.ellipse(PX(0.5, 0.5), PY(0.5, 0.5) - 34, 4, 2, 0, 0, 6.283); g.fill(); g.shadowBlur = 0; glow(g, PX(0.5, 0.5), PY(0.5, 0.5) - 33, col, 20); g.fillStyle = 'rgba(233,216,197,.2)'; g.fillRect(PX(0.5, 0.5) - 4, PY(0.5, 0.5) - 22, 8, 1.5); },
     crate: function (g, ob) { box(g, 0.15, 0.15, 0, 0.7, 0.7, 26, '#3a2a22', { top: '#5a4234' }); box(g, 0.2, 0.2, 26, 0.6, 0.6, 14, '#3a2a22', { top: '#4a3628' }); g.strokeStyle = 'rgba(11,6,9,.5)'; g.lineWidth = 1; g.beginPath(); g.moveTo(PX(0.15, 0.85), PY(0.15, 0.85) - 13); g.lineTo(PX(0.85, 0.85), PY(0.85, 0.85) - 13); g.stroke(); g.fillStyle = INK.gold; g.globalAlpha = 0.7; g.fillRect(PX(0.5, 0.85) - 5, PY(0.5, 0.85) - 22, 10, 4); g.globalAlpha = 1; },
     vent: function (g, ob) { g.fillStyle = '#12080c'; g.beginPath(); g.moveTo(PX(0.25, 0.25), PY(0.25, 0.25)); g.lineTo(PX(0.75, 0.25), PY(0.75, 0.25)); g.lineTo(PX(0.75, 0.75), PY(0.75, 0.75)); g.lineTo(PX(0.25, 0.75), PY(0.25, 0.75)); g.closePath(); g.fill(); g.strokeStyle = 'rgba(233,216,197,.3)'; g.lineWidth = 1; g.stroke(); g.beginPath(); for (var i = 1; i < 5; i++) { g.moveTo(PX(0.25 + i*0.1, 0.25), PY(0.25 + i*0.1, 0.25)); g.lineTo(PX(0.25 + i*0.1, 0.75), PY(0.25 + i*0.1, 0.75)); } g.stroke(); },
     parcel: function (g, ob) { box(g, 0.3, 0.3, 0, 0.4, 0.4, 14, '#5a4234', { top: '#7a5a44' }); g.strokeStyle = INK.pink; g.lineWidth = 1.5; g.beginPath(); g.moveTo(PX(0.3, 0.5), PY(0.3, 0.5) - 14); g.lineTo(PX(0.7, 0.5), PY(0.7, 0.5) - 14); g.moveTo(PX(0.5, 0.3), PY(0.5, 0.3) - 14); g.lineTo(PX(0.5, 0.7), PY(0.5, 0.7) - 14); g.stroke(); },
@@ -769,7 +876,8 @@
     if (SPR[key]) return SPR[key];
     var pad = 40, W = (ob.w + ob.h)*32 + pad*2, H = (ob.w + ob.h)*16 + 130 + pad, c = document.createElement('canvas'); c.width = W*dpr; c.height = H*dpr;
     var g = c.getContext('2d'), ox = ob.h*32 + pad, oy = 130; g.setTransform(dpr, 0, 0, dpr, ox*dpr, oy*dpr);
-    if (ob.kind !== 'rug' && ob.kind !== 'liftcall') shadowEllipse(g, PX(ob.w/2, ob.h/2), PY(ob.w/2, ob.h/2), (ob.w + ob.h)*14, (ob.w + ob.h)*7, 0.35);
+    if (ob.kind !== 'rug' && ob.kind !== 'liftcall' && ob.kind !== 'helipad' && ob.kind !== 'vent') { shadowEllipse(g, PX(ob.w/2, ob.h/2), PY(ob.w/2, ob.h/2), (ob.w + ob.h)*14, (ob.w + ob.h)*7, 0.35);
+      g.fillStyle = 'rgba(0,0,0,.22)'; g.beginPath(); g.moveTo(PX(0.1, 0.1) + 8, PY(0.1, 0.1) + 4); g.lineTo(PX(ob.w, 0.1) + 12, PY(ob.w, 0.1) + 6); g.lineTo(PX(ob.w + 0.25, ob.h + 0.2) + 16, PY(ob.w + 0.25, ob.h + 0.2) + 8); g.lineTo(PX(0.15, ob.h + 0.25) + 10, PY(0.15, ob.h + 0.25) + 6); g.closePath(); g.fill(); }
     (OBJART[ob.kind] || function () {})(g, ob);
     SPR[key] = { c: c, ox: ox, oy: oy, w: W, h: H }; return SPR[key];
   }
@@ -779,7 +887,7 @@
      four-frame walk. The key light is the same one the walls use. */
   var FIGC = {};
   function figSprite(look, face, frame, pose) {
-    pose = pose || ''; var key = (look.id || JSON.stringify(look)) + '|' + face + '|' + frame + '|' + pose + '@' + dpr;
+    pose = pose || ''; var key = (look.id || JSON.stringify(look)) + '|' + (look.coat || '') + '|' + face + '|' + frame + '|' + pose + '@' + dpr;
     if (FIGC[key]) return FIGC[key];
     var W = 72, H = 88, c = document.createElement('canvas'); c.width = W*dpr; c.height = H*dpr; var g = c.getContext('2d');
     var mirror = face === 1 || face === 3, back = face >= 2, sc = look.small ? 0.8 : 1;
@@ -798,7 +906,7 @@
       FIGC[key] = { c: c, w: W, h: H, ax: W/2, ay: H - 6 }; return FIGC[key]; }
     var seated = pose === 'sit' || pose === 'work' || pose === 'floor' || pose === 'eatsit', lift = seated ? 11 : 0, S = 1.22;
     g.scale(S, S); // the figure is drawn at roughly seven heads
-    shadowEllipse(g, 0, 2, 11, 4.5, seated ? 0.35 : 0.5);
+    shadowEllipse(g, 0, 2, 11, 4.5, seated ? 0.35 : 0.5); g.fillStyle = 'rgba(0,0,0,.2)'; g.beginPath(); g.ellipse(7, 3, 12, 3.6, 0.3, 0, 6.283); g.fill();
     if (pose === 'work') { g.fillStyle = '#2a2a30'; g.fillRect(-7, -30, 14, 3); g.fillStyle = '#1a1a20'; g.fillRect(-7, -30, 14, 16); }
     var trous = mixh(coat, '#0b0609', 0.55), boot = '#1a0d12', yb = bob + lift, hem = seated ? -15 : -19;
     // legs: hip to knee to foot, the knee leading on the swing
@@ -917,8 +1025,10 @@
     { id: 'hot', t: 'a hot meal', d: 'Eat a bowl from Ohm, or cook one.', r: 25 }, { id: 'talk:vesna', t: 'a word with Vesna', d: 'Stay a moment with her.', r: 20 }, { id: 'talk:ohm', t: 'a word with Ohm', d: 'Stay a moment at the counter.', r: 20 },
     { id: 'talk:warden', t: 'a word with the Warden', d: 'He is on the south deck.', r: 20 }, { id: 'talk:kid', t: 'a word with Tam', d: 'On the roof, under the tree.', r: 20 }, { id: 'shift', t: 'a shift worked', d: 'The terminal, or the rail.', r: 30 },
     { id: 'view', t: 'the city, after dark', d: 'Sit on a deck bench after 21:00.', r: 25 }, { id: 'wash', t: 'hot water', d: 'The shower, twenty minutes.', r: 15 }, { id: 'shrine', t: 'the shrine tended', d: 'One credit, one light, on the roof.', r: 20 },
-    { id: 'cook', t: 'something cooked', d: 'Stock in the cold box, then the counter.', r: 30 }, { id: 'garden', t: 'the roof garden', d: 'Walk up to the tree.', r: 15 }, { id: 'sleepEarly', t: 'an early night', d: 'In bed before midnight.', r: 25 }, { id: 'laundry', t: 'clean clothes', d: 'The laundry alcove, thirty minutes.', r: 15 }
+    { id: 'cook', t: 'something cooked', d: 'Stock in the cold box, then the counter.', r: 30 }, { id: 'garden', t: 'the roof garden', d: 'Walk up to the tree.', r: 15 }, { id: 'sleepEarly', t: 'an early night', d: 'In bed before midnight.', r: 25 }, { id: 'laundry', t: 'clean clothes', d: 'The laundry alcove, thirty minutes.', r: 15 },
+    { id: 'drink', t: 'a drink at the Sump', d: 'The bar on the ground floor. Sol pours.', r: 20 }, { id: 'roofview', t: 'the top of the tower', d: 'Sit on a roof bench.', r: 30 }, { id: 'job', t: 'a job from the board', d: 'The lobby board. Take one and finish it.', r: 40 }, { id: 'talk:mira', t: 'a word with Mira', d: 'The desk in the lobby.', r: 20 }
   ];
+  var WANT_AT = { hot: ['l41', 'noodle'], shift: ['l41', 'desk'], view: ['l41', 'bench'], wash: ['l41', 'shower'], shrine: ['l41', 'shrine'], cook: ['l41', 'counter'], garden: ['l41', 'tree'], sleepEarly: ['l41', 'bed'], laundry: ['l41', 'washer'], drink: ['lobby', 'bar'], roofview: ['roof', 'bench'], job: ['lobby', 'jobterm'] };
   function dayStart() {
     meta.wantDay = meta.day; var pool = WANTS.slice(), picks = [], r = mulberry(meta.day*7919 + 3);
     while (picks.length < 3 && pool.length) { var i = Math.floor(r()*pool.length), w = pool.splice(i, 1)[0]; if (w.id === 'listen' && !meta.own.deck) continue; picks.push({ id: w.id, done: 0 }); }
@@ -928,6 +1038,34 @@
     for (var k in meta.rel) meta.rel[k] = Math.max(0, meta.rel[k] - 3);
   }
   function wantDone(tag) { for (var i = 0; i < meta.wants.length; i++) { var w = meta.wants[i]; if (w.id === tag && !w.done) { w.done = 1; var def = WANTS.filter(function (q) { return q.id === tag; })[0]; meta.creds += def.r; meta.earned += def.r; bump('spirit', 6); toast('', 'Want met: ' + def.t + '. ' + def.r + ' credits.'); Snd.done(); buzz([6, 20, 6]); } } }
+  /* ---- jobs: the board in the lobby, and what they ask of you ---- */
+  var JOBS = {
+    courier: { n: 'Courier run', d: 'Collect a parcel from Mira at the desk and carry it to whoever it names, anywhere in the tower. Six hours.', pay: 55, req: null },
+    watch: { n: 'Night watch', d: 'Four beacons on the roof, in order, one after another. Fitness 1.', pay: 90, req: ['fitness', 1] },
+    counter: { n: 'Counter hand', d: 'Ask Ohm, between 11:00 and 20:00. Two hours behind the counter.', pay: 60, ask: 1 },
+    analyst: { n: 'Analyst', d: 'Your own terminal, at home. Eight hours. Focus pays.', pay: 80, ask: 1 }
+  };
+  var COURIER_TO = ['vesna', 'ohm', 'pell', 'sol', 'kid'];
+  function jobText() { var j = meta.job; if (!j) return ''; if (j.id === 'courier') return j.step === 0 ? 'Collect the parcel · Mira, ground' : 'Deliver to ' + npcName(j.to) + ' · ' + LEVELS[NPC_LEVEL[j.to]].n; if (j.id === 'watch') return 'Beacon ' + (j.step + 1) + ' of 4 · roof'; return ''; }
+  function npcName(id) { return { vesna: 'Vesna', ohm: 'Ohm', warden: 'the Warden', kid: 'Tam', mira: 'Mira', sol: 'Sol', pell: 'Old Pell' }[id] || id; }
+  function jobTarget() { var j = meta.job; if (!j) return null;
+    if (j.id === 'courier') { var who = j.step === 0 ? 'mira' : j.to; return { level: NPC_LEVEL[who], npc: who, label: j.step === 0 ? 'Mira' : npcName(j.to) }; }
+    if (j.id === 'watch') return { level: 'roof', kind: 'beacon', idx: j.step, label: 'beacon ' + (j.step + 1) }; return null; }
+  function acceptJob(id) { var J = JOBS[id]; if (J.req && skillLv(J.req[0]) < J.req[1]) { Snd.nope(); toast('', SKILLN[J.req[0]] + ' ' + J.req[1] + ' needed.'); return; }
+    meta.job = { id: id, step: 0, to: COURIER_TO[(meta.jobsDone + meta.day) % COURIER_TO.length], due: meta.day*1440 + meta.min + 6*60 }; if (meta.job.to === 'kid' && meta.min > 20*60) meta.job.to = 'vesna';
+    toast('', J.n + '. ' + jobText() + '.'); Snd.done(); buzz([6, 20, 6]); dirty = true; $('jobs').classList.remove('on'); paused = false; }
+  function jobDone() { var j = meta.job, J = JOBS[j.id], late = meta.day*1440 + meta.min > j.due, pay = Math.round(J.pay*(late ? 0.5 : 1)*(1 + skillLv('charm')*0.03)); meta.creds += pay; meta.earned += pay; meta.jobsDone++; meta.shifts++; meta.job = null;
+    gainSkill(j.id === 'watch' ? 'fitness' : 'charm', 12); wantDone('job'); wantDone('shift'); toast('', (late ? 'Late, and it shows. ' : 'Done. ') + pay + ' credits.'); Snd.done(); buzz([6, 20, 6, 20, 6]); dirty = true; }
+  function openJobs() { var L = $('jobList'); L.innerHTML = ''; $('jobNow').textContent = meta.job ? jobText() : 'No job taken.';
+    Object.keys(JOBS).forEach(function (id) { var J = JOBS[id], b = document.createElement('button'); b.className = 'item'; var can = !J.ask && !meta.job, reqTxt = J.req ? ' · ' + SKILLN[J.req[0]] + ' ' + J.req[1] : '';
+      b.innerHTML = '<div class="t"><span class="n">' + J.n + '</span><span class="d">' + J.d + reqTxt + '</span></div><span class="p">' + J.pay + '</span>'; b.disabled = !can; if (!J.ask && !meta.job) b.addEventListener('click', function () { acceptJob(id); }); L.appendChild(b); });
+    $('jobs').classList.add('on'); paused = true; Snd.open(); }
+  $('bJobsClose').addEventListener('click', function () { $('jobs').classList.remove('on'); paused = false; Snd.tick(); });
+  $('jobs').addEventListener('click', function (e) { if (e.target === $('jobs')) $('bJobsClose').click(); });
+  function counterShift() { var ohm = npcs.filter(function (n) { return n.id === 'ohm'; })[0]; if (!ohm) return; var served = 0, spawnT = 2, custs = [];
+    startAct('Serve', 'the lunch counter · 2h', 120, function () { for (var i = 0; i < custs.length; i++) { var ci = npcs.indexOf(custs[i]); if (ci >= 0) npcs.splice(ci, 1); } var pay = 60 + skillLv('cooking')*4 + served*2; meta.creds += pay; meta.earned += pay; meta.shifts++; gainSkill('cooking', 10); gainSkill('charm', 4); wantDone('shift'); toast('', served + ' served. ' + pay + ' credits, and your hands smell of broth.'); }, 'cook', null, [22.5, 16.5], 0);
+    P.act.tick = function (dt) { spawnT -= dt; if (spawnT <= 0 && custs.length < 3) { spawnT = 3.5 + Math.random()*3; var r = Math.random(), cN = npc('c' + Date.now(), 'A customer', { coat: r < 0.5 ? '#2a2a30' : '#3a2a3a', trim: r < 0.5 ? INK.teal : INK.gold, hair: r < 0.3 ? '#5c434a' : '#0b0609', bag: r < 0.4 }, 16, 18, { spd: 2.2, wait: 0, pause: 0, sched: [{ from: 0, to: 1440, wp: [[20.5 + Math.floor(Math.random()*3), 19.3], [16.5, 18.5]] }] }); cN.cust = 1; custs.push(cN); }
+      for (var i = custs.length - 1; i >= 0; i--) { var c = custs[i]; if (c.wi === 1 && !c.servedAt) { c.servedAt = 1; served++; c.say = ['Thanks.', 'Hot. Good.', 'Same again tomorrow.'][served % 3]; c.sayT = 2; Snd.buy(); } if (c.wi >= 2) { var ci = npcs.indexOf(c); if (ci >= 0) npcs.splice(ci, 1); custs.splice(i, 1); } } }; }
   var ev = null;
   function startEvent(kind) {
     if (kind === 'blackout') { ev = { kind: kind, left: 30 }; toast('', 'The power goes. The corridor lights die one by one.'); Snd.thunder(); }
@@ -1019,6 +1157,14 @@
   function startAct(verb, what, mins, done, pose, ob, seat, face) { P.act = { verb: verb, what: what, mins: mins, t: 0, done: done }; P.actT = 0; P.moving = false; P.frame = 0; setPose(pose, ob, seat, face); Snd.open(); buzz(8); }
   function moment(pose, ob, seat, face, secs, then) { P.freeze = true; setPose(pose, ob, seat, face); P.momT = secs; P.momFn = then; }
   function skip(mins, what, done) { skipping = { mins: mins, t: 0, dur: 1.8 + Math.min(2.2, mins/240), from: meta.min, what: what, done: done }; $('fadeWhat').textContent = what; $('fadeClock').textContent = fmtClock(meta.min); fadeEl.classList.add('on'); Snd.lift(); }
+  function travel(level, mins, what) { var to = LEVELS[level]; skip(mins, what || 'in the lift', function () { advance(mins); meta.level = level; rebuild(); clearPose(); P.x = to.lift[0]; P.y = to.lift[1]; camX = PX(P.x, P.y); camY = PY(P.x, P.y) - 24; bedKey = -1; toast('', to.n + '.'); Snd.lift(); saveMeta(); }); }
+  var LIFT_STOPS = [['lobby', 'Ground', 'the lobby, the Sump, the plaza', 2], ['l41', 'Level 41', 'home', 2], ['roof', 'Roof', 'the top of the tower', 1]];
+  function openLift() { var L = $('liftList'); L.innerHTML = ''; LIFT_STOPS.forEach(function (st) { if (st[0] === meta.level) return; var mins = st[3] + (meta.level === 'roof' || st[0] === 'roof' ? 1 : 0), b = document.createElement('button'); b.className = 'item';
+      b.innerHTML = '<div class="t"><span class="n">' + st[1] + '</span><span class="d">' + st[2] + ' · ' + mins + ' min</span></div><span class="p">' + (ev && ev.kind === 'liftout' ? 'out' : '▸') + '</span>';
+      b.addEventListener('click', function () { if (ev && ev.kind === 'liftout') { Snd.nope(); toast('', 'Out of order. The rail runs from the south deck.'); return; } $('lift').classList.remove('on'); paused = false; travel(st[0], mins); }); L.appendChild(b); });
+    $('lift').classList.add('on'); paused = true; Snd.open(); }
+  $('bLiftClose').addEventListener('click', function () { $('lift').classList.remove('on'); paused = false; Snd.tick(); });
+  $('lift').addEventListener('click', function (e) { if (e.target === $('lift')) $('bLiftClose').click(); });
   function untilMorning() { var m = meta.min, target = 7*60; return m < target ? target - m : 1440 - m + target; }
   function act() {
     if (P.act || skipping) return;
@@ -1034,10 +1180,10 @@
     else if (k === 'work') { if (meta.needs.spirit < 15) { Snd.nope(); toast('', 'You cannot face the terminal. Not like this.'); return; }
       moment('work', null, [ob.x + 0.75, ob.y + 1.45], 2, 1.1, function () { skip(8*60, 'working', function () { advance(8*60); pay = Math.round((80 + (needAvg() > 60 ? 30 : 0))*(1 + skillLv('focus')*0.06)); meta.creds += pay; meta.earned += pay; meta.shifts++; bump('rest', -28); bump('hunger', -28); bump('spirit', -12); gainSkill('focus', 14); wantDone('shift');
         moment('work', null, null, 2, 0.6, function () { clearPose(); toast('', 'Shift logged. ' + pay + ' credits, and a headache.'); Snd.done(); }); }); }); }
-    else if (k === 'commute') { if (ev && ev.kind === 'liftout' && ob.kind === 'liftcall') { Snd.nope(); toast('', 'Out of order. The rail runs from the south deck.'); return; } if (meta.needs.spirit < 15) { Snd.nope(); toast('', 'You cannot face the rail. Not like this.'); return; }
-      if (ob.kind === 'liftcall') Snd.lift();
-      moment('', null, null, ob.kind === 'liftcall' ? 3 : 2, 1.0, function () { skip(9*60, 'riding the rail', function () { advance(9*60); pay = Math.round((110 + (needAvg() > 60 ? 30 : 0) + (meta.rel.warden >= 60 ? 15 : 0))*(1 + skillLv('focus')*0.06)); meta.creds += pay; meta.earned += pay; meta.shifts++; bump('rest', -32); bump('hunger', -32); bump('hygiene', -14); bump('spirit', -5); bump('warmth', -20); gainSkill('focus', 10); gainSkill('fitness', 6); wantDone('shift');
-        clearPose(); P.x = ob.kind === 'liftcall' ? 10.9 : 13.5; P.y = ob.kind === 'liftcall' ? 21 : 34.5; toast('', 'Back on 41. ' + pay + ' credits. The city went by twice.'); Snd.done(); }); }); }
+    else if (k === 'lift') { openLift(); }
+    else if (k === 'commute') { if (meta.needs.spirit < 15) { Snd.nope(); toast('', 'You cannot face the rail. Not like this.'); return; } var backTo = meta.level, bx = P.x, by = P.y;
+      moment('', null, null, 2, 1.0, function () { skip(9*60, 'riding the rail', function () { advance(9*60); pay = Math.round((110 + (needAvg() > 60 ? 30 : 0) + (meta.rel.warden >= 60 ? 15 : 0))*(1 + skillLv('focus')*0.06)); meta.creds += pay; meta.earned += pay; meta.shifts++; bump('rest', -32); bump('hunger', -32); bump('hygiene', -14); bump('spirit', -5); bump('warmth', -20); gainSkill('focus', 10); gainSkill('fitness', 6); wantDone('shift');
+        clearPose(); P.x = bx; P.y = by; toast('', 'Back from the shift. ' + pay + ' credits. The city went by twice.'); Snd.done(); }); }); }
     else if (k === 'eat') { var cost = u.cost && u.hot && meta.rel.ohm >= 60 ? 8 : u.cost; if (cost) { meta.creds -= cost; Snd.buy(); } var stool = null;
       if (u.hot) for (var si = 0; si < objs.length; si++) if (objs[si].kind === 'stool' && Math.hypot(objs[si].x + 0.5 - P.x, objs[si].y + 0.5 - P.y) < 1.6) { stool = objs[si]; break; }
       startAct(u.verb, u.what, u.hot ? 25 : u.small ? 3 : 15, function () { bump('hunger', u.hot ? 60 : u.small ? 18 : 36); bump('spirit', u.hot ? 10 : u.small ? 1 : -1); bump('warmth', u.hot ? 20 : 0); if (u.hot) wantDone('hot'); toast('', u.hot ? 'The broth knows things. You feel like one of them.' : u.small ? 'Sweet, cold, gone.' : 'Cold noodles again. They do the job.'); },
@@ -1051,16 +1197,22 @@
     else if (k === 'toilet') { startAct('Use', u.what, 5, function () { bump('spirit', 2); }, 'sit', ob, [ob.x + 0.5, ob.y + 0.62], 0); }
     else if (k === 'change') { startAct('Change', u.what, 6, function () { bump('hygiene', meta.own.coat ? 18 : 8); bump('spirit', meta.own.coat ? 8 : 3); bump('warmth', meta.own.coat ? 20 : 5); toast('', meta.own.coat ? 'The dry coat. It still smells of the shop.' : 'The other coat. It is the same coat.'); }); }
     else if (k === 'laundry') { startAct('Wash', u.what, 30, function () { bump('hygiene', 20); bump('spirit', 3); wantDone('laundry'); toast('', 'Clean, warm, and yours for another week.'); }, 'cook'); }
-    else if (k === 'rest') { var mins2 = u.short ? 30 : 60, late = meta.min >= 21*60 || meta.min < 5*60; startAct(u.verb, u.what, mins2, function () { bump('rest', u.short ? 5 : 14); bump('spirit', u.view ? 14 : u.short ? 8 : 6); if (u.view && late) wantDone('view'); toast('', u.view ? 'Forty-one floors of rain and light, and none of it asks anything of you.' : 'You sit. That is all that happens, and it is enough.'); }, 'sit', ob, seat, ob.f === 3 ? 1 : 0); }
+    else if (k === 'rest') { var mins2 = u.short ? 30 : 60, late = meta.min >= 21*60 || meta.min < 5*60; startAct(u.verb, u.what, mins2, function () { bump('rest', u.short ? 5 : 14); bump('spirit', u.view ? 14 : u.short ? 8 : 6); if (u.view && late && !u.roof) wantDone('view'); if (u.roof) wantDone('roofview'); toast('', u.view ? 'Forty-one floors of rain and light, and none of it asks anything of you.' : 'You sit. That is all that happens, and it is enough.'); }, 'sit', ob, seat, ob.f === 3 ? 1 : 0); }
     else if (k === 'listen') { startAct('Listen', u.what, 40, function () { bump('spirit', 16); toast('', 'Someone else’s record, from before the tower. It holds up.'); }); }
     else if (k === 'shrine') { if (meta.seen.shrine) { toast('', 'The lights are lit. Someone was here before you.'); Snd.nope(); return; } if (meta.creds < 1) { Snd.nope(); return; } meta.creds -= 1; meta.seen.shrine = 1; startAct('Tend', u.what, 10, function () { bump('spirit', 12); wantDone('shrine'); toast('', 'One credit, one light. The tree does not notice. You do.'); }, 'cook'); }
     else if (k === 'shop') { openShop(); }
+    else if (k === 'jobs') { openJobs(); }
+    else if (k === 'wear') { openWear(); }
+    else if (k === 'drink') { if (meta.creds < 6) { Snd.nope(); return; } meta.creds -= 6; Snd.buy(); startAct('Drink', u.what, 20, function () { bump('spirit', 9); bump('warmth', 14); bump('hygiene', -2); wantDone('drink'); toast('', 'Warm, then strong. Sol does not ask which you wanted.'); }, 'eat'); }
+    else if (k === 'check') { var jb = meta.job; if (!jb || jb.id !== 'watch') { Snd.nope(); toast('', 'The beacon blinks at you. Nobody is paying you to blink back.'); return; }
+      var bcs = objs.filter(function (o) { return o.kind === 'beacon'; }); if (bcs[jb.step] !== ob) { Snd.nope(); toast('', 'Not this one. In order.'); return; }
+      startAct('Check', 'beacon ' + (jb.step + 1), 8, function () { jb.step++; dirty = true; if (jb.step >= 4) jobDone(); else toast('', 'Logged. Beacon ' + (jb.step + 1) + ' next.'); }, 'cook'); }
     dirty = true;
   }
   function updateAct(dt) {
     if (P.freeze && P.momT > 0) { P.momT -= dt; if (P.momT <= 0) { var f = P.momFn; P.momFn = null; if (f) f(); } }
     if (!P.act) return; var a = P.act, rate = 6; // six game minutes a second while you are busy
-    P.actT += dt; var step = Math.min(rate*dt, a.mins - a.t); a.t += step; advance(step); ring(a.t/a.mins);
+    P.actT += dt; var step = Math.min(rate*dt, a.mins - a.t); a.t += step; advance(step); ring(a.t/a.mins); if (a.tick) a.tick(dt);
     if (a.t >= a.mins - 1e-6) { var d = a.done; P.act = null; ring(0); Snd.done(); buzz([6, 20, 6]); clearPose(); d(); dirty = true; }
   }
   function updateSkip(dt) {
@@ -1079,7 +1231,12 @@
       if (fresh) { var ch = skillLv('charm'); bump('spirit', 12 + ch); meta.talks++; meta.seen['talk' + n.id] = meta.min; meta.rel[n.id] = clamp(meta.rel[n.id] + 10 + ch*1.5 - (meta.needs.hygiene < 20 ? 6 : 0), 0, 100); gainSkill('charm', 9); wantDone('talk:' + n.id); if (meta.rel[n.id] >= 60 && !meta.seen['friend' + n.id]) { meta.seen['friend' + n.id] = 1; toast(n.n, n.id === 'vesna' ? 'I will leave a bowl out for you, mornings. Do not mention it.' : n.id === 'ohm' ? 'Eight credits, for you. Do not tell the Warden.' : n.id === 'warden' ? 'Show this at the gate. The fare is between us.' : 'You can stand under the tree with me. That is the rule.', 5); } } meta.met[n.id] = idx + 1; Snd.talk(); dirty = true;
       var lv = document.createElement('button'); lv.className = 'go ghost wide'; lv.textContent = 'Go'; lv.addEventListener('click', closeTalk); ops.appendChild(lv); });
     var lv0 = document.createElement('button'); lv0.className = 'go ghost wide'; lv0.textContent = 'Not now'; lv0.addEventListener('click', closeTalk);
-    ops.appendChild(rep); ops.appendChild(lv0); talkEl.classList.add('on'); paused = true; Snd.talk(); buzz(6);
+    ops.appendChild(rep);
+    var jb = meta.job;
+    if (jb && jb.id === 'courier' && jb.step === 0 && n.id === 'mira') { var jo = document.createElement('button'); jo.className = 'item'; jo.innerHTML = '<div class="t"><span class="n">Take the parcel</span><span class="d">For ' + npcName(jb.to) + ', on ' + LEVELS[NPC_LEVEL[jb.to]].n + '.</span></div>'; jo.addEventListener('click', function () { jb.step = 1; dirty = true; Snd.buy(); toast('Mira', 'Do not open it. Everyone opens it.'); closeTalk(); }); ops.appendChild(jo); }
+    if (jb && jb.id === 'courier' && jb.step === 1 && n.id === jb.to) { var jd = document.createElement('button'); jd.className = 'item'; jd.innerHTML = '<div class="t"><span class="n">Hand over the parcel</span><span class="d">From Mira, at the desk.</span></div>'; jd.addEventListener('click', function () { meta.rel[n.id] = clamp(meta.rel[n.id] + 6, 0, 100); jobDone(); closeTalk(); }); ops.appendChild(jd); }
+    if (n.id === 'ohm' && meta.min >= 11*60 && meta.min < 20*60 && !P.act) { var jc = document.createElement('button'); jc.className = 'item'; jc.innerHTML = '<div class="t"><span class="n">Work the counter · 2h</span><span class="d">Sixty credits and whatever the customers leave. Cooking.</span></div>'; jc.addEventListener('click', function () { closeTalk(); counterShift(); }); ops.appendChild(jc); }
+    ops.appendChild(lv0); talkEl.classList.add('on'); paused = true; Snd.talk(); buzz(6);
     function closeTalk() { talkEl.classList.remove('on'); paused = false; n.talking = false; n.pose = ''; clearPose(); Snd.tick(); }
   }
   /* ---- the catalogue ---- */
@@ -1090,6 +1247,13 @@
     { id: 'deck', n: 'A music deck', d: 'And one record, from before the tower. Listen: spirit.', p: 120 },
     { id: 'bed2', n: 'A better mattress', d: 'Sleep that leaves something behind besides morning.', p: 200 }
   ];
+  var WEAR = [{ id: 'oxblood', n: 'The coat you came in', c: '#4a1420', p: 0 }, { id: 'teal', n: 'A rail worker’s coat', c: '#1e3a3a', p: 60 }, { id: 'bone', n: 'A pale coat', c: '#8f7078', p: 80 }, { id: 'violet', n: 'A night coat', c: '#2a1a3a', p: 90 }, { id: 'ash', n: 'An ash coat', c: '#3a3a42', p: 50 }];
+  function openWear() { var L = $('wearList'); L.innerHTML = ''; WEAR.forEach(function (w) { var own = w.p === 0 || meta.own['coat_' + w.id], b = document.createElement('button'); b.className = 'item'; b.disabled = !own && meta.creds < w.p;
+      b.innerHTML = '<div class="t"><span class="n">' + w.n + '</span><span class="d">' + (own ? 'Yours.' : 'Wool, lined.') + '</span></div><span class="p' + (own ? ' own' : '') + '">' + (own ? (PLAYER_LOOK.coat === w.c ? 'worn' : 'wear') : w.p) + '</span>';
+      b.addEventListener('click', function () { if (!own) { if (meta.creds < w.p) return; meta.creds -= w.p; meta.own['coat_' + w.id] = 1; Snd.buy(); } PLAYER_LOOK.coat = w.c; meta.look = w.c; FIGC = {}; openWear(); saveMeta(); Snd.tick(); }); L.appendChild(b); });
+    $('wear').classList.add('on'); paused = true; Snd.open(); }
+  $('bWearClose').addEventListener('click', function () { $('wear').classList.remove('on'); paused = false; Snd.tick(); });
+  $('wear').addEventListener('click', function (e) { if (e.target === $('wear')) $('bWearClose').click(); });
   function openShop() { paintShop(); shopEl.classList.add('on'); paused = true; Snd.open(); }
   function paintShop() { $('shopCreds').textContent = meta.creds; $('shopLede').textContent = 'Delivered to 4107 by the next shift. Paid for now.'; var L = $('shopList'); L.innerHTML = '';
     CATALOGUE.forEach(function (it) { var b = document.createElement('button'); b.className = 'item'; var own = !!meta.own[it.id]; b.disabled = own || meta.creds < it.p;
@@ -1097,9 +1261,9 @@
       b.addEventListener('click', function () { if (meta.own[it.id] || meta.creds < it.p) return; meta.creds -= it.p; meta.own[it.id] = 1; Snd.buy(); buzz([6, 20, 6]); rebuild(); paintShop(); toast('', it.n + '. It will be there when you get home.'); saveMeta(); }); L.appendChild(b); }); }
   $('bShopClose').addEventListener('click', function () { shopEl.classList.remove('on'); paused = false; Snd.tick(); });
   shopEl.addEventListener('click', function (e) { if (e.target === shopEl) $('bShopClose').click(); });
-  function rebuild() { floor.fill(0); wallN.fill(0); wallW.fill(0); roomOf.fill(0); solid.fill(0); outdoor.fill(0); decoN = {}; decoW = {}; rooms = []; objs = []; lightsStatic = []; npcs = []; chunks = {}; build();
-    if (meta.own.plant2) obj('plant', 10, 13); if (meta.own.deck) obj('deck', 11, 12, { use: { verb: 'Listen', what: 'to the one record', kind: 'listen' }, light: '#c96a8e' });
-    if (meta.own.lamp2) for (var i = 0; i < objs.length; i++) if (objs[i].kind === 'lamp' && objs[i].x === 11 && objs[i].y === 8) objs[i].light = '#e9d8c5';
+  function rebuild() { floor.fill(0); wallN.fill(0); wallW.fill(0); roomOf.fill(0); solid.fill(0); outdoor.fill(0); decoN = {}; decoW = {}; rooms = []; objs = []; lightsStatic = []; npcs = []; chunks = {}; parts = []; towerA = 0; if (!LEVELS[meta.level]) meta.level = 'l41'; LEVELS[meta.level].build();
+    if (meta.level === 'l41') { if (meta.own.plant2) obj('plant', 10, 13); if (meta.own.deck) obj('deck', 11, 12, { use: { verb: 'Listen', what: 'to the one record', kind: 'listen' }, light: '#c96a8e' });
+      if (meta.own.lamp2) for (var i = 0; i < objs.length; i++) if (objs[i].kind === 'lamp' && objs[i].x === 11 && objs[i].y === 8) objs[i].light = '#e9d8c5'; }
     for (i = 0; i < MW*MH*2; i++) wallCut[i] = WH; findEdges(); }
   OBJART.deck = function (g, ob) { box(g, 0.15, 0.2, 0, 0.7, 0.6, 14, '#1a1a20', { top: '#2a2a30' }); var col = ob.light || INK.pink; g.fillStyle = '#0b0609'; g.beginPath(); g.ellipse(PX(0.45, 0.5), PY(0.45, 0.5) - 14, 8, 4, 0, 0, 6.283); g.fill(); g.fillStyle = col; g.globalAlpha = 0.8; g.beginPath(); g.ellipse(PX(0.45, 0.5), PY(0.45, 0.5) - 14, 2, 1, 0, 0, 6.283); g.fill(); g.globalAlpha = 1; for (var i = 0; i < 3; i++) { g.fillStyle = [INK.teal, INK.gold, col][i]; g.fillRect(PX(0.75, 0.45) + i*3 - 4, PY(0.75, 0.45) - 17, 2, 2); } glow(g, PX(0.5, 0.5), PY(0.5, 0.5) - 16, col, 18); };
 
@@ -1126,7 +1290,7 @@
     // rain on the open decks lands somewhere
     if (settings.weather) { g.strokeStyle = INK.bone; g.lineWidth = 1; for (i = 0; i < storm.sp.length; i++) { var sp = storm.sp[i], sk = sp.t/0.5, sx = PX(sp.x, sp.y), sy = PY(sp.x, sp.y); g.globalAlpha = (1 - sk)*(1 - sk)*0.35; g.beginPath(); g.ellipse(sx, sy, 1.5 + sk*7, 0.6 + sk*2.6, 0, 0, 6.283); g.stroke(); } g.globalAlpha = 1; }
     // the core, when you are out on the south deck
-    var rmNow = roomAt(P.x, P.y), wantCore = rmNow && rmNow.n === 'South deck' ? 1 : 0; towerA += (wantCore - towerA)*Math.min(1, dt*2.2); drawCore(g, t);
+    var rmNow = roomAt(P.x, P.y), wantCore = meta.level === 'l41' && rmNow && rmNow.n === 'South deck' ? 1 : 0; towerA += (wantCore - towerA)*Math.min(1, dt*2.2); drawCore(g, t);
     // everything that stands: walls, furniture, people, in depth order
     var items = [], pk = P.x + P.y, pkey = pk, hideN = towerA > 0.5;
     for (y = vr.y0; y <= vr.y1; y++) for (x = vr.x0; x <= vr.x1; x++) { var ti = T(x, y);
@@ -1137,6 +1301,7 @@
     if (P.onObj) { var ok = P.onObj.x + P.onObj.w - 1 + P.onObj.y + P.onObj.h - 1 + 0.9; pk = ok + (P.pose === 'shower' ? -0.05 : 0.05); }
     items.push({ k: pk, ch: P }); for (i = 0; i < npcs.length; i++) if (!(hideN && npcs[i].y < 32)) items.push({ k: npcs[i].x + npcs[i].y, ch: npcs[i] });
     for (i = 0; i < parts.length; i++) items.push({ k: parts[i].x + parts[i].y + 0.02, pa: parts[i] });
+    items.push({ k: 1e9, mk: 1 });
     items.sort(function (a, b) { return a.k - b.k; });
     var psx = PX(P.x, P.y), psy = PY(P.x, P.y), ctr = Math.max(1, dt*9);
     for (i = 0; i < items.length; i++) { var it = items[i];
@@ -1148,6 +1313,7 @@
         var target = settings.cutaway && front && covers && it.m !== WM.rail ? 16 : WH; wallCut[ci] += (target - wallCut[ci])*Math.min(1, ctr);
         drawWall(g, it.x, it.y, it.w, it.m, wallCut[ci], 1, t); }
       else if (it.pa) drawPart(g, it.pa);
+      else if (it.mk) drawMarkers(g, t);
       else if (it.ob) { var s = objSprite(it.ob), ox = PX(it.ob.x, it.ob.y) - s.ox, oy = PY(it.ob.x, it.ob.y) - s.oy, a = 1;
         if (it.k > pkey && it.ob.kind !== 'rug') { if (psx > ox + 10 && psx < ox + s.w - 10 && psy > oy + s.oy - 74 && psy < oy + s.h) a = 0.42; } // something between you and the camera goes to glass
         if (a < 1) g.globalAlpha = a; g.drawImage(s.c, ox, oy, s.w, s.h); if (a < 1) g.globalAlpha = 1; }
@@ -1157,7 +1323,28 @@
         if (c === P && P.act && P.pose !== 'lie') { g.strokeStyle = INK.bone; g.globalAlpha = 0.5; g.lineWidth = 1; g.beginPath(); g.arc(fx, fy - 74, 5, -1.57, -1.57 + 6.283*(P.act.t/P.act.mins)); g.stroke(); g.globalAlpha = 1; } }
     }
   }
-  var PLAYER_LOOK = { id: 'you', coat: '#4a1420', trim: '#e9d8c5', hair: '#0b0609', skin: '#e9d8c5', eye: '#ff8fa3' };
+  function wantTarget(id) { if (id.indexOf('talk:') === 0) { var who = id.slice(5); return { level: NPC_LEVEL[who], npc: who, label: npcName(who) }; } var at = WANT_AT[id]; if (!at) return null; return { level: at[0], kind: at[1], label: WANTS.filter(function (q) { return q.id === id; })[0].t }; }
+  function resolveTarget(tg) { if (!tg || tg.level !== meta.level) return null; var i;
+    if (tg.npc) { for (i = 0; i < npcs.length; i++) if (npcs[i].id === tg.npc) return { x: npcs[i].x, y: npcs[i].y, z: 78 }; return null; }
+    var n = 0; for (i = 0; i < objs.length; i++) { var o = objs[i]; if (o.kind !== tg.kind) continue; if (tg.kind === 'bench' && meta.level === 'l41' && !(o.use && o.use.view)) continue; if (tg.idx !== undefined && n++ !== tg.idx) continue; return { x: o.x + o.w/2, y: o.y + o.h/2, z: 30 + o.h*10 + (o.kind === 'tree' ? 90 : o.kind === 'noodle' || o.kind === 'bar' ? 60 : 30) }; }
+    return null; }
+  function markers() { var out = [], i, tg;
+    if (meta.job) { tg = jobTarget(); if (tg) out.push({ tg: tg, kind: 'job', col: INK.bone }); }
+    for (i = 0; i < meta.wants.length && out.length < 3; i++) { var w = meta.wants[i]; if (w.done) continue; tg = wantTarget(w.id); if (tg) out.push({ tg: tg, kind: 'want', col: INK.gold }); }
+    for (i = 0; i < npcs.length; i++) { var n = npcs[i]; if (n.cust) continue; var last = meta.seen['talk' + n.id]; if (!last || meta.min - last > 240 || meta.min < last) out.push({ tg: { level: meta.level, npc: n.id, label: n.n }, kind: 'npc', col: INK.brand }); }
+    return out; }
+  function drawMarkers(g, t) { var ms = markers(), i; for (i = 0; i < ms.length; i++) { var m = ms[i], at = resolveTarget(m.tg); if (!at) continue; var sx = PX(at.x, at.y), sy = PY(at.x, at.y) - at.z - 10 + Math.sin(t*3 + i)*3, r = m.kind === 'job' ? 6 : m.kind === 'want' ? 5 : 3.5;
+      if (m.kind !== 'npc') { g.strokeStyle = rgba(m.col, 0.25); g.lineWidth = 1; g.beginPath(); g.moveTo(sx, sy + r + 2); g.lineTo(sx, PY(at.x, at.y)); g.stroke(); }
+      g.fillStyle = m.col; g.shadowColor = m.col; g.shadowBlur = 8; g.beginPath(); g.moveTo(sx, sy - r); g.lineTo(sx + r*0.7, sy); g.lineTo(sx, sy + r); g.lineTo(sx - r*0.7, sy); g.closePath(); g.fill(); g.shadowBlur = 0;
+      g.fillStyle = 'rgba(11,6,9,.4)'; g.beginPath(); g.moveTo(sx, sy - r); g.lineTo(sx + r*0.7, sy); g.lineTo(sx, sy); g.closePath(); g.fill(); } }
+  function drawEdgeArrow(g) { var ms = markers().filter(function (m) { return m.kind !== 'npc'; }); if (!ms.length) return; var m = ms[0], at = resolveTarget(m.tg), label = m.tg.label, via = false;
+    if (!at) { if (m.tg.level === meta.level) return; for (var i = 0; i < objs.length; i++) if (objs[i].kind === 'liftcall') { at = { x: objs[i].x + 1, y: objs[i].y + 1, z: 40 }; via = true; break; } if (!at) return; }
+    var sx = (PX(at.x, at.y) - camX)*zoom + cssW/2, sy = (PY(at.x, at.y) - at.z - camY)*zoom + cssH/2, x0 = INS.l + 30, x1 = cssW - INS.r - 30, y0 = INS.t + 170, y1 = cssH - INS.b - 170;
+    if (sx > x0 && sx < x1 && sy > y0 && sy < y1) return;
+    var cx = cssW/2, cy = cssH/2, dx = sx - cx, dy = sy - cy, kx = dx !== 0 ? (dx > 0 ? (x1 - cx) : (x0 - cx))/dx : 1e9, ky = dy !== 0 ? (dy > 0 ? (y1 - cy) : (y0 - cy))/dy : 1e9, k = Math.min(kx, ky), ex = cx + dx*k, ey = cy + dy*k, a = Math.atan2(dy, dx);
+    g.save(); g.translate(ex, ey); g.rotate(a); g.fillStyle = m.col; g.shadowColor = m.col; g.shadowBlur = 8; g.beginPath(); g.moveTo(9, 0); g.lineTo(-5, -6); g.lineTo(-2, 0); g.lineTo(-5, 6); g.closePath(); g.fill(); g.shadowBlur = 0; g.restore();
+    g.font = '500 7.5px -apple-system, system-ui, sans-serif'; g.fillStyle = m.col; var txt = (via ? 'LIFT · ' : '') + label.toUpperCase(); if (txt.length > 22) txt = txt.slice(0, 21) + '…'; var tw = g.measureText(txt).width, tx = clamp(ex, tw/2 + 8, cssW - tw/2 - 8), ty = ey + (dy > 0 ? -14 : 18); g.textAlign = 'center'; g.fillText(txt, tx, ty); g.textAlign = 'left'; }
+  var PLAYER_LOOK = { id: 'you', coat: meta.look || '#4a1420', trim: '#e9d8c5', hair: '#0b0609', skin: '#e9d8c5', eye: '#ff8fa3' };
   function drawLights(g, t) {
     var lw = Math.ceil(cssW*LS), lh = Math.ceil(cssH*LS);
     if (!lightCv) { lightCv = document.createElement('canvas'); lightCv.width = lw; lightCv.height = lh; L = lightCv.getContext('2d'); }
@@ -1172,7 +1359,7 @@
     for (i = 0; i < lightsStatic.length; i++) { var l = lightsStatic[i], a = 0.85; if (l.win) a = 0.25 + 0.6*dk; if (l.neon) a = 0.7 + 0.3*Math.sin(t*9 + i); if (l.ceil || l.screen) a *= bo; lamp(PX(l.x, l.y), PY(l.x, l.y) - (l.ceil ? 70 : 30), l.col, l.r, a); }
     var emis = [];
     for (i = 0; i < objs.length; i++) { var ob = objs[i]; if (!ob.light) continue; var lx = ob.x + ob.w/2, ly = ob.y + ob.h/2, ex = PX(lx, ly) + (ob.tall ? 14 : 0), ey = PY(lx, ly) - (ob.tall ? 110 : ob.kind === 'lamp' ? 56 : 30);
-      lamp(ex, ey, ob.light, ob.tall ? 150 : 95, ob.tall ? 0.95 : 0.8); emis.push([ex, ey, ob.light, ob.tall ? 30 : 22]);
+      var mast = ob.kind === 'mast'; if (mast) ey = PY(lx, ly) - 150; lamp(ex, ey, ob.light, mast ? 70 : ob.tall ? 150 : 95, mast ? 0.5 + 0.5*(Math.floor(t*1.3) % 2) : ob.tall ? 0.95 : 0.8); emis.push([ex, ey, ob.light, ob.tall ? 30 : 22]);
       // the wet deck throws the lamp back as a smear under it
       if (isOutdoor(lx, ly)) { var sp2 = lightSprite(ob.light); L.globalAlpha = 0.32; L.drawImage(sp2.c, ex - 18, ey + 30, 36, 190); L.globalAlpha = 1; } }
     for (i = 0; i < lightsStatic.length; i++) { var l2 = lightsStatic[i]; if (l2.neon || l2.screen) emis.push([PX(l2.x, l2.y), PY(l2.x, l2.y) - 30, l2.col, l2.neon ? 34 : 22]); }
@@ -1213,7 +1400,7 @@
     if (settings.lighting) drawLights(g, t);
     if (settings.weather && isOutdoor(P.x, P.y)) drawRain(g, t);
     if (flash > 0 && isOutdoor(P.x, P.y)) { g.fillStyle = 'rgba(233,216,197,' + (0.3*flash).toFixed(2) + ')'; g.fillRect(0, 0, cssW, cssH); }
-    vignette(g); drawGrain(g, t);
+    if (running) drawEdgeArrow(g); vignette(g); drawGrain(g, t);
     if (settings.diag) { g.fillStyle = INK.bone; g.font = '500 9px ui-monospace, Menlo, monospace'; g.fillText(Math.round(fps) + ' fps · ' + cssW + '×' + cssH + ' · dpr ' + dpr + ' · ' + P.x.toFixed(1) + ',' + P.y.toFixed(1) + ' · ' + Object.keys(SPR).length + ' spr', INS.l + 10, cssH - INS.b - 6); }
   }
 
@@ -1226,8 +1413,9 @@
     var c = fmtClock(meta.min); if (c !== hudShown.clock) { hudShown.clock = c; $('clock').textContent = c; }
     var d = dayName(); if (d !== hudShown.day) { hudShown.day = d; $('day').textContent = d; }
     if (meta.creds !== hudShown.creds) { hudShown.creds = meta.creds; $('creds').textContent = meta.creds; }
-    var rm = roomAt(P.x, P.y), pl = 'Level 41 · ' + (rm ? rm.n : 'the edge'); if (pl !== hudShown.place) { hudShown.place = pl; $('place').textContent = pl; if (rm && rm.n === 'Roof garden') wantDone('garden'); }
+    var rm = roomAt(P.x, P.y), pl = LEVELS[meta.level].n + ' · ' + (rm ? rm.n : 'the edge'); if (pl !== hudShown.place) { hudShown.place = pl; $('place').textContent = pl; if (rm && rm.n === 'Roof garden') wantDone('garden'); }
     var wt = ''; for (var wi = 0; wi < meta.wants.length; wi++) if (!meta.wants[wi].done) { wt = 'Want · ' + WANTS.filter(function (q) { return q.id === meta.wants[wi].id; })[0].t; break; } if (wt !== hudShown.want) { hudShown.want = wt; $('want').textContent = wt; }
+    var jt = meta.job ? 'Job · ' + jobText() : ''; if (jt !== hudShown.job) { hudShown.job = jt; $('job').textContent = jt; }
     paintVerb();
   }
 
@@ -1242,7 +1430,7 @@
   Object.keys(SW).forEach(function (id) { $(id).addEventListener('click', function () { settings[SW[id]] = !settings[SW[id]]; applySettings(); Snd.tick(); if (id === 'swHaptic') buzz(10); }); });
   if (!navigator.vibrate) { var hr = $('swHaptic').closest('.opt'); if (hr) hr.style.display = 'none'; }
   function meter(v, label, cls) { var segs = ''; for (var i = 0; i < 10; i++) segs += '<i' + (i < v/10 ? ' class="on"' : '') + '></i>'; return '<div class="need' + (cls || '') + '"><span class="k">' + label + '</span><span class="bar">' + segs + '</span><span class="v">' + Math.round(v) + '</span></div>'; }
-  function openPause() { $('kDay').textContent = meta.day; $('kEarned').textContent = meta.earned; $('kShifts').textContent = meta.shifts; $('kTalks').textContent = meta.talks; $('kRent').textContent = 'day ' + meta.rentDay + (meta.owed ? ' · owed ' + meta.owed : ''); $('kStock').textContent = meta.stock;
+  function openPause() { $('kDay').textContent = meta.day; $('kEarned').textContent = meta.earned; $('kShifts').textContent = meta.shifts; $('kTalks').textContent = meta.talks; $('kRent').textContent = 'day ' + meta.rentDay + (meta.owed ? ' · owed ' + meta.owed : ''); $('kStock').textContent = meta.stock; $('kJob').textContent = meta.job ? jobText() : 'none · the board is in the lobby';
     $('kWants').innerHTML = meta.wants.map(function (w) { var d = WANTS.filter(function (q) { return q.id === w.id; })[0]; return '<div class="kv"><span>' + (w.done ? '✦ ' : '◇ ') + d.t + '<br><small style="color:var(--t-3)">' + d.d + '</small></span><b>' + (w.done ? 'done' : d.r) + '</b></div>'; }).join('');
     $('kSkills').innerHTML = Object.keys(SKILLN).map(function (k) { return meter(skillLv(k)*10, SKILLN[k]); }).join('');
     $('kRel').innerHTML = [['vesna', 'Vesna'], ['ohm', 'Ohm'], ['warden', 'Warden'], ['kid', 'Tam']].map(function (r) { return meter(meta.rel[r[0]], r[1]); }).join('');
