@@ -272,9 +272,11 @@
   function saveSettings() { try { localStorage.setItem(SKEY, JSON.stringify(settings)); } catch (e) {} mirrorSave(); }
   function buzz(p) { if (settings.haptics && navigator.vibrate) navigator.vibrate(p); }
   // The tenancy: everything that persists between sessions.
-  function freshMeta() { return { v: 1, savedAt: 0, day: 1, min: 22*60, creds: 40, needs: { rest: 62, hunger: 55, hygiene: 70, spirit: 58, warmth: 66 }, own: {}, px: 0, py: 0, earned: 0, shifts: 0, talks: 0, met: {}, seen: {}, skills: { focus: 0, cooking: 0, charm: 0, fitness: 0 }, rel: { vesna: 0, ohm: 0, warden: 0, kid: 0, mira: 0, sol: 0, pell: 0, w1: 0, w2: 0 }, stock: 1, wants: [], wantDay: 0, rentDay: 4, owed: 0, evPlan: null, cooked: 0, level: 'l41', job: null, jobsDone: 0, look: null }; }
+  function freshMeta() { return { v: 2, savedAt: 0, day: 1, min: 22*60, creds: 40, needs: { rest: 62, hunger: 55, hygiene: 70, spirit: 58, warmth: 66 }, own: {}, px: 0, py: 0, earned: 0, shifts: 0, talks: 0, met: {}, seen: {}, skills: { focus: 0, cooking: 0, charm: 0, fitness: 0 }, rel: { vesna: 0, ohm: 0, warden: 0, kid: 0, mira: 0, sol: 0, pell: 0, w1: 0, w2: 0 }, stock: 1, wants: [], wantDay: 0, rentDay: 4, owed: 0, evPlan: null, cooked: 0, level: 'l41', job: null, jobsDone: 0, look: null }; }
   var meta = freshMeta();
-  function absorb(m) { if (!m || m.v !== 1) return false; var f = freshMeta(); for (var k in f) if (m[k] !== undefined) meta[k] = m[k]; if (meta.needs.warmth === undefined) meta.needs.warmth = 66; for (k in f.skills) if (meta.skills[k] === undefined) meta.skills[k] = 0; for (k in f.rel) if (meta.rel[k] === undefined) meta.rel[k] = 0; return true; }
+  function absorb(m) { if (!m || (m.v !== 1 && m.v !== 2)) return false; var f = freshMeta(); for (var k in f) if (m[k] !== undefined) meta[k] = m[k]; if (meta.needs.warmth === undefined) meta.needs.warmth = 66; for (k in f.skills) if (meta.skills[k] === undefined) meta.skills[k] = 0; for (k in f.rel) if (meta.rel[k] === undefined) meta.rel[k] = 0;
+    if (m.v === 1) { meta.px = 0; meta.py = 0; }   // the grid moved under this save; let the builder place them
+    meta.v = 2; return true; }
   try { absorb(JSON.parse(localStorage.getItem(MKEY) || 'null')); } catch (e) {}
   var onMetaLoaded = null, mirrorT = null;
   function saveMeta() { meta.savedAt = Date.now(); try { localStorage.setItem(MKEY, JSON.stringify(meta)); } catch (e) {} mirrorSave(); }
@@ -315,7 +317,7 @@
     INS = insets(); var root = document.documentElement.style;
     root.setProperty('--safe-t', ((framed() && !settings.fullscreen) ? 0 : INS.t) + 'px');
     root.setProperty('--safe-r', INS.r + 'px'); root.setProperty('--safe-b', INS.b + 'px'); root.setProperty('--safe-l', INS.l + 'px');
-    homeControls(); lightCv = null;
+    homeControls(); lightCv = null; bloomCv = null; chunks = {}; chunkUse = {};   // chunks bake at the dpr in force
   }
   window.addEventListener('resize', resize);
   window.addEventListener('orientationchange', function () { setTimeout(resize, 60); setTimeout(resize, 260); setTimeout(resize, 600); });
@@ -397,15 +399,15 @@
      Walls live on the north and west edges of a tile, so a room is four runs
      of edges with the doors left out. Floors bake into 8x8 chunks once; walls,
      objects and people are drawn every frame in depth order. */
-  var TW = 64, TH = 32, WH = 92, CH = 8, MW = 40, MH = 40;
+  var TW = 64, TH = 32, WH = 92, CH = 8, MW = 80, MH = 80;
   function PX(x, y) { return (x - y)*32; }
   function PY(x, y) { return (x + y)*16; }
-  var floor = new Uint8Array(MW*MH), wallN = new Uint8Array(MW*MH), wallW = new Uint8Array(MW*MH), roomOf = new Uint8Array(MW*MH), solid = new Uint8Array(MW*MH), outdoor = new Uint8Array(MW*MH);
+  var floor = new Uint8Array(MW*MH), wallN = new Uint8Array(MW*MH), wallW = new Uint8Array(MW*MH), roomOf = new Uint16Array(MW*MH), solid = new Uint8Array(MW*MH), outdoor = new Uint8Array(MW*MH);
   var decoN = {}, decoW = {}, rooms = [], objs = [], lightsStatic = [], npcs = [], liftOpen = 0;
   function T(x, y) { return y*MW + x; }
   function inMap(x, y) { return x >= 0 && y >= 0 && x < MW && y < MH; }
   // Floor materials. 0 is the void: nothing under it but the city.
-  var FL = { concrete:1, lino:2, tile:3, grate:4, deck:5, soil:6, terrazzo:7, wet:8, carpet:9, metal:10 };
+  var FL = { concrete:1, lino:2, tile:3, grate:4, deck:5, soil:6, terrazzo:7, wet:8, carpet:9, metal:10, asphalt:11, paving:12, grass:13, gravel:14, rubber:15 };
   // Wall materials.
   var WM = { plaster:1, panel:2, tile:3, glass:4, rail:5, shutter:6, brick:7 };
   function room(name, x, y, w, h, fl, wm, o) {
@@ -415,7 +417,9 @@
       for (var j = 0; j < h; j++) { wallW[T(x, y + j)] = wm; if (x + w < MW) wallW[T(x + w, y + j)] = o.east !== undefined ? o.east : wm; } }
     return rooms[rooms.length - 1];
   }
-  function door(side, x, y) { if (side === 'N') wallN[T(x, y)] = 0; else wallW[T(x, y)] = 0; if (side === 'N') decoN[T(x, y)] = { kind: 'door' }; else decoW[T(x, y)] = { kind: 'door' }; }
+  function door(side, x, y) { var i = T(x, y), m = side === 'N' ? wallN[i] : wallW[i];
+    if (side === 'N') wallN[i] = 0; else wallW[i] = 0;
+    (side === 'N' ? decoN : decoW)[i] = { kind: 'door', mat: m || WM.plaster, open: 0 }; }
   function deco(side, x, y, kind, o) { var d = { kind: kind }; if (o) for (var k in o) d[k] = o[k]; (side === 'N' ? decoN : decoW)[T(x, y)] = d; }
   function obj(kind, x, y, o) { var ob = { kind: kind, x: x, y: y, w: 1, h: 1, f: 0 }; if (o) for (var k in o) ob[k] = o[k]; objs.push(ob);
     if (!ob.walk) for (var yy = ob.y; yy < ob.y + ob.h; yy++) for (var xx = ob.x; xx < ob.x + ob.w; xx++) solid[T(xx, yy)] = 1; return ob; }
@@ -474,7 +478,7 @@
     room('Laundry', 16, 26, 4, 3, FL.tile, WM.tile, { light: 0.5, lightCol: '#c3d9e0' });
     door('W', 16, 27); obj('washer', 18, 26, { use: { verb: 'Wash', what: 'the coat · 30 min', kind: 'laundry' } }); obj('washer', 19, 26); obj('bin', 16, 28); deco('N', 17, 26, 'pipes');
     room('Lift', 10, 20, 2, 2, FL.metal, WM.panel, { light: 0.7, lightCol: '#d9a441' });
-    wallW[T(12, 20)] = 0; wallW[T(12, 21)] = 0; decoW[T(12, 20)] = { kind: 'lift', open: 0 }; decoW[T(12, 21)] = { kind: 'lift', open: 0 };
+    wallW[T(12, 20)] = 0; wallW[T(12, 21)] = 0; decoW[T(12, 20)] = { kind: 'lift', mat: WM.panel, open: 0 }; decoW[T(12, 21)] = { kind: 'lift', mat: WM.panel, open: 0 };
     obj('liftcall', 10, 20, { w: 2, h: 2, walk: 1, use: { verb: 'Ride', what: 'the lift', kind: 'lift', reach: 0.35 } });
     deco('W', 16, 30, 'poster', { ink: 'violet' }); deco('W', 12, 14, 'pipes'); deco('W', 12, 24, 'poster', { ink: 'gold' }); deco('W', 16, 13, 'vent'); deco('W', 12, 8, 'panelscreen');
     obj('bench', 12, 16, { w: 1, h: 2, f: 3, use: { verb: 'Sit', what: 'and watch the corridor', kind: 'rest', short: 1 } }); obj('plant', 15, 6); obj('bin', 12, 30); obj('plant', 15, 31);
@@ -512,9 +516,16 @@
   function buildLobby() {
     room('Lobby', 8, 8, 16, 12, FL.terrazzo, WM.panel, { light: 0.75, lightCol: '#e9d8c5' });
     room('The Sump', 2, 10, 6, 8, FL.carpet, WM.brick, { light: 0.35, lightCol: '#c96a8e' }); door('W', 8, 13); door('W', 8, 14);
-    room('Lift', 24, 12, 2, 2, FL.metal, WM.panel, { light: 0.7, lightCol: '#d9a441' }); wallW[T(24, 12)] = 0; wallW[T(24, 13)] = 0; decoW[T(24, 12)] = { kind: 'lift', open: 0 }; decoW[T(24, 13)] = { kind: 'lift', open: 0 };
+    room('Lift', 24, 12, 2, 2, FL.metal, WM.panel, { light: 0.7, lightCol: '#d9a441' }); wallW[T(24, 12)] = 0; wallW[T(24, 13)] = 0; decoW[T(24, 12)] = { kind: 'lift', mat: WM.panel, open: 0 }; decoW[T(24, 13)] = { kind: 'lift', mat: WM.panel, open: 0 };
     obj('liftcall', 24, 12, { w: 2, h: 2, walk: 1, use: { verb: 'Ride', what: 'the lift', kind: 'lift', reach: 0.35 } });
-    room('Plaza', 4, 20, 24, 12, FL.wet, WM.rail, { open: 1, south: WM.rail, east: WM.rail }); light(16, 26, '#7e9cc4', 420, { win: 1 });
+    // Grade. No railing anywhere out here — a railing is the signal that there
+    // is a drop beyond it, and beyond this there is a street. Nothing tall goes
+    // south or east of where you walk: that is between you and the camera.
+    room('Plaza', 4, 20, 24, 6, FL.wet, 0, { open: 1 });
+    room('Kerb', 2, 26, 28, 2, FL.paving, 0, { open: 1 });
+    room('Ash Street', 0, 28, 34, 4, FL.asphalt, 0, { open: 1 });
+    room('Far kerb', 0, 32, 34, 3, FL.paving, 0, { open: 1 });
+    light(15.5, 20.6, '#e9d8c5', 260, { screen: 1 }); light(16, 26, '#7e9cc4', 420, { win: 1 });
     for (var i = 8; i < 24; i++) wallN[T(i, 20)] = WM.panel; for (i = 24; i < 28; i++) wallN[T(i, 20)] = WM.panel; door('N', 15, 20); door('N', 16, 20);
     deco('N', 12, 8, 'billboard'); deco('N', 18, 8, 'screen'); deco('N', 21, 8, 'panelscreen'); deco('W', 8, 9, 'poster', { ink: 'teal' }); deco('W', 8, 17, 'pipes'); deco('N', 10, 20, 'billboard'); deco('N', 24, 20, 'neon', { text: 'TRANSIT', ink: 'teal' }); deco('N', 20, 20, 'poster', { ink: 'gold' }); deco('N', 8, 20, 'vent');
     obj('desk2', 10, 10, { w: 3, h: 1 }); obj('jobterm', 20, 9, { use: { verb: 'Browse', what: 'the job board', kind: 'jobs' }, light: '#6fb3ab' });
@@ -531,8 +542,18 @@
       deep: [['I poured for the man who built the roof garden. He drank here every night for a year and then he stopped coming.', 'The tree is his. Tam is his. Nobody tells her.']], idle: ['Warm or strong?', 'Nine for both.', 'Sit anywhere.'] });
     obj('cart', 13, 24, { w: 2, h: 1, use: { verb: 'Eat', what: 'from the cart · 6', kind: 'eat', cost: 6, hot: 1, reach: 1.8 }, light: '#d9a441' });
     obj('bench', 8, 27, { w: 2, h: 1, use: { verb: 'Sit', what: 'in the rain', kind: 'rest', short: 1, view: 1 } }); obj('bench', 20, 27, { w: 2, h: 1, use: { verb: 'Sit', what: 'in the rain', kind: 'rest', short: 1, view: 1 } });
-    obj('lamppost', 10, 24, { light: '#d9a441', tall: 1 }); obj('lamppost', 18, 29, { light: '#d9a441', tall: 1 }); obj('lamppost', 24, 25, { light: '#d9a441', tall: 1 });
-    obj('car', 6, 29, { w: 2, h: 1, light: '#ff5470' }); obj('car', 22, 30, { w: 2, h: 1, light: '#ff5470' }); obj('vent', 12, 30, { walk: 1 }); obj('bin', 26, 28); obj('planter', 4, 22, { w: 1, h: 3 }); obj('planter', 26, 21, { w: 1, h: 2 });
+    obj('lamppost', 10, 24, { light: '#d9a441', tall: 1 }); obj('lamppost', 18, 27, { light: '#d9a441', tall: 1 }); obj('lamppost', 24, 25, { light: '#d9a441', tall: 1 });
+    obj('vent', 12, 27, { walk: 1 }); obj('bin', 26, 27); obj('planter', 4, 22, { w: 1, h: 3 }); obj('planter', 26, 21, { w: 1, h: 2 });
+    obj('bollard', 5, 27); obj('bollard', 9, 27); obj('bollard', 13, 27); obj('bollard', 22, 27); obj('bollard', 27, 27);
+    obj('crossing', 15, 28, { w: 2, h: 4, walk: 1 });
+    obj('bench', 4, 33, { w: 2, h: 1, use: { verb: 'Sit', what: 'across the road', kind: 'rest', short: 1, view: 1 } });
+    obj('bench', 27, 33, { w: 2, h: 1, use: { verb: 'Sit', what: 'across the road', kind: 'rest', short: 1, view: 1 } });
+    obj('shelter', 10, 32, { w: 3, h: 2 }); obj('kiosk', 20, 32, { w: 2, h: 2, light: '#d9a441', use: { verb: 'Eat', what: 'a bowl from the kiosk \u00b7 5', kind: 'eat', cost: 5, hot: 1, reach: 1.9 } });
+    obj('hydrant', 7, 32); obj('hydrant', 25, 32); obj('bin', 14, 32); obj('bin', 23, 27);
+    obj('trafficlight', 16, 32, { tall: 1, light: '#5fa777' }); obj('trafficlight', 15, 27, { tall: 1, light: '#ff5470' });
+    obj('lamppost', 6, 33, { light: '#d9a441', tall: 1 }); obj('lamppost', 17, 33, { light: '#d9a441', tall: 1 }); obj('lamppost', 29, 33, { light: '#d9a441', tall: 1 });
+    obj('planter', 12, 26, { w: 2, h: 1 }); obj('planter', 19, 26, { w: 2, h: 1 });
+    light(20.5, 32.8, '#d9a441', 120, { neon: 1 }); light(10.5, 32.6, '#8a8fc9', 100, { screen: 1 });
     obj('gate', 25, 22, { w: 2, h: 1, use: { verb: 'Ride', what: 'the rail to work · 8h', kind: 'commute' }, light: '#6fb3ab' });
     light(26, 22.8, '#6fb3ab', 120, { neon: 1 }); light(11, 20.8, '#8a8fc9', 170, { screen: 1 });
     npc('w1', 'A commuter', { coat: '#2a2a30', trim: '#8f6f76', hair: '#0b0609', bag: 1 }, 16, 25, { spd: 2.3, wait: 2, pause: 4,
@@ -540,14 +561,14 @@
       sched: [{ from: 0, to: 1440, wp: [[16.5, 25.5], [15.5, 19.5], [15.5, 16.5], [19.5, 12.5], [15.5, 16.5], [16.5, 21.5], [25.5, 23.5], [16.5, 25.5]] }] });
     npc('w2', 'A commuter', { coat: '#3a3a42', trim: '#6fb3ab', hair: '#5c434a', scarf: 1 }, 24, 24, { spd: 2.1, wait: 6, pause: 5,
       idle: ['Cold.', 'Every night.'], lines: [['Thirty years I have taken this rail and I have never once seen the ground level of the tower in daylight.', 'Nobody has. Think about that.']],
-      sched: [{ from: 0, to: 1440, wp: [[24.5, 24.5], [14.5, 25.5], [9.5, 28.5], [14.5, 25.5], [24.5, 24.5]] }] });
+      sched: [{ from: 0, to: 1440, wp: [[24.5, 24.5], [15.5, 25.5], [15.5, 32.5], [10.5, 33.5], [15.5, 32.5], [15.5, 25.5], [24.5, 24.5]] }] });
     meta.px = 24.9; meta.py = 13;
   }
   /* ---- the roof: the top of the tower, in the weather ---- */
   function buildRoof() {
     room('Open air', 6, 6, 24, 20, FL.wet, WM.rail, { open: 1, south: WM.rail, east: WM.rail });
     light(18, 16, '#7e9cc4', 520, { win: 1 }); light(11, 11, '#7e9cc4', 300, { win: 1 }); light(24, 22, '#7e9cc4', 300, { win: 1 });
-    room('Lift', 6, 22, 2, 2, FL.metal, WM.panel, { light: 0.7, lightCol: '#d9a441' }); wallW[T(8, 22)] = 0; wallW[T(8, 23)] = 0; decoW[T(8, 22)] = { kind: 'lift', open: 0 }; decoW[T(8, 23)] = { kind: 'lift', open: 0 };
+    room('Lift', 6, 22, 2, 2, FL.metal, WM.panel, { light: 0.7, lightCol: '#d9a441' }); wallW[T(8, 22)] = 0; wallW[T(8, 23)] = 0; decoW[T(8, 22)] = { kind: 'lift', mat: WM.panel, open: 0 }; decoW[T(8, 23)] = { kind: 'lift', mat: WM.panel, open: 0 };
     obj('liftcall', 6, 22, { w: 2, h: 2, walk: 1, use: { verb: 'Ride', what: 'the lift', kind: 'lift', reach: 0.35 } });
     room('Greenhouse', 20, 16, 6, 5, FL.soil, WM.glass, { light: 0.5, lightCol: '#5fa777' }); door('W', 20, 18);
     obj('planter', 21, 16, { w: 4, h: 1, soil: 1 }); obj('planter', 21, 20, { w: 4, h: 1, soil: 1 }); obj('plant', 25, 18); obj('plant', 25, 17); obj('lamp', 21, 18, { light: '#5fa777' });
@@ -561,7 +582,18 @@
       deep: [['I carried that tree on 41 up from the ground. One floor a year. I am not finished.', 'You are young. Carry the next one.']], idle: ['Mind the wind.', 'The glass holds.', 'Sweep the pad.'] });
     meta.px = 6.9; meta.py = 23;
   }
-  var LEVELS = { l41: { n: 'Level 41', build: build41, lift: [10.9, 21] }, lobby: { n: 'Ground', build: buildLobby, lift: [24.9, 13] }, roof: { n: 'Roof', build: buildRoof, lift: [6.9, 23] } };
+  var LEVELS = {
+    l41: { n: 'Level 41', build: build41, lift: [10.9, 21], lane: 13, view: [14, 20],
+      core: { hide: 32, room: 'South deck', slabs: [ { x0: 4, x1: 26, y: 32, up: 900, beacon: 1 } ] } },
+    lobby: { n: 'Ground', build: buildLobby, lift: [24.9, 13], grade: 1, view: [16, 26],
+      // at grade the tower is a podium you stand against and a shaft above it
+      core: { hide: 20, out: 1, slabs: [ { x0: -10, x1: 38, y: 20, up: 420, cap: 1 }, { x0: 6, x1: 26, y: 20, up: 1700, beacon: 1 } ] },
+      road: { y0: 29.2, y1: 30.6, x0: -8, x1: 38, n: 4 },
+      back: [ { x0: -14, x1: 52, y: 1, h: 1150, haze: 0.75, a: 0.85 },
+              { x0: -6, x1: 34, y: 5, h: 1550, haze: 0.45, beacon: 1 },
+              { x: 0, y0: 8, y1: 34, h: 760, haze: 0.6 } ] },
+    roof: { n: 'Roof', build: buildRoof, lift: [6.9, 23], view: [18, 16] }
+  };
   var NPC_LEVEL = { vesna: 'l41', ohm: 'l41', warden: 'l41', kid: 'l41', mira: 'lobby', sol: 'lobby', pell: 'roof', w1: 'lobby', w2: 'lobby' };
   /* ---- finding a way ----
      A* over tiles. A step is legal only if the tile is floor, holds no
@@ -572,17 +604,101 @@
   function edgeOpen(i0, j0, i1, j1) { // orthogonal neighbours only
     var dl = i1 > i0 ? decoW[T(i1, j0)] : i1 < i0 ? decoW[T(i0, j0)] : null; if (dl && dl.kind === 'lift') return false;
     if (i1 > i0) return !wallW[T(i1, j0)]; if (i1 < i0) return !wallW[T(i0, j0)]; if (j1 > j0) return !wallN[T(i0, j1)]; if (j1 < j0) return !wallN[T(i0, j0)]; return true; }
+  // A binary heap, typed bookkeeping stamped by a sequence number so nothing
+  // needs clearing between calls, and an f-then-h tie-break. The tie-break is
+  // the important one: Manhattan h is exact on open floor, so f is constant
+  // along every optimal path and a plain queue floods the whole plateau — a
+  // 24x12 plaza costs thousands of expansions and used to trip the guard,
+  // whereupon a person walked to the waypoint through the walls.
+  var pfG = new Float32Array(MW*MH), pfCame = new Int32Array(MW*MH), pfStamp = new Int32Array(MW*MH), pfState = new Uint8Array(MW*MH),
+      pfSeq = 0, pfHN = 0, pfHeap = new Int32Array(MW*MH*4 + 1), pfHeapF = new Float32Array(MW*MH*4 + 1), pfExp = 0, pfMs = 0;
+  function pfPush(node, f) { var i = pfHN++; pfHeap[i] = node; pfHeapF[i] = f;
+    while (i > 0) { var pi = (i - 1) >> 1; if (pfHeapF[pi] <= pfHeapF[i]) break;
+      var tn = pfHeap[pi], tf = pfHeapF[pi]; pfHeap[pi] = pfHeap[i]; pfHeapF[pi] = pfHeapF[i]; pfHeap[i] = tn; pfHeapF[i] = tf; i = pi; } }
+  function pfPop() { var top = pfHeap[0]; pfHN--;
+    if (pfHN > 0) { pfHeap[0] = pfHeap[pfHN]; pfHeapF[0] = pfHeapF[pfHN]; var i = 0;
+      for (;;) { var l = i*2 + 1, r = l + 1, m = i;
+        if (l < pfHN && pfHeapF[l] < pfHeapF[m]) m = l; if (r < pfHN && pfHeapF[r] < pfHeapF[m]) m = r; if (m === i) break;
+        var tn = pfHeap[m], tf = pfHeapF[m]; pfHeap[m] = pfHeap[i]; pfHeapF[m] = pfHeapF[i]; pfHeap[i] = tn; pfHeapF[i] = tf; i = m; } }
+    return top; }
+  function placePlayer() { P.x = meta.px; P.y = meta.py;
+    if (!passable(Math.floor(P.x), Math.floor(P.y))) { var lf = LEVELS[meta.level].lift; P.x = lf[0]; P.y = lf[1]; meta.px = P.x; meta.py = P.y; } }
   function findPath(x0, y0, x1, y1) {
-    var s0 = T(Math.floor(x0), Math.floor(y0)), s1 = T(Math.floor(x1), Math.floor(y1)); if (s0 === s1) return [[x1, y1]];
-    var open = [s0], came = {}, gs = {}, fs = {}, i; gs[s0] = 0; fs[s0] = 0; var tx = s1 % MW, ty = Math.floor(s1/MW), guard = 0;
-    while (open.length && guard++ < 4000) {
-      var bi = 0; for (i = 1; i < open.length; i++) if (fs[open[i]] < fs[open[bi]]) bi = i; var cur = open[bi]; open.splice(bi, 1);
-      if (cur === s1) { var path = [[x1, y1]], c = cur; while (came[c] !== undefined) { c = came[c]; if (c !== s0) path.push([c % MW + 0.5, Math.floor(c/MW) + 0.5]); } path.reverse(); return path; }
+    var i0 = Math.floor(x0), j0 = Math.floor(y0), i1 = Math.floor(x1), j1 = Math.floor(y1);
+    if (!passable(i1, j1)) return null;                       // a waypoint in the void used to exhaust the whole level
+    var s0 = T(i0, j0), s1 = T(i1, j1); if (s0 === s1) return [[x1, y1]];
+    var t0 = performance.now(), i, tx = i1, ty = j1, guard = 0;
+    pfSeq++; pfHN = 0; pfExp = 0; pfG[s0] = 0; pfCame[s0] = -1; pfStamp[s0] = pfSeq; pfState[s0] = 1; pfPush(s0, 0);
+    while (pfHN && guard++ < MW*MH*4) {
+      var cur = pfPop(); if (pfState[cur] === 2 && pfStamp[cur] === pfSeq) continue; pfState[cur] = 2; pfExp++;
+      if (cur === s1) { var path = [[x1, y1]], c = cur; while (pfCame[c] !== -1) { c = pfCame[c]; if (c !== s0) path.push([c % MW + 0.5, Math.floor(c/MW) + 0.5]); } path.reverse(); pfMs = performance.now() - t0; return path; }
       var cx = cur % MW, cy = Math.floor(cur/MW), nb = [[cx + 1, cy], [cx - 1, cy], [cx, cy + 1], [cx, cy - 1]];
-      for (i = 0; i < 4; i++) { var nx = nb[i][0], ny = nb[i][1]; if (!passable(nx, ny) || !edgeOpen(cx, cy, nx, ny)) continue; var n = T(nx, ny), g = gs[cur] + 1;
-        if (gs[n] === undefined || g < gs[n]) { gs[n] = g; fs[n] = g + Math.abs(nx - tx) + Math.abs(ny - ty); came[n] = cur; if (open.indexOf(n) < 0) open.push(n); } }
+      for (i = 0; i < 4; i++) { var nx = nb[i][0], ny = nb[i][1]; if (!passable(nx, ny) || !edgeOpen(cx, cy, nx, ny)) continue;
+        var n = T(nx, ny), g = pfG[cur] + 1;
+        if (pfStamp[n] !== pfSeq || g < pfG[n]) { var h = Math.abs(nx - tx) + Math.abs(ny - ty);
+          pfStamp[n] = pfSeq; pfG[n] = g; pfCame[n] = cur; pfState[n] = 1; pfPush(n, g + h + h*0.001); } }
     }
-    return null;
+    pfMs = performance.now() - t0; return null;
+  }
+  /* ---- wall runs ----
+     A run is a straight line of wall along one edge. Cutting per tile made a
+     jagged silhouette with stubs beside full walls, so the whole run decides
+     together and eases together. */
+  var runOf = new Int16Array(MW*MH*2), runN = 0, runCut = null, runHit = null, runRoom = null, openRm = null;
+  var CUT = 16, CUTV = (WH - CUT)/0.16;                    // the stub height, and 76px in 160ms
+  var FACE_DIR = [[1, 0], [0, 1], [0, -1], [-1, 0]];       // matches faceFrom(): 0 +x, 1 +y, 2 -y, 3 -x
+  // The room a wall stands in front of. A north wall hides the tile to its
+  // north, a west wall the tile to its west; that tile's room is the only room
+  // the wall can occlude, and so the only room whose occupant may cut it. Walls
+  // whose inner tile belongs to no room (the building's outward shell, and any
+  // floor a level lays down without calling room()) resolve to 0 and can never
+  // be cut — that is what stops the building dissolving from the outside.
+  function nearRoom(x, y, side) { return side === 0 ? (y > 0 ? roomOf[T(x, y - 1)] : 0) : (x > 0 ? roomOf[T(x - 1, y)] : 0); }
+  // A run is every wall face that hides the same room from the same side along
+  // the same line — NOT every wall that happens to touch another wall. That is
+  // what makes the cut silhouette straight by construction: the set only
+  // changes when you cross a threshold, never sub-tile, and one eased scalar
+  // drives every segment of it.
+  function findRuns() {
+    var x, y, i, map = {}, owner = []; for (i = 0; i < runOf.length; i++) runOf[i] = -1; runN = 0;
+    for (y = 0; y < MH; y++) for (x = 0; x < MW; x++) { var ti = T(x, y);
+      if (wallN[ti] || (decoN[ti] && decoN[ti].kind)) { var rn = nearRoom(x, y, 0);
+        if (rn) { var kn = 'N' + rn + ':' + y; if (map[kn] === undefined) { map[kn] = runN++; owner.push(rn); } runOf[ti*2] = map[kn]; } }
+      if (wallW[ti] || (decoW[ti] && decoW[ti].kind)) { var rw = nearRoom(x, y, 1);
+        if (rw) { var kw = 'W' + rw + ':' + x; if (map[kw] === undefined) { map[kw] = runN++; owner.push(rw); } runOf[ti*2 + 1] = map[kw]; } } }
+    runCut = new Float32Array(runN); runHit = new Uint8Array(runN); runRoom = new Int16Array(runN);
+    for (i = 0; i < runN; i++) { runCut[i] = WH; runRoom[i] = owner[i]; }
+    openRm = new Uint8Array(rooms.length + 1);
+  }
+  // The room you are walking into: step up to two tiles along your facing,
+  // stopping at the first standing wall. edgeOpen() is the pathfinder's own
+  // test, so a doorway reads as open and a lift door does not — the room ahead
+  // starts opening about a tile before you cross its threshold.
+  function aheadRoom() {
+    var d = FACE_DIR[P.face] || FACE_DIR[0], i = Math.floor(P.x), j = Math.floor(P.y), n, ni, nj;
+    for (n = 0; n < 2; n++) { ni = i + d[0]; nj = j + d[1];
+      if (!inMap(ni, nj) || !floor[T(ni, nj)] || !edgeOpen(i, j, ni, nj)) break; i = ni; j = nj; }
+    return roomOf[T(i, j)];
+  }
+  // Which rooms are open to the camera. The 0.2 margin is the hysteresis: it is
+  // smaller than the player's radius, so pressing against a standing wall can
+  // never reach the neighbour's rect, while standing in a doorway opens both.
+  function openRooms() {
+    var i, r, m = 0.2; openRm.fill(0);
+    for (i = 0; i < rooms.length; i++) { r = rooms[i];
+      if (P.x > r.x - m && P.x < r.x + r.w + m && P.y > r.y - m && P.y < r.y + r.h + m) openRm[r.id] = 1; }
+    openRm[aheadRoom()] = 1; openRm[0] = 0; return openRm;
+  }
+  // Does this wall face actually sit over that screen point? The face is a
+  // vertical extrusion of the base line, so the test is exact and cheap.
+  function faceCovers(x, y, side, hgt, px, py) {
+    var ax, ay, bx, by;
+    if (side === 0) { ax = PX(x, y); ay = PY(x, y); bx = PX(x + 1, y); by = PY(x + 1, y); }
+    else { ax = PX(x, y + 1); ay = PY(x, y + 1); bx = PX(x, y); by = PY(x, y); }
+    if (bx === ax) return false; var lo = ax < bx ? ax : bx, hi = ax < bx ? bx : ax;
+    if (px < lo || px > hi) return false;
+    var yb = ay + (by - ay)*((px - ax)/(bx - ax));
+    return py < yb && py > yb - hgt;
   }
   function roomAt(x, y) { var i = Math.floor(x), j = Math.floor(y); return inMap(i, j) ? rooms[roomOf[T(i, j)] - 1] || null : null; }
   function isOutdoor(x, y) { var i = Math.floor(x), j = Math.floor(y); return inMap(i, j) && outdoor[T(i, j)] === 1; }
@@ -605,21 +721,36 @@
     else if (name === 'wet') { g.fillStyle = '#1c1a20'; g.fillRect(0, 0, s, s); speck(160, '#26232c', 0.6); speck(60, '#12080c', 0.7); g.strokeStyle = 'rgba(233,216,197,.05)'; g.beginPath(); g.moveTo(0, 32); g.lineTo(64, 32); g.moveTo(32, 0); g.lineTo(32, 64); g.stroke(); }
     else if (name === 'metal') { g.fillStyle = '#2a2a30'; g.fillRect(0, 0, s, s); speck(120, '#3a3a42', 0.5); }
     else if (name === 'soil') { g.fillStyle = '#1e1410'; g.fillRect(0, 0, s, s); speck(300, '#2c1e16', 0.6); speck(100, '#0b0609', 0.7); speck(40, '#5fa777', 0.25, 2); }
+    else if (name === 'asphalt') { g.fillStyle = '#22202a'; g.fillRect(0, 0, s, s); speck(320, '#2c2a36', 0.55); speck(160, '#16141c', 0.7); speck(40, '#3a3846', 0.35, 2); }
+    else if (name === 'paving') { g.fillStyle = '#2e2a30'; g.fillRect(0, 0, s, s); g.strokeStyle = 'rgba(11,6,9,.45)'; g.lineWidth = 1.5;
+      for (i = 0; i <= 64; i += 32) { g.beginPath(); g.moveTo(0, i); g.lineTo(64, i); g.stroke(); }
+      for (i = 0; i <= 64; i += 32) { g.beginPath(); g.moveTo(i, 0); g.lineTo(i, 32); g.moveTo(i + 16, 32); g.lineTo(i + 16, 64); g.stroke(); }
+      speck(120, '#3a3540', 0.4); speck(70, '#221e26', 0.5); }
+    else if (name === 'grass') { g.fillStyle = '#1e2c20'; g.fillRect(0, 0, s, s); speck(420, '#26381f', 0.6); speck(180, '#16200f', 0.55);
+      g.strokeStyle = '#2e5a3a'; g.lineWidth = 1; g.globalAlpha = 0.5; for (i = 0; i < 90; i++) { var gx = r()*s, gy = r()*s; g.beginPath(); g.moveTo(gx, gy); g.lineTo(gx + r()*2 - 1, gy - 2 - r()*2); g.stroke(); } g.globalAlpha = 1; }
+    else if (name === 'gravel') { g.fillStyle = '#2a2624'; g.fillRect(0, 0, s, s); for (i = 0; i < 170; i++) { var px0 = r()*s, py0 = r()*s, pr = 0.8 + r()*1.6; g.fillStyle = r() < 0.5 ? '#3a3430' : '#1e1a18'; g.globalAlpha = 0.5 + r()*0.4; g.beginPath(); g.arc(px0, py0, pr, 0, 6.283); g.fill(); } g.globalAlpha = 1; }
+    else if (name === 'rubber') { g.fillStyle = '#1e1c22'; g.fillRect(0, 0, s, s); g.fillStyle = '#262430'; for (i = 0; i < 64; i += 8) for (var j = 0; j < 64; j += 8) if (((i/8) + (j/8)) % 2 === 0) g.fillRect(i, j, 8, 8); speck(90, '#14121a', 0.5); }
     else { g.fillStyle = '#241119'; g.fillRect(0, 0, s, s); }
     TEXC[name] = c; return c;
   }
-  var FLNAME = ['void', 'concrete', 'lino', 'tile', 'grate', 'deck', 'soil', 'terrazzo', 'wet', 'carpet', 'metal'];
+  var FLNAME = ['void', 'concrete', 'lino', 'tile', 'grate', 'deck', 'soil', 'terrazzo', 'wet', 'carpet', 'metal', 'asphalt', 'paving', 'grass', 'gravel', 'rubber'];
 
   /* ---- chunks: the floor, baked ---- */
-  var chunks = {};
+  var chunks = {}, chunkUse = {}, chunkClock = 0, CHUNK_CAP = 28, bakedThisFrame = 0, bakeMs = 0;
   function diamond(g, x, y) { g.beginPath(); g.moveTo(PX(x, y), PY(x, y)); g.lineTo(PX(x + 1, y), PY(x + 1, y)); g.lineTo(PX(x + 1, y + 1), PY(x + 1, y + 1)); g.lineTo(PX(x, y + 1), PY(x, y + 1)); g.closePath(); }
   function bakeChunk(cx, cy) {
-    var c = document.createElement('canvas'), W = CH*TW + 4, H = CH*TH + 4; c.width = W*dpr; c.height = H*dpr; var g = c.getContext('2d');
+    // A chunk canvas is 2 MiB of backing store at dpr 2. An empty one is 2 MiB
+    // of nothing, and in a large grid most of them are empty.
+    var any = 0, qx, qy;
+    for (qy = cy*CH; qy < cy*CH + CH && !any; qy++) for (qx = cx*CH; qx < cx*CH + CH; qx++) if (inMap(qx, qy) && floor[T(qx, qy)]) { any = 1; break; }
+    if (!any) return { empty: 1, x: PX(cx*CH, cy*CH) - CH*32 - 2, y: PY(cx*CH, cy*CH) - 2, w: CH*TW + 4, h: CH*TH + 4 };
+    var c = document.createElement('canvas'), W = CH*TW + 4, H = CH*TH + 4; c.width = W*dpr; c.height = H*dpr; var g = c.getContext('2d'), pats = [];
+    var laneX = LEVELS[meta.level].lane === undefined ? -1 : LEVELS[meta.level].lane;
     var ox = -PX(cx*CH, cy*CH) + CH*32 + 2, oy = -PY(cx*CH, cy*CH) + 2;
     g.setTransform(dpr, 0, 0, dpr, ox*dpr, oy*dpr);
     for (var y = cy*CH; y < cy*CH + CH; y++) for (var x = cx*CH; x < cx*CH + CH; x++) {
       if (!inMap(x, y)) continue; var m = floor[T(x, y)]; if (!m) continue;
-      var name = FLNAME[m], tx = texture(name), pat = g.createPattern(tx, 'repeat'), h = hash2(x, y);
+      var name = FLNAME[m], pat = pats[m] || (pats[m] = g.createPattern(texture(name), 'repeat')), h = hash2(x, y);
       g.save(); diamond(g, x, y); g.clip();
       // The pattern is squashed to the tile's foreshortening so the grain lies on the floor.
       g.save(); g.translate(PX(x, y), PY(x, y)); g.transform(1, 0.5, -1, 0.5, 0, 0); g.fillStyle = pat; g.fillRect(-64, -64, 192, 192); g.restore();
@@ -635,17 +766,19 @@
       if (inMap(x, y + 1) && wallN[T(x, y + 1)]) { gr = g.createLinearGradient(PX(x, y + 1), PY(x, y + 1), PX(x, y + 0.62), PY(x, y + 0.62)); gr.addColorStop(0, 'rgba(0,0,0,.28)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(PX(x, y) - 40, PY(x, y) - 2, 80, 40); }
       if (inMap(x + 1, y) && wallW[T(x + 1, y)]) { gr = g.createLinearGradient(PX(x + 1, y), PY(x + 1, y), PX(x + 0.62, y), PY(x + 0.62, y)); gr.addColorStop(0, 'rgba(0,0,0,.28)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(PX(x, y) - 40, PY(x, y) - 2, 80, 40); }
       // Marks on the floor: a lane down the corridor, drains on the decks, a mat at every door, leaves in the garden.
-      if (name === 'concrete' && x === 13 && (y % 2 === 0)) { g.fillStyle = 'rgba(217,164,65,.14)'; g.beginPath(); g.moveTo(PX(x + 0.95, y + 0.4), PY(x + 0.95, y + 0.4)); g.lineTo(PX(x + 1.05, y + 0.4), PY(x + 1.05, y + 0.4)); g.lineTo(PX(x + 1.05, y + 1), PY(x + 1.05, y + 1)); g.lineTo(PX(x + 0.95, y + 1), PY(x + 0.95, y + 1)); g.closePath(); g.fill(); }
+      if (name === 'concrete' && x === laneX && (y % 2 === 0)) { g.fillStyle = 'rgba(217,164,65,.14)'; g.beginPath(); g.moveTo(PX(x + 0.95, y + 0.4), PY(x + 0.95, y + 0.4)); g.lineTo(PX(x + 1.05, y + 0.4), PY(x + 1.05, y + 0.4)); g.lineTo(PX(x + 1.05, y + 1), PY(x + 1.05, y + 1)); g.lineTo(PX(x + 0.95, y + 1), PY(x + 0.95, y + 1)); g.closePath(); g.fill(); }
       if (name === 'wet' && h % 11 === 0) { g.fillStyle = '#0b0609'; g.beginPath(); g.ellipse(PX(x + 0.5, y + 0.5), PY(x + 0.5, y + 0.5), 9, 4.5, 0, 0, 6.283); g.fill(); g.strokeStyle = 'rgba(233,216,197,.25)'; g.lineWidth = 1; g.stroke(); g.beginPath(); for (var gi = -6; gi <= 6; gi += 3) { g.moveTo(PX(x + 0.5, y + 0.5) + gi, PY(x + 0.5, y + 0.5) - 3.5); g.lineTo(PX(x + 0.5, y + 0.5) + gi - 1, PY(x + 0.5, y + 0.5) + 3.5); } g.stroke(); }
       if (name === 'deck' && h % 4 === 0) { g.fillStyle = (h >> 5) % 2 ? '#3d7a4a' : '#5a4234'; g.globalAlpha = 0.6; for (var li = 0; li < 3; li++) g.beginPath(), g.ellipse(PX(x + 0.5, y + 0.5) + ((h >> (li*3)) % 30) - 15, PY(x + 0.5, y + 0.5) + ((h >> (li*2 + 1)) % 12) - 6, 3, 1.4, li, 0, 6.283), g.fill(); g.globalAlpha = 1; }
-      var dN = decoN[T(x, y)], dW = decoW[T(x, y)]; if ((dN && dN.kind === 'door') || (dW && dW.kind === 'door')) { g.fillStyle = '#2a1a20'; g.beginPath(); var mx = dN && dN.kind === 'door' ? x + 0.5 : x + 0.25, my = dN && dN.kind === 'door' ? y + 0.25 : y + 0.5; g.moveTo(PX(mx - 0.3, my - 0.18), PY(mx - 0.3, my - 0.18)); g.lineTo(PX(mx + 0.3, my - 0.18), PY(mx + 0.3, my - 0.18)); g.lineTo(PX(mx + 0.3, my + 0.18), PY(mx + 0.3, my + 0.18)); g.lineTo(PX(mx - 0.3, my + 0.18), PY(mx - 0.3, my + 0.18)); g.closePath(); g.fill(); g.strokeStyle = 'rgba(233,216,197,.16)'; g.lineWidth = 1; g.stroke(); }
+      var dN = decoN[T(x, y)] || (inMap(x, y + 1) ? decoN[T(x, y + 1)] : null), dW = decoW[T(x, y)] || (inMap(x + 1, y) ? decoW[T(x + 1, y)] : null);
+      if (dN && dN.kind !== 'door') dN = null; if (dW && dW.kind !== 'door') dW = null;
+      if (dN || dW) { g.fillStyle = '#2a1a20'; g.beginPath(); var far = decoN[T(x, y)] || decoW[T(x, y)] ? 0 : 1, mx = dN ? x + 0.5 : x + (far ? 0.75 : 0.25), my = dN ? y + (far ? 0.75 : 0.25) : y + 0.5; g.moveTo(PX(mx - 0.3, my - 0.18), PY(mx - 0.3, my - 0.18)); g.lineTo(PX(mx + 0.3, my - 0.18), PY(mx + 0.3, my - 0.18)); g.lineTo(PX(mx + 0.3, my + 0.18), PY(mx + 0.3, my + 0.18)); g.lineTo(PX(mx - 0.3, my + 0.18), PY(mx - 0.3, my + 0.18)); g.closePath(); g.fill(); g.strokeStyle = 'rgba(233,216,197,.16)'; g.lineWidth = 1; g.stroke(); }
       g.restore();
       // A hairline where two different floors meet, and the edge of the slab over the void.
       var nb = [[x, y - 1, 0], [x - 1, y, 1]]; for (var k = 0; k < 2; k++) { var nx = nb[k][0], ny = nb[k][1], nm = inMap(nx, ny) ? floor[T(nx, ny)] : 0;
-        if (nm !== m) { g.strokeStyle = nm === 0 ? 'rgba(233,216,197,.22)' : 'rgba(11,6,9,.5)'; g.lineWidth = nm === 0 ? 1.5 : 1; g.beginPath(); if (k === 0) { g.moveTo(PX(x, y), PY(x, y)); g.lineTo(PX(x + 1, y), PY(x + 1, y)); } else { g.moveTo(PX(x, y), PY(x, y)); g.lineTo(PX(x, y + 1), PY(x, y + 1)); } g.stroke(); } }
+        if (nm !== m) { g.strokeStyle = nm === 0 && !grade ? 'rgba(233,216,197,.22)' : 'rgba(11,6,9,.5)'; g.lineWidth = nm === 0 && !grade ? 1.5 : 1; g.beginPath(); if (k === 0) { g.moveTo(PX(x, y), PY(x, y)); g.lineTo(PX(x + 1, y), PY(x + 1, y)); } else { g.moveTo(PX(x, y), PY(x, y)); g.lineTo(PX(x, y + 1), PY(x, y + 1)); } g.stroke(); } }
       // The slab's underside shows on the south and east edges over the void.
       var sm = inMap(x, y + 1) ? floor[T(x, y + 1)] : 0, em = inMap(x + 1, y) ? floor[T(x + 1, y)] : 0;
-      if (sm === 0 || em === 0) { g.fillStyle = '#1a0d12'; g.strokeStyle = 'rgba(233,216,197,.18)'; g.lineWidth = 1;
+      if ((sm === 0 || em === 0) && !grade) { g.fillStyle = '#1a0d12'; g.strokeStyle = 'rgba(233,216,197,.18)'; g.lineWidth = 1;
         if (sm === 0) { g.beginPath(); g.moveTo(PX(x, y + 1), PY(x, y + 1)); g.lineTo(PX(x + 1, y + 1), PY(x + 1, y + 1)); g.lineTo(PX(x + 1, y + 1), PY(x + 1, y + 1) + 6); g.lineTo(PX(x, y + 1), PY(x, y + 1) + 6); g.closePath(); g.fill(); g.stroke(); }
         if (em === 0) { g.beginPath(); g.moveTo(PX(x + 1, y), PY(x + 1, y)); g.lineTo(PX(x + 1, y + 1), PY(x + 1, y + 1)); g.lineTo(PX(x + 1, y + 1), PY(x + 1, y + 1) + 6); g.lineTo(PX(x + 1, y), PY(x + 1, y) + 6); g.closePath(); g.fill(); g.stroke(); } }
     }
@@ -656,41 +789,164 @@
      facade drops away, floor after floor, into the haze. From the south deck
      the core rises behind the corridor block; it fades in when you step out
      and never sits over you. */
-  var edgeS = [], edgeE = [], towerA = 0, FACADE = null;
+  var edgeS = [], edgeE = [], towerA = 0, FACADE = null, grade = 0, traffic = [];
   function facadeTex() { if (FACADE) return FACADE; var c = document.createElement('canvas'); c.width = 192; c.height = 120; var g = c.getContext('2d'), r = mulberry(919), row, col;
     g.fillStyle = '#1a0d12'; g.fillRect(0, 0, 192, 120);
     for (row = 0; row < 3; row++) { var y0 = row*40; g.fillStyle = '#12080c'; g.fillRect(0, y0, 192, 5); g.fillStyle = 'rgba(233,216,197,.08)'; g.fillRect(0, y0 + 5, 192, 1); g.fillStyle = 'rgba(0,0,0,.25)'; g.fillRect(0, y0 + 6, 192, 3);
       for (col = 0; col < 12; col++) { var lit = r() < 0.28, wc = lit ? (r() < 0.12 ? INK.pink : r() < 0.25 ? INK.teal : r() < 0.5 ? INK.gold : '#c3a9ad') : '#0b0609'; g.fillStyle = wc; g.globalAlpha = lit ? 0.22 + r()*0.4 : 0.75; g.fillRect(5 + col*16, y0 + 14, 7, 12); if (lit && r() < 0.5) { g.globalAlpha = 0.12; g.fillRect(3 + col*16, y0 + 12, 11, 16); } } }
     g.globalAlpha = 1; FACADE = c; return c; }
-  function findEdges() { edgeS = []; edgeE = []; for (var y = 0; y < MH; y++) for (var x = 0; x < MW; x++) { if (!floor[T(x, y)]) continue; if (!inMap(x, y + 1) || !floor[T(x, y + 1)]) edgeS.push([x, y]); if (!inMap(x + 1, y) || !floor[T(x + 1, y)]) edgeE.push([x, y]); } }
+  function findEdges() { edgeS = []; edgeE = []; for (var y = 0; y < MH; y++) for (var x = 0; x < MW; x++) { if (!floor[T(x, y)]) continue; if (!inMap(x, y + 1) || !floor[T(x, y + 1)]) edgeS.push([x, y, inMap(x, y + 1) ? 0 : 1]); if (!inMap(x + 1, y) || !floor[T(x + 1, y)]) edgeE.push([x, y, inMap(x + 1, y) ? 0 : 1]); } }
+  // At grade the world needs a floor that does not end. In a parallel
+  // projection there is no horizon: without this, everything outside the built
+  // tiles is sky, and a street at ground level floats exactly as badly as the
+  // facade drop it replaced. One sheared fill, far enough out that its own
+  // silhouette is never on screen, plus a haze that fixes the far edge to the
+  // map so it does not slide as you walk.
+  function viewClip(g) { var vx0 = camX - cssW/(2*zoom) - 8, vy0 = camY - cssH/(2*zoom) - 8;
+    g.beginPath(); g.rect(vx0, vy0, cssW/zoom + 16, cssH/zoom + 16); g.clip(); }
+  function drawGround(g) {
+    var R = 28, x0 = -R, x1 = MW + R, y0 = -R, y1 = MH + R;
+    // clipped to the screen: the apron is the size of the map, the fill must
+    // not be — a pattern fill that large costs the same whether you see it or not
+    g.save(); viewClip(g);
+    // the grain lies on the ground: the same shear bakeChunk uses per tile
+    g.save(); g.translate(PX(x0, y0), PY(x0, y0)); g.transform(1, 0.5, -1, 0.5, 0, 0);
+    g.fillStyle = g.createPattern(texture('asphalt'), 'repeat'); g.fillRect(0, 0, (x1 - x0)*32, (y1 - y0)*32); g.restore();
+    // distance, anchored to the map rather than to the camera
+    var ay0 = PY(x0, y0), ay1 = PY(x1, y1), fg = g.createLinearGradient(0, ay0, 0, ay0 + (ay1 - ay0)*0.62);
+    fg.addColorStop(0, 'rgba(36,17,25,.95)'); fg.addColorStop(1, 'rgba(36,17,25,0)');
+    g.beginPath(); g.moveTo(PX(x0, y0), PY(x0, y0)); g.lineTo(PX(x1, y0), PY(x1, y0)); g.lineTo(PX(x1, y1), PY(x1, y1)); g.lineTo(PX(x0, y1), PY(x0, y1)); g.closePath();
+    g.fillStyle = fg; g.fill(); g.restore();
+  }
+  // At grade there is nothing under you but pavement: the slab edge becomes a
+  // kerb, and the tower you live in rises behind instead of falling away.
+  function drawKerb(g, vr) {
+    var i, KH = 11;
+    function lip(ax, ay, bx, by) { if (bx < PX(vr.x0, vr.y1) - 80 || ax > PX(vr.x1, vr.y0) + 80) return;
+      g.beginPath(); g.moveTo(ax, ay); g.lineTo(bx, by); g.lineTo(bx, by + KH); g.lineTo(ax, ay + KH); g.closePath();
+      g.fillStyle = '#241f26'; g.fill(); g.fillStyle = 'rgba(0,0,0,.3)'; g.fill();
+      g.strokeStyle = 'rgba(233,216,197,.16)'; g.lineWidth = 1; g.beginPath(); g.moveTo(ax, ay); g.lineTo(bx, by); g.stroke(); }
+    for (i = 0; i < edgeS.length; i++) { var e = edgeS[i]; if (e[2] || e[0] < vr.x0 - 2 || e[0] > vr.x1 + 2 || e[1] < vr.y0 - 2 || e[1] > vr.y1 + 2) continue; lip(PX(e[0], e[1] + 1), PY(e[0], e[1] + 1), PX(e[0] + 1, e[1] + 1), PY(e[0] + 1, e[1] + 1)); }
+    for (i = 0; i < edgeE.length; i++) { e = edgeE[i]; if (e[2] || e[0] < vr.x0 - 2 || e[0] > vr.x1 + 2 || e[1] < vr.y0 - 2 || e[1] > vr.y1 + 2) continue; lip(PX(e[0] + 1, e[1] + 1), PY(e[0] + 1, e[1] + 1), PX(e[0] + 1, e[1]), PY(e[0] + 1, e[1])); }
+  }
+  // Slabs of building standing behind the level, drawn before the floors.
+  function drawBackdrops(g, t) {
+    var B = LEVELS[meta.level].back; if (!B) return; var pat = g.createPattern(facadeTex(), 'repeat'), i, dk = darkness();
+    for (i = 0; i < B.length; i++) { var b = B[i], west = b.x !== undefined, UH = b.h, ax, ay, bx, by;
+      // two forms: a block facing you across a constant-y line, or one standing
+      // along a constant-x line on the west flank, which takes the shaded value
+      if (west) { ax = PX(b.x, b.y1); ay = PY(b.x, b.y1); bx = PX(b.x, b.y0); by = PY(b.x, b.y0); }
+      else { ax = PX(b.x0, b.y); ay = PY(b.x0, b.y); bx = PX(b.x1, b.y); by = PY(b.x1, b.y); }
+      g.save(); viewClip(g); g.globalAlpha = b.a === undefined ? 1 : b.a;
+      g.fillStyle = 'rgba(11,6,9,.55)'; g.beginPath(); g.moveTo(ax, ay); g.lineTo(bx, by); g.lineTo(bx, by + 20); g.lineTo(ax, ay + 20); g.closePath(); g.fill();
+      g.beginPath(); g.moveTo(ax, ay); g.lineTo(bx, by); g.lineTo(bx, by - UH); g.lineTo(ax, ay - UH); g.closePath(); g.clip();
+      g.fillStyle = west ? '#100a0e' : '#160c12'; g.fillRect(Math.min(ax, bx) - 4, ay - UH - 4, Math.abs(bx - ax) + 8, UH + 8);
+      g.save(); g.translate(ax, ay - UH); g.transform(1, (by - ay)/(bx - ax), 0, 1, 0, 0); g.fillStyle = pat; g.fillRect(-4, 0, bx - ax + 8, UH + 40); g.restore();
+      var fg = g.createLinearGradient(0, ay, 0, ay - UH); fg.addColorStop(0, 'rgba(11,6,9,.08)'); fg.addColorStop(0.45, 'rgba(18,8,12,' + (0.3 + b.haze*0.4).toFixed(2) + ')'); fg.addColorStop(1, 'rgba(36,17,25,' + (0.7 + b.haze*0.25).toFixed(2) + ')');
+      g.fillStyle = fg; g.fillRect(Math.min(ax, bx) - 4, ay - UH, Math.abs(bx - ax) + 8, UH + 4);
+      g.restore();
+      g.strokeStyle = 'rgba(233,216,197,' + (0.2 - b.haze*0.12).toFixed(2) + ')'; g.lineWidth = 1.4; g.beginPath(); g.moveTo(ax, ay - UH); g.lineTo(bx, by - UH); g.stroke();
+      if (b.beacon) { var mx = (ax + bx)/2; g.fillStyle = INK.rose; g.globalAlpha = 0.4 + 0.6*(Math.floor(t*1.1) % 2); g.fillRect(mx - 1.5, ay - UH - 6, 3, 3); g.globalAlpha = 1; } }
+  }
   function drawFacade(g, vr, t) {
+    if (grade) { drawKerb(g, vr); return; }
     var pat = g.createPattern(facadeTex(), 'repeat'), DH = 560, i, dk = darkness();
     function drop(ax, ay, bx, by) { if (bx < PX(vr.x0, vr.y1) - 80 || ax > PX(vr.x1, vr.y0) + 80) return;
-      g.save(); g.beginPath(); g.moveTo(ax, ay); g.lineTo(bx, by); g.lineTo(bx, by + DH); g.lineTo(ax, ay + DH); g.closePath(); g.clip();
+      g.save(); viewClip(g); g.beginPath(); g.moveTo(ax, ay); g.lineTo(bx, by); g.lineTo(bx, by + DH); g.lineTo(ax, ay + DH); g.closePath(); g.clip();
       g.save(); g.translate(ax, ay); g.transform(1, (by - ay)/(bx - ax), 0, 1, 0, 0); g.fillStyle = pat; g.fillRect(-4, 0, bx - ax + 8, DH); g.restore();
       var fg = g.createLinearGradient(0, ay, 0, ay + DH); fg.addColorStop(0, 'rgba(11,6,9,0)'); fg.addColorStop(0.25, 'rgba(18,8,12,.35)'); fg.addColorStop(1, 'rgba(36,17,25,' + (0.92 - dk*0.2).toFixed(2) + ')'); g.fillStyle = fg; g.fillRect(Math.min(ax, bx), ay, Math.abs(bx - ax) + 1, DH);
       g.restore(); }
     for (i = 0; i < edgeS.length; i++) { var e = edgeS[i]; if (e[0] < vr.x0 - 2 || e[0] > vr.x1 + 2 || e[1] < vr.y0 - 2 || e[1] > vr.y1 + 2) continue; drop(PX(e[0], e[1] + 1), PY(e[0], e[1] + 1), PX(e[0] + 1, e[1] + 1), PY(e[0] + 1, e[1] + 1)); }
     for (i = 0; i < edgeE.length; i++) { e = edgeE[i]; if (e[0] < vr.x0 - 2 || e[0] > vr.x1 + 2 || e[1] < vr.y0 - 2 || e[1] > vr.y1 + 2) continue; drop(PX(e[0] + 1, e[1] + 1), PY(e[0] + 1, e[1] + 1), PX(e[0] + 1, e[1]), PY(e[0] + 1, e[1])); }
   }
-  function drawCore(g, t) { // rises from the deck's north wall, behind everything the deck looks at
-    if (towerA <= 0.01) return; var x0 = 4, x1 = 26, y = 32, ax = PX(x0, y), ay = PY(x0, y) - WH, bx = PX(x1, y), by = PY(x1, y) - WH, UH = 900, pat = g.createPattern(facadeTex(), 'repeat');
-    g.save(); g.globalAlpha = towerA; g.beginPath(); g.moveTo(ax, ay); g.lineTo(bx, by); g.lineTo(bx, by - UH); g.lineTo(ax, ay - UH); g.closePath(); g.clip();
-    g.save(); g.translate(ax, ay - UH); g.transform(1, (by - ay)/(bx - ax), 0, 1, 0, 0); g.fillStyle = pat; g.fillRect(-4, 0, bx - ax + 8, UH + 40); g.restore();
-    var fg = g.createLinearGradient(0, ay, 0, ay - UH); fg.addColorStop(0, 'rgba(11,6,9,.1)'); fg.addColorStop(0.5, 'rgba(18,8,12,.35)'); fg.addColorStop(1, 'rgba(36,17,25,.85)'); g.fillStyle = fg; g.fillRect(ax, ay - UH, bx - ax, UH + 4);
-    g.strokeStyle = 'rgba(233,216,197,.2)'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(ax, ay - 2); g.lineTo(bx, by - 2); g.stroke();
-    g.fillStyle = INK.rose; g.globalAlpha = towerA*(0.4 + 0.6*(Math.floor(t*1.2) % 2)); g.fillRect((ax + bx)/2 - 1.5, (ay + by)/2 - UH + 30, 3, 3); g.restore(); }
-  function chunkAt(cx, cy) { var k = cx + ',' + cy; if (!chunks[k]) chunks[k] = bakeChunk(cx, cy); return chunks[k]; }
+  // The tower you are standing on, or at the foot of: one or more slabs rising
+  // from a line of the grid. Drawn after the floors and before the sorted
+  // pass, so the interior it covers is culled by row rather than overdrawn.
+  function drawCore(g, t, co) {
+    if (towerA <= 0.01) return; var pat = g.createPattern(facadeTex(), 'repeat'), si;
+    for (si = 0; si < co.slabs.length; si++) { var sl = co.slabs[si], x0 = sl.x0, x1 = sl.x1, y = sl.y, UH = sl.up,
+        ax = PX(x0, y), ay = PY(x0, y) - WH, bx = PX(x1, y), by = PY(x1, y) - WH;
+      g.save(); viewClip(g); g.globalAlpha = towerA; g.beginPath(); g.moveTo(ax, ay); g.lineTo(bx, by); g.lineTo(bx, by - UH); g.lineTo(ax, ay - UH); g.closePath(); g.clip();
+      g.save(); g.translate(ax, ay - UH); g.transform(1, (by - ay)/(bx - ax), 0, 1, 0, 0); g.fillStyle = pat; g.fillRect(-4, 0, bx - ax + 8, UH + 40); g.restore();
+      var fg = g.createLinearGradient(0, ay, 0, ay - UH); fg.addColorStop(0, 'rgba(11,6,9,.1)'); fg.addColorStop(0.5, 'rgba(18,8,12,.35)'); fg.addColorStop(1, 'rgba(36,17,25,.85)'); g.fillStyle = fg; g.fillRect(ax, ay - UH, bx - ax, UH + 4);
+      g.strokeStyle = 'rgba(233,216,197,.2)'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(ax, ay - 2); g.lineTo(bx, by - 2); g.stroke();
+      if (sl.beacon) { g.fillStyle = INK.rose; g.globalAlpha = towerA*(0.4 + 0.6*(Math.floor(t*1.2) % 2)); g.fillRect((ax + bx)/2 - 1.5, (ay + by)/2 - UH + 30, 3, 3); }
+      g.restore();
+      if (sl.cap) { g.save(); g.globalAlpha = towerA; g.strokeStyle = 'rgba(233,216,197,.2)'; g.lineWidth = 1.4; g.beginPath(); g.moveTo(ax, ay - UH); g.lineTo(bx, by - UH); g.stroke(); g.restore(); } } }
+  function chunkAt(cx, cy) { var k = cx + ',' + cy; chunkUse[k] = ++chunkClock;
+    if (!chunks[k]) { var t0 = performance.now(); chunks[k] = bakeChunk(cx, cy); if (!chunks[k].empty) { bakedThisFrame++; bakeMs = performance.now() - t0; } }
+    return chunks[k]; }
+  // Canvases are not reclaimed by dropping the reference alone on iOS: zero the
+  // backing store first. Never while the floor loop is still drawing from it.
+  function sweepChunks() {
+    var ks = Object.keys(chunks), live = 0, i; for (i = 0; i < ks.length; i++) if (!chunks[ks[i]].empty) live++;
+    while (live > CHUNK_CAP) { var old = null, bst = Infinity;
+      for (i = 0; i < ks.length; i++) { var k = ks[i]; if (!chunks[k] || chunks[k].empty) continue; var u = chunkUse[k] || 0; if (u < bst) { bst = u; old = k; } }
+      if (old === null) break;
+      var ev = chunks[old]; if (ev.c) { ev.c.width = 0; ev.c.height = 0; }
+      delete chunks[old]; delete chunkUse[old]; live--; } }
 
   /* ---- walls ----
      A wall is a run along a tile edge, drawn as a parallelogram in face space:
      u along the run (0..64), v up (0..-height). Faces that run down-right catch
      the key light; faces that run down-left are in its shade. Decals are laid
      in the same space, so a poster foreshortens with its wall. */
-  var WALLCOL = { 1:['#4a3138','#3a262c'], 2:['#3a3238','#2c262b'], 3:['#3a4a50','#2c3a40'], 5:['#2a2226','#1e181c'], 6:['#38303a','#2a242c'], 7:['#4a2a2a','#38201f'] };
+  var WALLCOL = { 1:['#4a3138','#3a262c'], 2:['#3a3238','#2c262b'], 3:['#3a4a50','#2c3a40'], 4:['#44525a','#35434a'], 5:['#2a2226','#1e181c'], 6:['#38303a','#2a242c'], 7:['#4a2a2a','#38201f'] };
   function faceXf(g, x, y, side) { if (side === 0) g.transform(0.5, 0.25, 0, 1, PX(x, y), PY(x, y)); else g.transform(0.5, -0.25, 0, 1, PX(x, y + 1), PY(x, y + 1)); }
+  // An opening: jambs, a head over it, a leaf that swings or slides aside, and
+  // NOTHING filling the gap — whatever was drawn behind shows through it.
+  var DOOR_H = 74;   // height of the clear opening; the wall above it is real structure
+  function drawOpening(g, x, y, side, d, hgt, alpha, t) {
+    var lit = side === 0, cols = WALLCOL[d.mat] || WALLCOL[1], base = lit ? cols[0] : cols[1], dkc = mixh(base, '#0b0609', 0.55);
+    var a = d.open || 0, lift = d.kind === 'lift', oh = Math.min(hgt, DOOR_H);
+    g.save(); if (alpha < 1) g.globalAlpha = alpha; faceXf(g, x, y, side);
+    // the head: the wall above the opening
+    if (hgt > oh + 1) { var hg = g.createLinearGradient(0, -hgt, 0, -oh); hg.addColorStop(0, mixh(base, '#e9d8c5', lit ? 0.14 : 0.06)); hg.addColorStop(1, dkc);
+      g.fillStyle = hg; g.fillRect(0, -hgt, 64, hgt - oh);
+      g.fillStyle = 'rgba(0,0,0,.3)'; g.fillRect(0, -oh - 4, 64, 4); }
+    // the jambs
+    var jw = lift ? 4 : 5, jg = g.createLinearGradient(0, -oh, 0, 0); jg.addColorStop(0, mixh(base, '#e9d8c5', 0.1)); jg.addColorStop(1, dkc);
+    g.fillStyle = jg; g.fillRect(0, -oh, jw, oh); g.fillRect(64 - jw, -oh, jw, oh);
+    g.fillStyle = 'rgba(11,6,9,.55)'; g.fillRect(jw, -oh, 1.5, oh); g.fillRect(64 - jw - 1.5, -oh, 1.5, oh);
+    g.fillStyle = 'rgba(233,216,197,.16)'; g.fillRect(0, -oh, jw, 1.5); g.fillRect(64 - jw, -oh, jw, 1.5);
+    // the threshold
+    g.fillStyle = 'rgba(11,6,9,.5)'; g.fillRect(jw, -4, 64 - jw*2, 4); g.fillStyle = 'rgba(233,216,197,.1)'; g.fillRect(jw, -4, 64 - jw*2, 1);
+    var iw = 64 - jw*2;
+    if (lift) { // two panels sliding apart
+      var slide = a*(iw/2), pw = iw/2;
+      for (var pi = 0; pi < 2; pi++) { var px0 = pi ? 32 + slide : jw - slide, pg = g.createLinearGradient(px0, 0, px0 + pw, 0);
+        pg.addColorStop(0, '#22222a'); pg.addColorStop(0.5, '#2e2e38'); pg.addColorStop(1, '#1a1a20');
+        g.save(); g.beginPath(); g.rect(jw, -oh, iw, oh); g.clip();
+        g.fillStyle = pg; g.fillRect(px0, -oh, pw, oh);
+        g.fillStyle = 'rgba(233,216,197,.14)'; g.fillRect(pi ? px0 : px0 + pw - 1.5, -oh, 1.5, oh);
+        g.fillStyle = 'rgba(11,6,9,.5)'; g.fillRect(px0, -oh*0.55, pw, 1.5); g.restore(); } }
+    g.restore();
+    if (!lift) drawLeaf(g, x, y, side, d, oh, alpha);
+  }
+  // A hinged leaf does not just get narrower: in plan it sweeps through the
+  // room beyond. Drawn in world space, so it foreshortens like everything else.
+  function drawLeaf(g, x, y, side, d, oh, alpha) {
+    var a = d.open || 0, jw = 5/64, L = (64 - 10)/64, th = a*1.32;
+    var hx, hy, ax0, ay0, px0, py0;                       // hinge, along, perpendicular (into the far room)
+    if (side === 0) { hx = x + jw; hy = y; ax0 = 1; ay0 = 0; px0 = 0; py0 = -1; if (!inMap(x, y - 1) || !floor[T(x, y - 1)]) py0 = 1; }
+    else { hx = x; hy = y + 1 - jw; ax0 = 0; ay0 = -1; px0 = -1; py0 = 0; if (!inMap(x - 1, y) || !floor[T(x - 1, y)]) px0 = 1; }
+    var ex = hx + (ax0*Math.cos(th) + px0*Math.sin(th))*L, ey = hy + (ay0*Math.cos(th) + py0*Math.sin(th))*L;
+    var bx = PX(hx, hy), by = PY(hx, hy), fx = PX(ex, ey), fy = PY(ex, ey), lit2 = Math.abs(Math.cos(th));
+    g.save(); if (alpha < 1) g.globalAlpha = alpha;
+    g.beginPath(); g.moveTo(bx, by); g.lineTo(fx, fy); g.lineTo(fx, fy - oh + 2); g.lineTo(bx, by - oh + 2); g.closePath();
+    var lg2 = g.createLinearGradient(bx, 0, fx, 0), warm = mixh('#4a3038', '#0b0609', 0.15 + (1 - lit2)*0.45);
+    lg2.addColorStop(0, mixh(warm, '#e9d8c5', 0.14)); lg2.addColorStop(0.7, warm); lg2.addColorStop(1, mixh(warm, '#0b0609', 0.4));
+    g.fillStyle = lg2; g.fill(); g.strokeStyle = 'rgba(11,6,9,.7)'; g.lineWidth = 1; g.stroke();
+    var span = Math.hypot(fx - bx, fy - by);
+    if (span > 16) { g.save(); g.clip(); g.fillStyle = 'rgba(233,216,197,.06)'; g.fillRect(Math.min(bx, fx), by - oh + 8, span, oh*0.34);
+      g.fillStyle = 'rgba(11,6,9,.26)'; g.fillRect(Math.min(bx, fx), by - oh*0.52, span, oh*0.3); g.restore();
+      g.fillStyle = INK.gold; var kx = bx + (fx - bx)*0.86, ky = by + (fy - by)*0.86; g.fillRect(kx - 1.2, ky - oh*0.5, 2.4, 1.8); }
+    g.restore();
+  }
   function drawWall(g, x, y, side, mat, hgt, alpha, t) {
-    var lit = side === 0, cols = WALLCOL[mat] || WALLCOL[1], base = lit ? cols[0] : cols[1], dk = mixh(base, '#0b0609', 0.55), d = (side === 0 ? decoN : decoW)[T(x, y)];
+    var d0 = (side === 0 ? decoN : decoW)[T(x, y)];
+    if (!mat) { if (d0 && (d0.kind === 'door' || d0.kind === 'lift')) { drawOpening(g, x, y, side, d0, hgt, alpha, t); wallTop(g, x, y, side, WALLCOL[d0.mat] ? (side === 0 ? WALLCOL[d0.mat][0] : WALLCOL[d0.mat][1]) : '#3a262c', hgt, alpha); } return; }
+    var lit = side === 0, cols = WALLCOL[mat] || WALLCOL[1], base = lit ? cols[0] : cols[1], dk = mixh(base, '#0b0609', 0.55), d = d0;
     g.save(); if (alpha < 1) g.globalAlpha = alpha; faceXf(g, x, y, side);
     if (mat === WM.glass) { // a greenhouse pane: a frame, a tint, a reflection
       g.fillStyle = 'rgba(126,156,196,.13)'; g.fillRect(0, -hgt, 64, hgt); g.fillStyle = 'rgba(233,216,197,.06)'; g.beginPath(); g.moveTo(4, -hgt + 4); g.lineTo(30, -hgt + 4); g.lineTo(4, -hgt*0.45); g.closePath(); g.fill();
@@ -710,18 +966,28 @@
     else { // plaster: a wash, faint stains
       var hh = hash2(x*3 + side, y*7); g.fillStyle = 'rgba(0,0,0,' + (0.04 + (hh % 5)*0.02).toFixed(2) + ')'; g.fillRect((hh >> 3) % 40, -hgt + (hh >> 6) % 30, 22, 30); }
     // baseboard, corner posts where runs meet, and the cap
-    g.fillStyle = 'rgba(11,6,9,.6)'; g.fillRect(0, -7, 64, 7); g.fillStyle = 'rgba(233,216,197,.06)'; g.fillRect(0, -7, 64, 1);
+    var bb = Math.min(7, hgt*0.35);                        // a stub must not be half baseboard
+    g.fillStyle = 'rgba(11,6,9,.6)'; g.fillRect(0, -bb, 64, bb); g.fillStyle = 'rgba(233,216,197,.06)'; g.fillRect(0, -bb, 64, 1);
     var pc = side === 0 ? [(inMap(x, y - 1) && wallW[T(x, y - 1)]) || wallW[T(x, y)], (inMap(x + 1, y - 1) && wallW[T(x + 1, y - 1)]) || (inMap(x + 1, y) && wallW[T(x + 1, y)])]
                         : [(inMap(x - 1, y + 1) && wallN[T(x - 1, y + 1)]) || (inMap(x, y + 1) && wallN[T(x, y + 1)]), (inMap(x - 1, y) && wallN[T(x - 1, y)]) || wallN[T(x, y)]];
     g.fillStyle = 'rgba(11,6,9,.5)'; if (pc[0]) g.fillRect(0, -hgt, 3, hgt); if (pc[1]) g.fillRect(61, -hgt, 3, hgt); g.fillStyle = 'rgba(233,216,197,.14)'; if (pc[0]) g.fillRect(3, -hgt, 1, hgt); if (pc[1]) g.fillRect(60, -hgt, 1, hgt);
     if (hgt >= WH - 1) { g.fillStyle = 'rgba(233,216,197,.28)'; g.fillRect(0, -hgt, 64, 1.5); g.fillStyle = 'rgba(0,0,0,.35)'; g.fillRect(0, -hgt + 1.5, 64, 2.5); }
-    else { g.fillStyle = mixh(base, '#e9d8c5', 0.3); g.fillRect(0, -hgt - 3, 64, 3); g.fillStyle = 'rgba(233,216,197,.5)'; g.fillRect(0, -hgt - 3, 64, 1); }
+    else { g.fillStyle = mixh(base, '#0b0609', 0.25); g.fillRect(0, -hgt, 64, 3); g.fillStyle = 'rgba(233,216,197,.10)'; g.fillRect(0, -hgt, 64, 1); }
     // decals, only on a wall standing at full height
-    if (d && hgt > 40) drawDeco(g, d, lit, t, hgt);
+    // Decals fade out as their wall drops and are clipped to it throughout,
+    // so nothing pops and nothing hangs in the air above a shortened wall.
+    if (d && hgt > 26) { var da = clamp((hgt - 40)/26, 0, 1); g.save(); g.beginPath(); g.rect(0, -hgt, 64, hgt); g.clip();
+      if (da < 1) g.globalAlpha = (alpha < 1 ? alpha : 1)*da; drawDeco(g, d, lit, t, hgt); g.restore(); }
     g.restore();
-    // the wall has thickness: a lit strip along its top, set back into the wall
-    var ax, ay, bx, by, ox = side === 0 ? 5 : -5, oy = -2.5; if (side === 0) { ax = PX(x, y); ay = PY(x, y) - hgt; bx = PX(x + 1, y); by = PY(x + 1, y) - hgt; } else { ax = PX(x, y + 1); ay = PY(x, y + 1) - hgt; bx = PX(x, y); by = PY(x, y) - hgt; }
-    g.save(); if (alpha < 1) g.globalAlpha = alpha; g.fillStyle = mixh(base, '#e9d8c5', hgt >= WH - 1 ? 0.3 : 0.42); g.beginPath(); g.moveTo(ax, ay); g.lineTo(bx, by); g.lineTo(bx + ox, by + oy); g.lineTo(ax + ox, ay + oy); g.closePath(); g.fill(); g.strokeStyle = 'rgba(11,6,9,.5)'; g.lineWidth = 0.8; g.stroke(); g.restore();
+    wallTop(g, x, y, side, base, hgt, alpha);
+  }
+  // The wall has thickness: a strip along its top, set back into the wall. A
+  // cut-down stub gets a duller cap so it reads as a low wall, not a lit ledge.
+  function wallTop(g, x, y, side, base, hgt, alpha) {
+    var ax, ay, bx, by, ox = side === 0 ? 5 : -5, oy = -2.5, full = hgt >= WH - 1;
+    if (side === 0) { ax = PX(x, y); ay = PY(x, y) - hgt; bx = PX(x + 1, y); by = PY(x + 1, y) - hgt; } else { ax = PX(x, y + 1); ay = PY(x, y + 1) - hgt; bx = PX(x, y); by = PY(x, y) - hgt; }
+    g.save(); if (alpha < 1) g.globalAlpha = alpha; g.fillStyle = mixh(base, '#e9d8c5', full ? 0.3 : 0.16); g.beginPath(); g.moveTo(ax, ay); g.lineTo(bx, by); g.lineTo(bx + ox, by + oy); g.lineTo(ax + ox, ay + oy); g.closePath(); g.fill();
+    g.strokeStyle = 'rgba(11,6,9,' + (full ? 0.5 : 0.68) + ')'; g.lineWidth = 0.8; g.stroke(); g.restore();
   }
   function drawDeco(g, d, lit, t, hgt) {
     var k = d.kind, ink = INK[d.ink] || INK.bone;
@@ -823,6 +1089,101 @@
     bin: function (g, ob) { cyl(g, 0.5, 0.5, 0.26, 24, '#2a2a30', { top: '#1a1a20' }); g.fillStyle = '#0b0609'; g.beginPath(); g.ellipse(PX(0.5, 0.5), PY(0.5, 0.5) - 24, 6, 3, 0, 0, 6.283); g.fill(); g.fillStyle = 'rgba(233,216,197,.1)'; g.fillRect(PX(0.5, 0.5) - 8, PY(0.5, 0.5) - 14, 16, 1.5); },
     washer: function (g, ob) { box(g, 0.1, 0.1, 0, 0.8, 0.8, 40, '#c3a9ad', { top: '#d9c8b5', ef: '#8f7078' }); g.fillStyle = '#1a2028'; g.beginPath(); g.ellipse(PX(0.5, 0.9), PY(0.5, 0.9) - 20, 11, 8, 0, 0, 6.283); g.fill(); g.strokeStyle = 'rgba(233,216,197,.4)'; g.lineWidth = 1.5; g.stroke(); g.fillStyle = INK.teal; g.fillRect(PX(0.2, 0.9) - 2, PY(0.2, 0.9) - 37, 3, 2); },
     liftcall: function () {},
+    // ---- street and yard: the props a level at grade needs ----
+    kerb: function (g, ob) { var w = ob.w, d = ob.h; box(g, 0, 0, 0, w, d, 5, '#3a3238', { top: '#544a52' }); g.fillStyle = 'rgba(233,216,197,.14)'; g.fillRect(PX(0, d) - 2, PY(0, d) - 5, 3, 5); },
+    crossing: function (g, ob) { var w = ob.w, d = ob.h, i; g.fillStyle = 'rgba(233,216,197,.4)';
+      for (i = 0; i < w*2; i++) { var x0 = i*0.5 + 0.08; g.beginPath(); g.moveTo(PX(x0, 0.1), PY(x0, 0.1)); g.lineTo(PX(x0 + 0.3, 0.1), PY(x0 + 0.3, 0.1)); g.lineTo(PX(x0 + 0.3, d - 0.1), PY(x0 + 0.3, d - 0.1)); g.lineTo(PX(x0, d - 0.1), PY(x0, d - 0.1)); g.closePath(); g.fill(); } },
+    bollard: function (g, ob) { cyl(g, 0.5, 0.5, 0.11, 26, '#2a2a30', { top: '#3a3a42' }); g.fillStyle = INK.gold; g.globalAlpha = 0.7; g.fillRect(PX(0.5, 0.5) - 3.5, PY(0.5, 0.5) - 22, 7, 2); g.globalAlpha = 1; },
+    hydrant: function (g, ob) { cyl(g, 0.5, 0.5, 0.13, 20, '#5c2028', { top: '#7a2c36' }); cyl(g, 0.5, 0.5, 0.07, 26, '#5c2028'); g.fillStyle = '#7a2c36'; g.fillRect(PX(0.5, 0.5) - 8, PY(0.5, 0.5) - 15, 16, 3); },
+    trafficlight: function (g, ob) { cyl(g, 0.5, 0.5, 0.1, 6, '#2a2a30'); g.strokeStyle = '#3a3a42'; g.lineWidth = 3.5; g.lineCap = 'round'; g.beginPath(); g.moveTo(PX(0.5, 0.5), PY(0.5, 0.5) - 6); g.lineTo(PX(0.5, 0.5), PY(0.5, 0.5) - 96); g.stroke();
+      var hx = PX(0.5, 0.5), hy = PY(0.5, 0.5) - 96; g.fillStyle = '#1a1a20'; g.fillRect(hx - 6, hy - 26, 12, 28); g.strokeStyle = 'rgba(233,216,197,.2)'; g.lineWidth = 1; g.strokeRect(hx - 6.5, hy - 26.5, 13, 29);
+      var cols = [INK.rose, INK.gold, INK.green], on = ob.f || 0; for (var i = 0; i < 3; i++) { g.fillStyle = cols[i]; g.globalAlpha = i === on ? 1 : 0.16; if (i === on) { g.shadowColor = cols[i]; g.shadowBlur = 7; } g.beginPath(); g.arc(hx, hy - 20 + i*8, 2.6, 0, 6.283); g.fill(); g.shadowBlur = 0; } g.globalAlpha = 1; if (cols[on]) glow(g, hx, hy - 20 + on*8, cols[on], 16); },
+    shelter: function (g, ob) { var w = ob.w, d = ob.h; box(g, 0.05, 0.06, 0, 0.12, 0.12, 74, '#2a2a30', { noline: 1 }); box(g, w - 0.17, 0.06, 0, 0.12, 0.12, 74, '#2a2a30', { noline: 1 }); box(g, w - 0.17, d - 0.18, 0, 0.12, 0.12, 74, '#2a2a30', { noline: 1 });
+      g.fillStyle = 'rgba(126,156,196,.12)'; g.beginPath(); g.moveTo(PX(0.1, d - 0.1), PY(0.1, d - 0.1)); g.lineTo(PX(w - 0.1, d - 0.1), PY(w - 0.1, d - 0.1)); g.lineTo(PX(w - 0.1, d - 0.1), PY(w - 0.1, d - 0.1) - 70); g.lineTo(PX(0.1, d - 0.1), PY(0.1, d - 0.1) - 70); g.closePath(); g.fill();
+      g.strokeStyle = 'rgba(233,216,197,.3)'; g.lineWidth = 1.2; g.stroke();
+      box(g, 0, 0, 74, w, d, 5, '#1e1e24', { top: '#33333c', soft: 5 });
+      box(g, 0.2, d - 0.3, 16, w - 0.4, 0.22, 4, '#3a2a22', { top: '#5a4234', soft: 3 });
+      var col = ob.light || INK.teal; g.fillStyle = col; g.shadowColor = col; g.shadowBlur = 8; g.fillRect(PX(0.2, d - 0.12), PY(0.2, d - 0.12) - 62, 34, 2); g.shadowBlur = 0; glow(g, PX(w/2, d/2), PY(w/2, d/2) - 60, col, 30); },
+    fountain: function (g, ob) { var w = ob.w, c = w/2; cyl(g, c, c, c - 0.12, 14, '#3a3238', { top: '#12303a' });
+      g.fillStyle = 'rgba(126,156,196,.4)'; g.beginPath(); g.ellipse(PX(c, c), PY(c, c) - 14, (c - 0.22)*32, (c - 0.22)*16, 0, 0, 6.283); g.fill();
+      cyl(g, c, c, 0.16, 34, '#4a4048', { top: '#5a505a' }); var jx = PX(c, c), jy = PY(c, c) - 34;
+      g.strokeStyle = 'rgba(233,216,197,.3)'; g.lineWidth = 1.2; g.beginPath(); for (var i = 0; i < 7; i++) { var a = i/7*6.283; g.moveTo(jx, jy - 6); g.quadraticCurveTo(jx + Math.cos(a)*14, jy - 16, jx + Math.cos(a)*24, jy + Math.sin(a)*10 + 12); } g.stroke();
+      glow(g, jx, jy, '#7e9cc4', 30); },
+    shopfront: function (g, ob) { var w = ob.w, d = ob.h, col = ob.col || '#2c1c22', sign = ob.sign || 'OPEN', ink = INK[ob.ink] || INK.pink;
+      box(g, 0, 0, 0, w, d, 132, col, { top: mixh(col, '#e9d8c5', 0.14), sf: mixh(col, '#e9d8c5', 0.05) });
+      var y0 = d, wx0 = PX(0.3, y0), wy0 = PY(0.3, y0); g.fillStyle = '#0b0609'; g.beginPath(); g.moveTo(PX(0.3, y0), PY(0.3, y0) - 26); g.lineTo(PX(w - 0.3, y0), PY(w - 0.3, y0) - 26); g.lineTo(PX(w - 0.3, y0), PY(w - 0.3, y0) - 78); g.lineTo(PX(0.3, y0), PY(0.3, y0) - 78); g.closePath(); g.fill();
+      var lg = g.createLinearGradient(0, wy0 - 78, 0, wy0 - 26); lg.addColorStop(0, mixh(ink, '#0b0609', 0.55)); lg.addColorStop(1, mixh(ink, '#0b0609', 0.82)); g.fillStyle = lg; g.fill();
+      g.fillStyle = 'rgba(233,216,197,.1)'; g.beginPath(); g.moveTo(PX(0.4, y0), PY(0.4, y0) - 74); g.lineTo(PX(1.1, y0), PY(1.1, y0) - 74); g.lineTo(PX(0.4, y0), PY(0.4, y0) - 44); g.closePath(); g.fill();
+      g.strokeStyle = 'rgba(233,216,197,.28)'; g.lineWidth = 1.4; g.beginPath(); g.moveTo(PX(0.3, y0), PY(0.3, y0) - 26); g.lineTo(PX(w - 0.3, y0), PY(w - 0.3, y0) - 26); g.lineTo(PX(w - 0.3, y0), PY(w - 0.3, y0) - 78); g.lineTo(PX(0.3, y0), PY(0.3, y0) - 78); g.closePath(); g.stroke();
+      for (var mi = 1; mi < w - 0.6; mi++) { g.beginPath(); g.moveTo(PX(0.3 + mi, y0), PY(0.3 + mi, y0) - 26); g.lineTo(PX(0.3 + mi, y0), PY(0.3 + mi, y0) - 78); g.stroke(); }
+      box(g, 0.15, d - 0.02, 80, w - 0.3, 0.2, 4, '#1a1a20', { top: mixh(ink, '#0b0609', 0.4), soft: 3 });
+      g.save(); g.translate(PX(w/2, y0 + 0.1), PY(w/2, y0 + 0.1) - 96); g.transform(0.5, 0.25, 0, 1, 0, 0); g.font = '500 12px Georgia, serif'; g.textAlign = 'center'; g.fillStyle = ink; g.shadowColor = ink; g.shadowBlur = 9; g.fillText(sign, 0, 0); g.restore(); g.shadowBlur = 0;
+      glow(g, PX(w/2, y0), PY(w/2, y0) - 52, ink, 46); },
+    awning: function (g, ob) { var w = ob.w, d = ob.h, ink = INK[ob.ink] || INK.blood; g.fillStyle = mixh(ink, '#0b0609', 0.45);
+      g.beginPath(); g.moveTo(PX(0, 0), PY(0, 0) - 74); g.lineTo(PX(w, 0), PY(w, 0) - 74); g.lineTo(PX(w, d), PY(w, d) - 58); g.lineTo(PX(0, d), PY(0, d) - 58); g.closePath(); g.fill();
+      g.strokeStyle = 'rgba(11,6,9,.5)'; g.lineWidth = 1; g.stroke(); g.fillStyle = mixh(ink, '#e9d8c5', 0.2); g.globalAlpha = 0.5;
+      for (var i = 0; i < w*2; i++) { if (i % 2) continue; g.beginPath(); g.moveTo(PX(i*0.5, 0), PY(i*0.5, 0) - 74); g.lineTo(PX(i*0.5 + 0.5, 0), PY(i*0.5 + 0.5, 0) - 74); g.lineTo(PX(i*0.5 + 0.5, d), PY(i*0.5 + 0.5, d) - 58); g.lineTo(PX(i*0.5, d), PY(i*0.5, d) - 58); g.closePath(); g.fill(); } g.globalAlpha = 1;
+      g.fillStyle = 'rgba(0,0,0,.3)'; g.beginPath(); g.moveTo(PX(0, d), PY(0, d) - 58); g.lineTo(PX(w, d), PY(w, d) - 58); g.lineTo(PX(w, d), PY(w, d) - 54); g.lineTo(PX(0, d), PY(0, d) - 54); g.closePath(); g.fill(); },
+    kiosk: function (g, ob) { var w = ob.w, d = ob.h, col = ob.light || INK.teal; box(g, 0.05, 0.05, 0, w - 0.1, d - 0.1, 66, '#241119', { top: '#3a2a2e', sf: '#2c1c22' });
+      g.fillStyle = '#0b0609'; g.beginPath(); g.moveTo(PX(0.15, d - 0.05), PY(0.15, d - 0.05) - 24); g.lineTo(PX(w - 0.15, d - 0.05), PY(w - 0.15, d - 0.05) - 24); g.lineTo(PX(w - 0.15, d - 0.05), PY(w - 0.15, d - 0.05) - 56); g.lineTo(PX(0.15, d - 0.05), PY(0.15, d - 0.05) - 56); g.closePath(); g.fill();
+      g.fillStyle = mixh(col, '#0b0609', 0.5); g.fill(); g.strokeStyle = col; g.lineWidth = 1; g.stroke();
+      var cs = [INK.pink, INK.gold, INK.teal, INK.violet]; for (var i = 0; i < 6; i++) { g.fillStyle = cs[i % 4]; g.globalAlpha = 0.8; g.fillRect(PX(0.3 + (i % 3)*0.4, d - 0.05) - 3, PY(0.3 + (i % 3)*0.4, d - 0.05) - 50 + Math.floor(i/3)*12, 6, 8); } g.globalAlpha = 1;
+      box(g, 0, 0, 66, w, d, 4, '#1a1a20', { top: '#2a2a30', soft: 4 }); glow(g, PX(w/2, d), PY(w/2, d) - 40, col, 32); },
+    dumpster: function (g, ob) { var w = ob.w, d = ob.h; box(g, 0.05, 0.1, 4, w - 0.1, d - 0.2, 30, '#26302a', { top: '#1a2420', sf: '#2e3a32' });
+      box(g, 0, 0.05, 34, w, d - 0.1, 4, '#1e2822', { top: '#324036', soft: 4 }); cyl(g, 0.25, d - 0.05, 0.1, 5, '#0b0609'); cyl(g, w - 0.25, d - 0.05, 0.1, 5, '#0b0609');
+      g.strokeStyle = 'rgba(11,6,9,.5)'; g.lineWidth = 1; g.beginPath(); g.moveTo(PX(w/2, 0.1), PY(w/2, 0.1) - 38); g.lineTo(PX(w/2, d - 0.1), PY(w/2, d - 0.1) - 38); g.stroke();
+      g.fillStyle = 'rgba(233,216,197,.1)'; g.fillRect(PX(0.3, d - 0.1) - 6, PY(0.3, d - 0.1) - 26, 14, 8); },
+    pallet: function (g, ob) { var w = ob.w, d = ob.h, i; for (i = 0; i < 4; i++) box(g, 0.05, 0.05 + i*0.24, 0, w - 0.1, 0.14, 5, '#3a2a22', { top: '#5a4234', noline: 1, rim: false }); box(g, 0.05, 0.05, 5, w - 0.1, d - 0.1, 3, '#4a3628', { top: '#6a5040' }); },
+    crates: function (g, ob) { box(g, 0.05, 0.05, 0, 0.85, 0.85, 26, '#3a2a22', { top: '#5a4234', soft: 2 }); box(g, 0.1, 0.12, 26, 0.7, 0.7, 22, '#4a3628', { top: '#6a5040', soft: 2 }); g.fillStyle = INK.gold; g.globalAlpha = 0.6; g.fillRect(PX(0.45, 0.9) - 5, PY(0.45, 0.9) - 16, 10, 3); g.globalAlpha = 1; },
+    stairs: function (g, ob) { var w = ob.w, d = ob.h, n = 6, i; for (i = 0; i < n; i++) { var z = i*9, yy = d - 0.06 - i*(d - 0.12)/n; box(g, 0.05, yy - (d - 0.12)/n, z, w - 0.1, (d - 0.12)/n + 0.02, 9, '#3a3238', { top: '#544a52', noline: 1 }); }
+      g.strokeStyle = '#5c434a'; g.lineWidth = 2; g.lineCap = 'round'; g.beginPath(); g.moveTo(PX(0.08, d), PY(0.08, d) - 26); g.lineTo(PX(0.08, 0.1), PY(0.08, 0.1) - 26 - n*9); g.moveTo(PX(w - 0.08, d), PY(w - 0.08, d) - 26); g.lineTo(PX(w - 0.08, 0.1), PY(w - 0.08, 0.1) - 26 - n*9); g.stroke(); },
+    duct: function (g, ob) { var w = ob.w, d = ob.h, i; box(g, 0.05, 0.2, 18, w - 0.1, d - 0.4, 26, '#3a3a42', { top: '#4a4a54', soft: 3 });
+      g.strokeStyle = 'rgba(11,6,9,.45)'; g.lineWidth = 1.5; for (i = 1; i < w*2; i++) { g.beginPath(); g.moveTo(PX(i*0.5, 0.2), PY(i*0.5, 0.2) - 44); g.lineTo(PX(i*0.5, d - 0.2), PY(i*0.5, d - 0.2) - 44); g.stroke(); }
+      cyl(g, 0.35, d/2, 0.1, 18, '#2a2a30'); cyl(g, w - 0.35, d/2, 0.1, 18, '#2a2a30'); },
+    satdish: function (g, ob) { cyl(g, 0.5, 0.5, 0.14, 22, '#2a2a30'); var cx = PX(0.5, 0.5), cy = PY(0.5, 0.5) - 34;
+      g.save(); g.translate(cx, cy); g.rotate(-0.5); g.fillStyle = '#8f8f98'; g.beginPath(); g.ellipse(0, 0, 22, 13, 0, 0, 6.283); g.fill(); g.fillStyle = 'rgba(0,0,0,.3)'; g.beginPath(); g.ellipse(3, 2, 19, 11, 0, 0, 6.283); g.fill(); g.strokeStyle = 'rgba(233,216,197,.3)'; g.lineWidth = 1; g.beginPath(); g.ellipse(0, 0, 22, 13, 0, 0, 6.283); g.stroke(); g.restore();
+      g.strokeStyle = '#5c434a'; g.lineWidth = 2; g.beginPath(); g.moveTo(cx, cy + 6); g.lineTo(cx + 10, cy - 4); g.stroke(); g.fillStyle = INK.rose; g.beginPath(); g.arc(cx + 11, cy - 5, 2, 0, 6.283); g.fill(); },
+    loft: function (g, ob) { var w = ob.w, d = ob.h; box(g, 0.1, 0.1, 14, w - 0.2, d - 0.2, 44, '#3a2a22', { top: '#5a4234' }); cyl(g, 0.3, d - 0.25, 0.08, 14, '#2a1c16'); cyl(g, w - 0.3, d - 0.25, 0.08, 14, '#2a1c16');
+      g.fillStyle = '#12080c'; for (var i = 0; i < 3; i++) g.fillRect(PX(0.3 + i*0.55, d - 0.1) - 5, PY(0.3 + i*0.55, d - 0.1) - 46, 9, 11);
+      box(g, 0, 0, 58, w, d, 4, '#2a1c16', { top: '#4a3628', soft: 4 }); g.fillStyle = '#c3a9ad'; g.globalAlpha = 0.8; g.beginPath(); g.ellipse(PX(0.55, d - 0.1), PY(0.55, d - 0.1) - 48, 3.5, 3, 0, 0, 6.283); g.fill(); g.globalAlpha = 1; },
+    compost: function (g, ob) { var w = ob.w, d = ob.h; box(g, 0.05, 0.05, 0, w - 0.1, d - 0.1, 20, '#3a2a22', { top: '#241812' });
+      g.fillStyle = '#2e2216'; g.beginPath(); g.ellipse(PX(w/2, d/2), PY(w/2, d/2) - 20, (w - 0.4)*30, (d - 0.4)*15, 0, 0, 6.283); g.fill();
+      g.strokeStyle = 'rgba(11,6,9,.4)'; g.lineWidth = 1; for (var i = 1; i < 3; i++) { g.beginPath(); g.moveTo(PX(0.05, d - 0.05), PY(0.05, d - 0.05) - i*7); g.lineTo(PX(w - 0.05, d - 0.05), PY(w - 0.05, d - 0.05) - i*7); g.stroke(); }
+      g.fillStyle = '#3d7a4a'; g.globalAlpha = 0.7; for (i = 0; i < 5; i++) g.fillRect(PX(0.3 + i*0.3, d/2) - 2, PY(0.3 + i*0.3, d/2) - 24, 4, 2); g.globalAlpha = 1; },
+    waterbutt: function (g, ob) { cyl(g, 0.5, 0.5, 0.36, 50, '#26302a', { top: '#12303a' }); g.strokeStyle = 'rgba(11,6,9,.4)'; g.lineWidth = 2; for (var i = 1; i < 4; i++) { g.beginPath(); g.ellipse(PX(0.5, 0.5), PY(0.5, 0.5) - i*12, 11.5, 5.8, 0, 0, 3.14); g.stroke(); }
+      g.fillStyle = '#5c434a'; g.fillRect(PX(0.5, 0.85) - 2, PY(0.5, 0.85) - 12, 4, 5); },
+    shed: function (g, ob) { var w = ob.w, d = ob.h; box(g, 0, 0, 0, w, d, 76, '#3a2a22', { top: '#4a3628', sf: '#42302a' });
+      g.fillStyle = '#2a1c16'; g.beginPath(); g.moveTo(PX(0, d), PY(0, d) - 76); g.lineTo(PX(w, d), PY(w, d) - 76); g.lineTo(PX(w, d), PY(w, d) - 92); g.lineTo(PX(0, d), PY(0, d) - 92); g.closePath(); g.fill();
+      box(g, -0.1, -0.1, 76, w + 0.2, d + 0.2, 5, '#241812', { top: '#3a2a22', soft: 3 });
+      g.fillStyle = '#1a1210'; g.beginPath(); g.moveTo(PX(0.25, d), PY(0.25, d) - 8); g.lineTo(PX(0.85, d), PY(0.85, d) - 8); g.lineTo(PX(0.85, d), PY(0.85, d) - 62); g.lineTo(PX(0.25, d), PY(0.25, d) - 62); g.closePath(); g.fill(); g.strokeStyle = 'rgba(233,216,197,.2)'; g.lineWidth = 1; g.stroke();
+      g.fillStyle = 'rgba(126,156,196,.22)'; g.beginPath(); g.moveTo(PX(1.15, d), PY(1.15, d) - 30); g.lineTo(PX(1.75, d), PY(1.75, d) - 30); g.lineTo(PX(1.75, d), PY(1.75, d) - 58); g.lineTo(PX(1.15, d), PY(1.15, d) - 58); g.closePath(); g.fill(); g.strokeStyle = 'rgba(233,216,197,.25)'; g.stroke(); },
+    catwalk: function (g, ob) { var w = ob.w, d = ob.h, i; box(g, 0, 0.1, 30, w, d - 0.2, 4, '#2e2e36', { top: '#43434e' });
+      g.strokeStyle = 'rgba(11,6,9,.4)'; g.lineWidth = 1; for (i = 1; i < w*2; i++) { g.beginPath(); g.moveTo(PX(i*0.5, 0.1), PY(i*0.5, 0.1) - 34); g.lineTo(PX(i*0.5, d - 0.1), PY(i*0.5, d - 0.1) - 34); g.stroke(); }
+      g.strokeStyle = '#5c434a'; g.lineWidth = 2; g.lineCap = 'round'; for (var side = 0; side < 2; side++) { var yy = side ? d - 0.1 : 0.1; g.beginPath(); g.moveTo(PX(0, yy), PY(0, yy) - 34); g.lineTo(PX(0, yy), PY(0, yy) - 60); g.lineTo(PX(w, yy), PY(w, yy) - 60); g.lineTo(PX(w, yy), PY(w, yy) - 34); g.stroke();
+        for (i = 1; i < w; i++) { g.beginPath(); g.moveTo(PX(i, yy), PY(i, yy) - 34); g.lineTo(PX(i, yy), PY(i, yy) - 60); g.stroke(); } }
+      cyl(g, 0.3, d/2, 0.08, 30, '#2a2a30'); cyl(g, w - 0.3, d/2, 0.08, 30, '#2a2a30'); },
+    washline: function (g, ob) { var w = ob.w; cyl(g, 0.2, 0.5, 0.07, 64, '#3a3a42'); cyl(g, w - 0.2, 0.5, 0.07, 64, '#3a3a42');
+      g.strokeStyle = 'rgba(233,216,197,.35)'; g.lineWidth = 1; g.beginPath(); g.moveTo(PX(0.2, 0.5), PY(0.2, 0.5) - 62); g.quadraticCurveTo(PX(w/2, 0.5), PY(w/2, 0.5) - 52, PX(w - 0.2, 0.5), PY(w - 0.2, 0.5) - 62); g.stroke();
+      var cs = ['#8f7078', '#1e3a3a', '#c3a9ad', '#2a1a3a']; for (var i = 0; i < 4; i++) { var k = 0.22 + i*0.19, px0 = PX(0.2 + (w - 0.4)*k, 0.5), py0 = PY(0.2 + (w - 0.4)*k, 0.5) - 58 + Math.sin(k*3.14)*6;
+        g.fillStyle = cs[i]; g.beginPath(); g.moveTo(px0 - 7, py0); g.lineTo(px0 + 7, py0); g.lineTo(px0 + 8, py0 + 20); g.lineTo(px0 - 8, py0 + 20); g.closePath(); g.fill(); g.strokeStyle = 'rgba(11,6,9,.45)'; g.lineWidth = 1; g.stroke(); } },
+    plantroom: function (g, ob) { var w = ob.w, d = ob.h; box(g, 0, 0, 0, w, d, 86, '#2e2e36', { top: '#3e3e48', sf: '#36363f' });
+      g.fillStyle = '#12080c'; g.beginPath(); g.moveTo(PX(0.3, d), PY(0.3, d) - 10); g.lineTo(PX(1.1, d), PY(1.1, d) - 10); g.lineTo(PX(1.1, d), PY(1.1, d) - 64); g.lineTo(PX(0.3, d), PY(0.3, d) - 64); g.closePath(); g.fill(); g.strokeStyle = 'rgba(233,216,197,.22)'; g.lineWidth = 1.2; g.stroke();
+      g.fillStyle = INK.gold; g.globalAlpha = 0.55; g.fillRect(PX(0.7, d) - 2, PY(0.7, d) - 40, 4, 1.6); g.globalAlpha = 1;
+      for (var i = 0; i < 3; i++) { g.fillStyle = '#12080c'; g.fillRect(PX(1.6 + i*0.5, d) - 5, PY(1.6 + i*0.5, d) - 58, 10, 12); g.strokeStyle = 'rgba(233,216,197,.2)'; g.lineWidth = 1; for (var v = 0; v < 4; v++) { g.beginPath(); g.moveTo(PX(1.6 + i*0.5, d) - 4, PY(1.6 + i*0.5, d) - 56 + v*3); g.lineTo(PX(1.6 + i*0.5, d) + 4, PY(1.6 + i*0.5, d) - 56 + v*3); g.stroke(); } }
+      cyl(g, w - 0.4, 0.4, 0.18, 104, '#3a3a42'); glow(g, PX(w - 0.4, 0.4), PY(w - 0.4, 0.4) - 104, '#8f6f76', 20); },
+    bedplot: function (g, ob) { var w = ob.w, d = ob.h; box(g, 0.05, 0.05, 0, w - 0.1, d - 0.1, 10, '#3a2a22', { top: '#241812' });
+      var r = mulberry(w*71 + d*13); g.lineCap = 'round';
+      for (var i = 0; i < w*d*7; i++) { var px0 = PX(0.2 + r()*(w - 0.4), 0.2 + r()*(d - 0.4)), py0 = PY(0.2 + r()*(w - 0.4), 0.2 + r()*(d - 0.4)) - 10, a = -1.2 - r()*0.9, L = 8 + r()*14;
+        g.strokeStyle = r() < 0.45 ? '#2e5a3a' : '#3d7a4a'; g.lineWidth = 1.4; g.beginPath(); g.moveTo(px0, py0); g.quadraticCurveTo(px0 + Math.cos(a)*L*0.5, py0 + Math.sin(a)*L*0.5 - 4, px0 + Math.cos(a)*L, py0 + Math.sin(a)*L); g.stroke();
+        if (r() < 0.14) { g.fillStyle = r() < 0.5 ? INK.gold : INK.pink; g.beginPath(); g.arc(px0 + Math.cos(a)*L, py0 + Math.sin(a)*L, 1.6, 0, 6.283); g.fill(); } }
+      g.strokeStyle = 'rgba(233,216,197,.14)'; g.lineWidth = 1; g.beginPath(); g.moveTo(PX(0.05, d - 0.05), PY(0.05, d - 0.05) - 10); g.lineTo(PX(w - 0.05, d - 0.05), PY(w - 0.05, d - 0.05) - 10); g.stroke(); },
+    firedoor: function (g, ob) { var d = ob.h; box(g, 0.02, 0.15, 0, 0.16, d - 0.3, 84, '#2a2226', { top: '#3a3238' });
+      g.fillStyle = '#26302a'; g.beginPath(); g.moveTo(PX(0.18, d - 0.15), PY(0.18, d - 0.15)); g.lineTo(PX(0.18, 0.15), PY(0.18, 0.15)); g.lineTo(PX(0.18, 0.15), PY(0.18, 0.15) - 80); g.lineTo(PX(0.18, d - 0.15), PY(0.18, d - 0.15) - 80); g.closePath(); g.fill();
+      g.strokeStyle = 'rgba(11,6,9,.6)'; g.lineWidth = 1.4; g.stroke(); g.fillStyle = INK.green; g.globalAlpha = 0.7; g.fillRect(PX(0.18, d/2) - 1.5, PY(0.18, d/2) - 54, 3, 8); g.globalAlpha = 1;
+      g.fillStyle = '#8f6f76'; g.fillRect(PX(0.18, d - 0.4) - 1.5, PY(0.18, d - 0.4) - 42, 3, 10); },
+    sign: function (g, ob) { var ink = INK[ob.ink] || INK.teal, txt = ob.sign || 'CLINIC'; cyl(g, 0.5, 0.5, 0.08, 56, '#2a2a30');
+      var cx = PX(0.5, 0.5), cy = PY(0.5, 0.5) - 56; g.fillStyle = '#12080c'; g.fillRect(cx - 20, cy - 22, 40, 22); g.strokeStyle = ink; g.lineWidth = 1.2; g.strokeRect(cx - 20.5, cy - 22.5, 41, 23);
+      g.save(); g.translate(cx, cy - 8); g.font = '500 9px Georgia, serif'; g.textAlign = 'center'; g.fillStyle = ink; g.shadowColor = ink; g.shadowBlur = 8; g.fillText(txt, 0, 0); g.restore(); g.shadowBlur = 0; glow(g, cx, cy - 11, ink, 24); },
     desk2: function (g, ob) { var w = ob.w; box(g, 0, 0.15, 0, w, 0.7, 30, '#2c2226', { top: '#8f7078', sf: '#3a3238' }); g.fillStyle = 'rgba(233,216,197,.06)'; g.fillRect(PX(0, 0.85) - 1, PY(0, 0.85) - 30, 2, 30);
       box(g, 0.4, 0.3, 30, 0.5, 0.3, 2, '#1a1a22'); g.fillStyle = '#1c2a3a'; g.beginPath(); g.moveTo(PX(0.42, 0.32), PY(0.42, 0.32) - 54); g.lineTo(PX(0.88, 0.32), PY(0.88, 0.32) - 54); g.lineTo(PX(0.88, 0.32), PY(0.88, 0.32) - 35); g.lineTo(PX(0.42, 0.32), PY(0.42, 0.32) - 35); g.closePath(); g.fill(); g.fillStyle = 'rgba(111,179,171,.7)'; g.fillRect(PX(0.65, 0.32) - 8, PY(0.65, 0.32) - 48, 10, 1.5); g.fillRect(PX(0.65, 0.32) - 8, PY(0.65, 0.32) - 44, 6, 1.5); glow(g, PX(0.65, 0.32), PY(0.65, 0.32) - 45, INK.teal, 20);
       g.fillStyle = '#c3a9ad'; g.fillRect(PX(1.6, 0.5) - 6, PY(1.6, 0.5) - 33, 12, 5); g.fillRect(PX(2.3, 0.5) - 5, PY(2.3, 0.5) - 33, 10, 5); g.fillStyle = INK.gold; g.fillRect(PX(2.5, 0.3) - 3, PY(2.5, 0.3) - 40, 5, 8); },
@@ -963,6 +1324,17 @@
     else if (kind === 'mote') { pa.life = 3 + Math.random()*3; pa.vx = (Math.random() - 0.5)*0.04; pa.vy = (Math.random() - 0.5)*0.04; pa.vz = (Math.random() - 0.5)*3; pa.r = 0.8; }
     else if (kind === 'drip') { pa.life = 0.5; pa.vx = 0; pa.vy = 0; pa.vz = -90; pa.r = 0.8; }
     parts.push(pa); }
+  // Cars on the carriageway. Deliberately NOT in objs[]: that array drives
+  // solid[], collision and removeObj, and a moving car must not block a tile.
+  function seedTraffic() {
+    traffic = []; var rd = LEVELS[meta.level].road; if (!rd) return; var i, n = rd.n || 3;
+    for (i = 0; i < n; i++) {
+      traffic.push({ kind: 'car', w: 2, h: 1, f: 0, light: '#ff5470', x: rd.x0 + i*(rd.x1 - rd.x0)/n, y: rd.y0, v: 4.5 + Math.random()*2.5, dir: 1 });
+      traffic.push({ kind: 'car', w: 2, h: 1, f: 2, light: '#7e9cc4', x: rd.x1 - i*(rd.x1 - rd.x0)/n, y: rd.y1, v: 4 + Math.random()*2.5, dir: -1 }); } }
+  function updateTraffic(dt) {
+    var rd = LEVELS[meta.level].road; if (!rd) return; var i;
+    for (i = 0; i < traffic.length; i++) { var c = traffic[i]; c.x += c.v*c.dir*dt;
+      if (c.x > rd.x1) c.x = rd.x0; else if (c.x < rd.x0) c.x = rd.x1; } }
   function updateParts(dt) { for (var i = parts.length - 1; i >= 0; i--) { var pa = parts[i]; pa.t += dt; pa.x += pa.vx*dt; pa.y += pa.vy*dt; pa.z += pa.vz*dt; if (pa.kind === 'steam') { pa.vz *= 0.985; pa.r += dt*3; } if (pa.t > pa.life) parts.splice(i, 1); } }
   function drawPart(g, pa) { { var k = pa.t/pa.life, sx = PX(pa.x, pa.y), sy = PY(pa.x, pa.y) - pa.z;
       if (pa.kind === 'steam') { g.fillStyle = 'rgba(233,216,197,' + (0.16*(1 - k)).toFixed(3) + ')'; g.beginPath(); g.arc(sx, sy, pa.r, 0, 6.283); g.fill(); }
@@ -999,7 +1371,7 @@
      what you do with the things around you fills them. Sleeping, working and
      riding the rail skip time under a fade, with the clock running. */
   var P = { x: 13.5, y: 10.5, face: 0, frame: 0, ph: 0, vx: 0, vy: 0, moving: false, act: null, r: 0.28, pose: '', onObj: null, actT: 0, say: null, sayT: 0 };
-  var camX = 0, camY = 0, zoom = 1, running = false, paused = false, skipping = null, lastSave = 0, dirty = false, flash = 0, toastT = 0, wallCut = new Float32Array(MW*MH*2), near = null, nearNpc = null, verbShown = '';
+  var camX = 0, camY = 0, zoom = 1, running = false, paused = false, skipping = null, lastSave = 0, dirty = false, flash = 0, toastT = 0, near = null, nearNpc = null, verbShown = '';
   var storm = { wx: 0, ph: 0, sp: [], acc: 0, boltT: 50 }, bedKey = -1, partT = 0;
   var DECAY = { rest: 4.2, hunger: 5.5, hygiene: 3.2, spirit: 2.6, warmth: 1.4 };  // per game hour
   var NEEDN = { rest: 'Rest', hunger: 'Hunger', hygiene: 'Hygiene', spirit: 'Spirit', warmth: 'Warmth' };
@@ -1121,7 +1493,9 @@
       if (n.talking) { n.frame = Math.floor(performance.now()/450) % 2; n.pose = 'talk'; continue; } n.pose = '';
       if (!n.say && n.idle && Math.hypot(P.x - n.x, P.y - n.y) < 2.4 && Math.random() < dt*0.12) { n.say = n.idle[Math.floor(Math.random()*n.idle.length)]; n.sayT = 2.8; }
       var tg = wp[n.wi % wp.length];
-      if (!n.path || n.pathTo !== tg) { n.path = findPath(n.x, n.y, tg[0], tg[1]) || [[tg[0], tg[1]]]; n.pathTo = tg; n.pi = 0; }
+      if (!n.path || n.pathTo !== tg) { var np = findPath(n.x, n.y, tg[0], tg[1]);
+        if (!np) { n.wi++; n.path = null; n.pathTo = null; n.wait = 3; continue; }   // skip an unreachable stop, never beeline through a wall
+        n.path = np; n.pathTo = tg; n.pi = 0; }
       if (n.pi >= n.path.length) { n.wi++; n.path = null; n.wait = (n.wi % wp.length === 0 ? (n.pause || 20) : 1.5 + hash2(n.wi, i) % 4); n.frame = 0; continue; }
       var pt = n.path[n.pi], dx = pt[0] - n.x, dy = pt[1] - n.y, d = Math.hypot(dx, dy);
       if (d < 0.06) { n.pi++; continue; }
@@ -1261,10 +1635,10 @@
       b.addEventListener('click', function () { if (meta.own[it.id] || meta.creds < it.p) return; meta.creds -= it.p; meta.own[it.id] = 1; Snd.buy(); buzz([6, 20, 6]); rebuild(); paintShop(); toast('', it.n + '. It will be there when you get home.'); saveMeta(); }); L.appendChild(b); }); }
   $('bShopClose').addEventListener('click', function () { shopEl.classList.remove('on'); paused = false; Snd.tick(); });
   shopEl.addEventListener('click', function (e) { if (e.target === shopEl) $('bShopClose').click(); });
-  function rebuild() { floor.fill(0); wallN.fill(0); wallW.fill(0); roomOf.fill(0); solid.fill(0); outdoor.fill(0); decoN = {}; decoW = {}; rooms = []; objs = []; lightsStatic = []; npcs = []; chunks = {}; parts = []; towerA = 0; if (!LEVELS[meta.level]) meta.level = 'l41'; LEVELS[meta.level].build();
+  function rebuild() { floor.fill(0); wallN.fill(0); wallW.fill(0); roomOf.fill(0); solid.fill(0); outdoor.fill(0); decoN = {}; decoW = {}; rooms = []; objs = []; lightsStatic = []; npcs = []; chunks = {}; chunkUse = {}; parts = []; towerA = 0; if (!LEVELS[meta.level]) meta.level = 'l41'; grade = LEVELS[meta.level].grade ? 1 : 0; LEVELS[meta.level].build(); seedTraffic();
     if (meta.level === 'l41') { if (meta.own.plant2) obj('plant', 10, 13); if (meta.own.deck) obj('deck', 11, 12, { use: { verb: 'Listen', what: 'to the one record', kind: 'listen' }, light: '#c96a8e' });
       if (meta.own.lamp2) for (var i = 0; i < objs.length; i++) if (objs[i].kind === 'lamp' && objs[i].x === 11 && objs[i].y === 8) objs[i].light = '#e9d8c5'; }
-    for (i = 0; i < MW*MH*2; i++) wallCut[i] = WH; findEdges(); }
+    findRuns(); findEdges(); }
   OBJART.deck = function (g, ob) { box(g, 0.15, 0.2, 0, 0.7, 0.6, 14, '#1a1a20', { top: '#2a2a30' }); var col = ob.light || INK.pink; g.fillStyle = '#0b0609'; g.beginPath(); g.ellipse(PX(0.45, 0.5), PY(0.45, 0.5) - 14, 8, 4, 0, 0, 6.283); g.fill(); g.fillStyle = col; g.globalAlpha = 0.8; g.beginPath(); g.ellipse(PX(0.45, 0.5), PY(0.45, 0.5) - 14, 2, 1, 0, 0, 6.283); g.fill(); g.globalAlpha = 1; for (var i = 0; i < 3; i++) { g.fillStyle = [INK.teal, INK.gold, col][i]; g.fillRect(PX(0.75, 0.45) + i*3 - 4, PY(0.75, 0.45) - 17, 2, 2); } glow(g, PX(0.5, 0.5), PY(0.5, 0.5) - 16, col, 18); };
 
   /* ---------------- drawing the frame ---------------- */
@@ -1273,8 +1647,8 @@
   function drawSky(g, t) {
     var sk = g.createLinearGradient(0, 0, 0, cssH); var dk = darkness(); sk.addColorStop(0, mixh('#0b0609', '#241119', 0.5*(1 - dk))); sk.addColorStop(1, mixh('#12080c', '#3d1f28', 0.5)); g.fillStyle = sk; g.fillRect(0, 0, cssW, cssH);
     if (!SKY) bakeSky(); var i, ly;
-    for (i = 0; i < SKY.layers.length; i++) { var lyr = SKY.layers[i], c = lyr.c, off = ((camX*lyr.k*zoom) % c.width + c.width) % c.width, yoff = cssH*0.42 + camY*lyr.k*0.3*zoom - 700 + (i*50); g.globalAlpha = 1 - dk*0.15*(2 - i);
-      g.drawImage(c, -off, yoff); g.drawImage(c, c.width - off, yoff); }
+    for (i = 0; i < SKY.layers.length; i++) { var lyr = SKY.layers[i], c = lyr.c, gh = 700*(grade ? 1.5 : 1), off = ((camX*lyr.k*zoom) % c.width + c.width) % c.width, yoff = cssH*(grade ? 0.58 : 0.42) + camY*lyr.k*(grade ? 0.12 : 0.3)*zoom - gh + (i*50); g.globalAlpha = 1 - dk*0.15*(2 - i);
+      g.drawImage(c, -off, yoff, c.width, gh); g.drawImage(c, c.width - off, yoff, c.width, gh); }
     g.globalAlpha = 1; if (dk < 0.9) { g.fillStyle = 'rgba(74,49,56,' + ((1 - dk)*0.62).toFixed(2) + ')'; g.fillRect(0, 0, cssW, cssH); }
     var fog = g.createLinearGradient(0, cssH*0.35, 0, cssH*0.75); fog.addColorStop(0, 'rgba(36,17,25,0)'); fog.addColorStop(1, 'rgba(36,17,25,.55)'); g.fillStyle = fog; g.fillRect(0, 0, cssW, cssH);
     for (i = 0; i < SKY.drones.length; i++) { var d = SKY.drones[i]; var dx = ((d.x + t*d.v - camX*0.08) % (cssW + 200) + cssW + 200) % (cssW + 200) - 100, dy = d.y - 100 + Math.sin(t*0.4 + i)*8; g.fillStyle = d.col; g.globalAlpha = 0.5 + 0.5*Math.sin(t*3 + i*2); g.fillRect(dx, dy, 2, 2); } g.globalAlpha = 1;
@@ -1284,44 +1658,77 @@
     return { x0: Math.max(0, Math.floor(x0) - 1), x1: Math.min(MW - 1, Math.ceil(x1) + 1), y0: Math.max(0, Math.floor(y0) - 1), y1: Math.min(MH - 1, Math.ceil(y1) + 1) }; }
   function drawWorld(g, t, dt) {
     var vr = visibleRange(), i, x, y;
+    if (grade) drawGround(g);
+    drawBackdrops(g, t);
     drawFacade(g, vr, t);
     // floors
-    for (var cy = Math.floor(vr.y0/CH); cy <= Math.floor(vr.y1/CH); cy++) for (var cx = Math.floor(vr.x0/CH); cx <= Math.floor(vr.x1/CH); cx++) { if (cx < 0 || cy < 0 || cx*CH >= MW || cy*CH >= MH) continue; var ch = chunkAt(cx, cy); g.drawImage(ch.c, ch.x, ch.y, ch.w, ch.h); }
+    // Exact screen-rect reject, so the number of chunks blitted is a function
+    // of the screen and never of how big the map is.
+    bakedThisFrame = 0;
+    var bw = CH*TW + 4, bh = CH*TH + 4, vx0 = camX - cssW/(2*zoom), vx1 = camX + cssW/(2*zoom), vy0 = camY - cssH/(2*zoom), vy1 = camY + cssH/(2*zoom);
+    for (var cy = Math.floor(vr.y0/CH); cy <= Math.floor(vr.y1/CH); cy++) for (var cx = Math.floor(vr.x0/CH); cx <= Math.floor(vr.x1/CH); cx++) {
+      if (cx < 0 || cy < 0 || cx*CH >= MW || cy*CH >= MH) continue;
+      var bx = PX(cx*CH, cy*CH) - CH*32 - 2, by = PY(cx*CH, cy*CH) - 2;
+      if (bx + bw < vx0 || bx > vx1 || by + bh < vy0 || by > vy1) continue;
+      var ck = cx + ',' + cy;
+      if (!chunks[ck] && bakedThisFrame >= 2) { g.fillStyle = '#12080c'; g.fillRect(bx, by, bw, bh); continue; }
+      var ch = chunkAt(cx, cy); if (ch.empty) continue; g.drawImage(ch.c, ch.x, ch.y, ch.w, ch.h); }
+    sweepChunks();
     // rain on the open decks lands somewhere
     if (settings.weather) { g.strokeStyle = INK.bone; g.lineWidth = 1; for (i = 0; i < storm.sp.length; i++) { var sp = storm.sp[i], sk = sp.t/0.5, sx = PX(sp.x, sp.y), sy = PY(sp.x, sp.y); g.globalAlpha = (1 - sk)*(1 - sk)*0.35; g.beginPath(); g.ellipse(sx, sy, 1.5 + sk*7, 0.6 + sk*2.6, 0, 0, 6.283); g.stroke(); } g.globalAlpha = 1; }
     // the core, when you are out on the south deck
-    var rmNow = roomAt(P.x, P.y), wantCore = meta.level === 'l41' && rmNow && rmNow.n === 'South deck' ? 1 : 0; towerA += (wantCore - towerA)*Math.min(1, dt*2.2); drawCore(g, t);
+    // The interior behind the tower is culled while the tower is opaque, so the
+    // fade out has to be quicker than the fade in or you stand in a room that
+    // has not been drawn yet.
+    var rmNow = roomAt(P.x, P.y), co = LEVELS[meta.level].core,
+        wantCore = co && (co.out ? isOutdoor(P.x, P.y) : rmNow && rmNow.n === co.room) ? 1 : 0;
+    towerA += (wantCore - towerA)*Math.min(1, dt*(wantCore ? 2.2 : 8)); if (co) drawCore(g, t, co);
     // everything that stands: walls, furniture, people, in depth order
-    var items = [], pk = P.x + P.y, pkey = pk, hideN = towerA > 0.5;
+    // Which rooms are open to the camera, and therefore which runs are cut.
+    // Decided from the player alone, before anything is queued, so the answer
+    // cannot depend on what happens to be on screen this frame.
+    var ri; for (ri = 0; ri < runN; ri++) runHit[ri] = 0;
+    if (settings.cutaway) { openRooms(); for (ri = 0; ri < runN; ri++) if (openRm[runRoom[ri]]) runHit[ri] = 1; }
+    for (ri = 0; ri < runN; ri++) { var tgt = runHit[ri] ? CUT : WH; runCut[ri] += clamp(tgt - runCut[ri], -CUTV*dt, CUTV*dt); }
+    var items = [], pk = P.x + P.y, pkey = pk, cutY = co && towerA > 0.5 ? co.hide : -1;
     for (y = vr.y0; y <= vr.y1; y++) for (x = vr.x0; x <= vr.x1; x++) { var ti = T(x, y);
-      if (hideN && y < 32) continue;
+      if (y < cutY) continue;
       if (wallW[ti] || decoW[ti]) items.push({ k: x + y - 0.5, w: 1, x: x, y: y, m: wallW[ti] });
       if (wallN[ti] || decoN[ti]) items.push({ k: x + y - 0.49, w: 0, x: x, y: y, m: wallN[ti] }); }
-    for (i = 0; i < objs.length; i++) { var ob = objs[i]; if (ob.x + ob.w < vr.x0 || ob.x > vr.x1 || ob.y + ob.h < vr.y0 || ob.y > vr.y1 || (hideN && ob.y < 32)) continue; items.push({ k: ob.kind === 'rug' ? ob.x + ob.y - 0.45 : ob.x + ob.w - 1 + ob.y + ob.h - 1 + 0.9, ob: ob }); }
+    for (i = 0; i < objs.length; i++) { var ob = objs[i]; if (ob.x + ob.w < vr.x0 || ob.x > vr.x1 || ob.y + ob.h < vr.y0 || ob.y > vr.y1 || ob.y < cutY) continue; items.push({ k: ob.kind === 'rug' || ob.kind === 'crossing' ? ob.x + ob.y - 0.45 : ob.x + ob.w - 1 + ob.y + ob.h - 1 + 0.9, ob: ob }); }
+    for (i = 0; i < traffic.length; i++) { var tc = traffic[i]; if (tc.x + 2 < vr.x0 || tc.x > vr.x1 + 2 || tc.y < vr.y0 - 2 || tc.y > vr.y1 + 2) continue; items.push({ k: tc.x + 1 + tc.y + 0.9, ob: tc }); }
     if (P.onObj) { var ok = P.onObj.x + P.onObj.w - 1 + P.onObj.y + P.onObj.h - 1 + 0.9; pk = ok + (P.pose === 'shower' ? -0.05 : 0.05); }
-    items.push({ k: pk, ch: P }); for (i = 0; i < npcs.length; i++) if (!(hideN && npcs[i].y < 32)) items.push({ k: npcs[i].x + npcs[i].y, ch: npcs[i] });
+    items.push({ k: pk, ch: P }); for (i = 0; i < npcs.length; i++) if (!(npcs[i].y < cutY)) items.push({ k: npcs[i].x + npcs[i].y, ch: npcs[i] });
     for (i = 0; i < parts.length; i++) items.push({ k: parts[i].x + parts[i].y + 0.02, pa: parts[i] });
     items.push({ k: 1e9, mk: 1 });
+    var psx = PX(P.x, P.y), psy = PY(P.x, P.y), occl = false, pfs = null;
+    var SAMP = [[0, -4], [-9, -26], [9, -26], [0, -50], [0, -70]], sj;
     items.sort(function (a, b) { return a.k - b.k; });
-    var psx = PX(P.x, P.y), psy = PY(P.x, P.y), ctr = Math.max(1, dt*9);
     for (i = 0; i < items.length; i++) { var it = items[i];
-      if (it.w !== undefined) { // a wall run, with the dollhouse cutaway
-        var ci = T(it.x, it.y)*2 + it.w, front = it.k > pkey, fx0, fx1, fy0, fy1;
-        if (it.w === 0) { fx0 = PX(it.x, it.y); fx1 = PX(it.x + 1, it.y); fy0 = PY(it.x, it.y) - WH; fy1 = PY(it.x + 1, it.y); } else { fx0 = PX(it.x, it.y + 1); fx1 = PX(it.x, it.y); fy0 = PY(it.x, it.y) - WH; fy1 = PY(it.x, it.y + 1); }
-        // A wall drops only when it is drawn after you and its face would sit over you on screen. Walls behind you stay up.
-        var covers = fx1 > psx - 44 && fx0 < psx + 44 && fy1 > psy - 66 && fy0 < psy + 8;
-        var target = settings.cutaway && front && covers && it.m !== WM.rail ? 16 : WH; wallCut[ci] += (target - wallCut[ci])*Math.min(1, ctr);
-        drawWall(g, it.x, it.y, it.w, it.m, wallCut[ci], 1, t); }
+      if (it.w !== undefined) { // a wall run, cut as a whole run or not at all
+        // Rails hide nothing (they ignore hgt entirely), glass is already a
+        // tint, and a lift door is painted by its deco — cutting any of the
+        // three deletes a fixture instead of opening a room, so they stand.
+        var rid2 = runOf[T(it.x, it.y)*2 + it.w], dd = (it.w === 0 ? decoN : decoW)[T(it.x, it.y)],
+            opaque = it.m !== WM.rail && it.m !== WM.glass,
+            hgt2 = rid2 >= 0 && opaque && !(dd && dd.kind === 'lift') ? runCut[rid2] : WH;
+        if (it.k > pkey && opaque && (it.m || (dd && (dd.kind === 'lift' || dd.kind === 'door')))) {
+          for (sj = 0; sj < SAMP.length; sj++) if (faceCovers(it.x, it.y, it.w, hgt2, psx + SAMP[sj][0], psy + SAMP[sj][1])) { occl = true; break; } }
+        drawWall(g, it.x, it.y, it.w, it.m, hgt2, 1, t); }
       else if (it.pa) drawPart(g, it.pa);
       else if (it.mk) drawMarkers(g, t);
-      else if (it.ob) { var s = objSprite(it.ob), ox = PX(it.ob.x, it.ob.y) - s.ox, oy = PY(it.ob.x, it.ob.y) - s.oy, a = 1;
-        if (it.k > pkey && it.ob.kind !== 'rug') { if (psx > ox + 10 && psx < ox + s.w - 10 && psy > oy + s.oy - 74 && psy < oy + s.h) a = 0.42; } // something between you and the camera goes to glass
-        if (a < 1) g.globalAlpha = a; g.drawImage(s.c, ox, oy, s.w, s.h); if (a < 1) g.globalAlpha = 1; }
-      else { var c = it.ch, fs = figSprite(c.look || PLAYER_LOOK, c.face, c.frame, c.pose), fx = PX(c.x, c.y), fy = PY(c.x, c.y); g.drawImage(fs.c, fx - fs.ax, fy - fs.ay, fs.w, fs.h);
+      else if (it.ob) { var s = objSprite(it.ob), ox = PX(it.ob.x, it.ob.y) - s.ox, oy = PY(it.ob.x, it.ob.y) - s.oy;
+        // Furniture in front of you keeps its colour — you show through it instead.
+        if (it.k > pkey && it.ob.kind !== 'rug' && psx > ox + 10 && psx < ox + s.w - 10 && psy > oy + s.oy - 74 && psy < oy + s.h) occl = true;
+        g.drawImage(s.c, ox, oy, s.w, s.h); }
+      else { var c = it.ch, fs = figSprite(c.look || PLAYER_LOOK, c.face, c.frame, c.pose), fx = PX(c.x, c.y), fy = PY(c.x, c.y); if (c === P) pfs = fs; g.drawImage(fs.c, fx - fs.ax, fy - fs.ay, fs.w, fs.h);
         if (c.pose === 'shower') { g.strokeStyle = 'rgba(126,156,196,.35)'; g.lineWidth = 1; g.beginPath(); for (var wi = 0; wi < 7; wi++) { var wx = fx - 9 + wi*3, wy = fy - 74 + ((t*160 + wi*11) % 56); g.moveTo(wx, wy); g.lineTo(wx, wy + 5); } g.stroke(); }
         if (c.say && c.sayT > 0) { g.font = '400 8px Georgia, serif'; var tw = g.measureText(c.say).width + 12; g.fillStyle = 'rgba(11,6,9,.82)'; g.fillRect(fx - tw/2, fy - 90, tw, 15); g.strokeStyle = 'rgba(61,31,40,1)'; g.lineWidth = 1; g.strokeRect(fx - tw/2 + 0.5, fy - 89.5, tw, 15); g.fillStyle = INK.bone; g.textAlign = 'center'; g.fillText(c.say, fx, fy - 79); g.textAlign = 'left'; }
         if (c === P && P.act && P.pose !== 'lie') { g.strokeStyle = INK.bone; g.globalAlpha = 0.5; g.lineWidth = 1; g.beginPath(); g.arc(fx, fy - 74, 5, -1.57, -1.57 + 6.283*(P.act.t/P.act.mins)); g.stroke(); g.globalAlpha = 1; } }
     }
+    // Behind something? A ghost of you, over the top, so you are never lost.
+    if (occl && pfs) { g.save(); g.globalAlpha = 0.34; g.drawImage(pfs.c, psx - pfs.ax, psy - pfs.ay, pfs.w, pfs.h);
+      g.globalAlpha = 0.5; g.strokeStyle = INK.bone; g.lineWidth = 1; g.beginPath(); g.ellipse(psx, psy + 1, 9, 4, 0, 0, 6.283); g.stroke(); g.restore(); }
   }
   function wantTarget(id) { if (id.indexOf('talk:') === 0) { var who = id.slice(5); return { level: NPC_LEVEL[who], npc: who, label: npcName(who) }; } var at = WANT_AT[id]; if (!at) return null; return { level: at[0], kind: at[1], label: WANTS.filter(function (q) { return q.id === id; })[0].t }; }
   function resolveTarget(tg) { if (!tg || tg.level !== meta.level) return null; var i;
@@ -1354,15 +1761,22 @@
     if (flash > 0) { L.fillStyle = 'rgba(233,216,197,' + (0.4*flash).toFixed(2) + ')'; L.fillRect(0, 0, lw, lh); }
     L.setTransform(LS*zoom, 0, 0, LS*zoom, (cssW/2 - camX*zoom)*LS, (cssH/2 - camY*zoom)*LS); L.globalCompositeOperation = 'lighter';
     function lamp(x, y, col, r, a) { var sp = lightSprite(col); L.globalAlpha = a; L.drawImage(sp.c, x - r, y - r*0.62, r*2, r*1.24); L.globalAlpha = 1; }
+    // the same reject the obj-glow pass already has: a pool off screen costs
+    // exactly as much to composite as one in the middle of it
+    function inView(wx, wy, r) { var sx = (wx - camX)*zoom + cssW/2, sy = (wy - camY)*zoom + cssH/2, rr = r*zoom;
+      return !(sx + rr < 0 || sx - rr > cssW || sy + rr*0.62 < 0 || sy - rr*0.62 > cssH); }
     // rooms are lit from the ceiling: one soft pool each
-    for (i = 0; i < rooms.length; i++) { var rm = rooms[i]; if (!rm.light) continue; var cx = rm.x + rm.w/2, cy = rm.y + rm.h/2; lamp(PX(cx, cy), PY(cx, cy) - 10, rm.lightCol || INK.bone, Math.max(rm.w, rm.h)*44, rm.light*0.9*bo); }
-    for (i = 0; i < lightsStatic.length; i++) { var l = lightsStatic[i], a = 0.85; if (l.win) a = 0.25 + 0.6*dk; if (l.neon) a = 0.7 + 0.3*Math.sin(t*9 + i); if (l.ceil || l.screen) a *= bo; lamp(PX(l.x, l.y), PY(l.x, l.y) - (l.ceil ? 70 : 30), l.col, l.r, a); }
+    for (i = 0; i < rooms.length; i++) { var rm = rooms[i]; if (!rm.light) continue; var cx = rm.x + rm.w/2, cy = rm.y + rm.h/2; if (!inView(PX(cx, cy), PY(cx, cy) - 10, Math.max(rm.w, rm.h)*44)) continue; lamp(PX(cx, cy), PY(cx, cy) - 10, rm.lightCol || INK.bone, Math.max(rm.w, rm.h)*44, rm.light*0.9*bo); }
+    for (i = 0; i < lightsStatic.length; i++) { var l = lightsStatic[i], a = 0.85; if (!inView(PX(l.x, l.y), PY(l.x, l.y) - (l.ceil ? 70 : 30), l.r)) continue; if (l.win) a = 0.25 + 0.6*dk; if (l.neon) a = 0.7 + 0.3*Math.sin(t*9 + i); if (l.ceil || l.screen) a *= bo; lamp(PX(l.x, l.y), PY(l.x, l.y) - (l.ceil ? 70 : 30), l.col, l.r, a); }
     var emis = [];
-    for (i = 0; i < objs.length; i++) { var ob = objs[i]; if (!ob.light) continue; var lx = ob.x + ob.w/2, ly = ob.y + ob.h/2, ex = PX(lx, ly) + (ob.tall ? 14 : 0), ey = PY(lx, ly) - (ob.tall ? 110 : ob.kind === 'lamp' ? 56 : 30);
+    function emit(ob) { if (!ob.light) return; if (!inView(PX(ob.x + ob.w/2, ob.y + ob.h/2), PY(ob.x + ob.w/2, ob.y + ob.h/2) - 60, ob.tall ? 170 : 110)) return;
+      var lx = ob.x + ob.w/2, ly = ob.y + ob.h/2, ex = PX(lx, ly) + (ob.tall ? 14 : 0), ey = PY(lx, ly) - (ob.tall ? 110 : ob.kind === 'lamp' ? 56 : 30);
       var mast = ob.kind === 'mast'; if (mast) ey = PY(lx, ly) - 150; lamp(ex, ey, ob.light, mast ? 70 : ob.tall ? 150 : 95, mast ? 0.5 + 0.5*(Math.floor(t*1.3) % 2) : ob.tall ? 0.95 : 0.8); emis.push([ex, ey, ob.light, ob.tall ? 30 : 22]);
       // the wet deck throws the lamp back as a smear under it
       if (isOutdoor(lx, ly)) { var sp2 = lightSprite(ob.light); L.globalAlpha = 0.32; L.drawImage(sp2.c, ex - 18, ey + 30, 36, 190); L.globalAlpha = 1; } }
-    for (i = 0; i < lightsStatic.length; i++) { var l2 = lightsStatic[i]; if (l2.neon || l2.screen) emis.push([PX(l2.x, l2.y), PY(l2.x, l2.y) - 30, l2.col, l2.neon ? 34 : 22]); }
+    for (i = 0; i < objs.length; i++) emit(objs[i]);
+    for (i = 0; i < traffic.length; i++) emit(traffic[i]);
+    for (i = 0; i < lightsStatic.length; i++) { var l2 = lightsStatic[i]; if (!inView(PX(l2.x, l2.y), PY(l2.x, l2.y) - 30, 60)) continue; if (l2.neon || l2.screen) emis.push([PX(l2.x, l2.y), PY(l2.x, l2.y) - 30, l2.col, l2.neon ? 34 : 22]); }
     L.globalCompositeOperation = 'source-over'; L.setTransform(1, 0, 0, 1, 0, 0);
     g.globalCompositeOperation = 'multiply'; g.drawImage(lightCv, 0, 0, cssW, cssH); g.globalCompositeOperation = 'source-over';
     // bloom: the emitters again, small and soft, added on top
@@ -1401,7 +1815,7 @@
     if (settings.weather && isOutdoor(P.x, P.y)) drawRain(g, t);
     if (flash > 0 && isOutdoor(P.x, P.y)) { g.fillStyle = 'rgba(233,216,197,' + (0.3*flash).toFixed(2) + ')'; g.fillRect(0, 0, cssW, cssH); }
     if (running) drawEdgeArrow(g); vignette(g); drawGrain(g, t);
-    if (settings.diag) { g.fillStyle = INK.bone; g.font = '500 9px ui-monospace, Menlo, monospace'; g.fillText(Math.round(fps) + ' fps · ' + cssW + '×' + cssH + ' · dpr ' + dpr + ' · ' + P.x.toFixed(1) + ',' + P.y.toFixed(1) + ' · ' + Object.keys(SPR).length + ' spr', INS.l + 10, cssH - INS.b - 6); }
+    if (settings.diag) { g.fillStyle = INK.bone; g.font = '500 9px ui-monospace, Menlo, monospace'; g.fillText(Math.round(fps) + ' fps · ' + cssW + '×' + cssH + ' · dpr ' + dpr + ' · ' + P.x.toFixed(1) + ',' + P.y.toFixed(1) + ' · ' + Object.keys(SPR).length + ' spr · ' + Object.keys(chunks).length + ' chk ' + bakeMs.toFixed(1) + 'ms · pf ' + pfExp + '/' + pfMs.toFixed(2) + 'ms · cut ' + (openRm ? rooms.filter(function (r) { return openRm[r.id]; }).map(function (r) { return r.n; }).join('+') || '-' : '-'), INS.l + 10, cssH - INS.b - 6); }
   }
 
   /* ---------------- HUD ---------------- */
@@ -1441,12 +1855,12 @@
   $('bLeave').addEventListener('click', function () { saveMeta(); pauseEl.classList.remove('on'); if (framed()) { try { window.parent.postMessage({ type:'arcade:exit' }, '*'); } catch (e) {} } else if (history.length > 1) history.back(); });
   $('bSigilShow').addEventListener('click', function () { $('sigilOut').textContent = sigilOut(); Snd.tick(); });
   $('bSigilCopy').addEventListener('click', function () { var s = sigilOut(); $('sigilOut').textContent = s; try { navigator.clipboard.writeText(s); toast('', 'Copied.'); } catch (e) {} Snd.tick(); });
-  $('bSigilLoad').addEventListener('click', function () { var err = sigilIn($('sigilIn').value); if (err) { toast('', err); Snd.nope(); return; } rebuild(); P.x = meta.px; P.y = meta.py; toast('', 'Tenancy restored.'); Snd.done(); closePause(); });
+  $('bSigilLoad').addEventListener('click', function () { var err = sigilIn($('sigilIn').value); if (err) { toast('', err); Snd.nope(); return; } rebuild(); placePlayer(); toast('', 'Tenancy restored.'); Snd.done(); closePause(); });
   window.addEventListener('keydown', function (e) { if (e.key === 'Escape' && running) { if (pauseEl.classList.contains('on')) closePause(); else if (!paused) openPause(); } });
   document.addEventListener('visibilitychange', function () { if (document.hidden) { saveMeta(); if (running && !paused) openPause(); } });
   window.addEventListener('pagehide', saveMeta);
   titleEl.addEventListener('click', function () { titleEl.classList.remove('on'); hudEl.classList.remove('off'); running = true; Snd.tick(); toast('', meta.day === 1 && meta.earned === 0 ? 'Level 41. Your door is the one on the left. Everything here is yours to use.' : 'Back on 41.'); });
-  onMetaLoaded = function () { rebuild(); P.x = meta.px; P.y = meta.py; };
+  onMetaLoaded = function () { rebuild(); placePlayer(); };
 
   /* ---------------- arcade contract ---------------- */
   var fps = 0, fpsN = 0, fpsT = 0;
@@ -1473,7 +1887,7 @@
     for (var i = storm.sp.length - 1; i >= 0; i--) { storm.sp[i].t += dt; if (storm.sp[i].t > 0.5) storm.sp.splice(i, 1); }
     storm.boltT -= dt*(ev && ev.kind === 'storm' ? 6 : 1); if (storm.boltT <= 0) { storm.boltT = 40 + Math.random()*70; flash = 1; if (isOutdoor(P.x, P.y) || roomAt(P.x, P.y)) setTimeout(function () { Snd.thunder(); }, 400 + Math.random()*1200); }
     if (flash > 0) flash -= dt*3;
-    updateParts(dt); partT += dt;
+    updateTraffic(dt); updateParts(dt); partT += dt;
     if (partT > 0.08) { partT = 0; var vr2 = visibleRange();
       for (var oi = 0; oi < objs.length; oi++) { var so = objs[oi]; if (so.x < vr2.x0 || so.x > vr2.x1 || so.y < vr2.y0 || so.y > vr2.y1) continue;
         if (so.kind === 'noodle') { spawnPart(so.x + 0.5, so.y + 0.5, 46, 'steam'); if (Math.random() < 0.5) spawnPart(so.x + 1.4, so.y + 0.5, 46, 'steam'); }
@@ -1493,12 +1907,12 @@
     fpsN++; if (now - fpsT > 500) { fps = fpsN*1000/(now - fpsT); fpsN = 0; fpsT = now; }
     if (running) update(dt);
     var tx = PX(P.x, P.y), ty = PY(P.x, P.y) - 24;
-    if (!running) { tx = PX(14, 20) + Math.sin(t*0.11)*420; ty = PY(14, 20) - 60 + Math.cos(t*0.07)*260; camX += (tx - camX)*Math.min(1, dt*0.6); camY += (ty - camY)*Math.min(1, dt*0.6); }
+    if (!running) { var V = LEVELS[meta.level].view || [14, 20]; tx = PX(V[0], V[1]) + Math.sin(t*0.11)*420; ty = PY(V[0], V[1]) - 60 + Math.cos(t*0.07)*260; camX += (tx - camX)*Math.min(1, dt*0.6); camY += (ty - camY)*Math.min(1, dt*0.6); }
     else { camX += (tx - camX)*Math.min(1, dt*5); camY += (ty - camY)*Math.min(1, dt*5); }
     zoom = cssW < 500 ? 1 : 1.15;
     render(t, dt); if (running) paintHud();
   }
-  rebuild(); P.x = meta.px; P.y = meta.py; camX = PX(P.x, P.y); camY = PY(P.x, P.y) - 24; if (meta.wantDay !== meta.day) dayStart();
+  rebuild(); placePlayer(); camX = PX(P.x, P.y); camY = PY(P.x, P.y) - 24; if (meta.wantDay !== meta.day) dayStart();
   resize(); applySettings(); titleEl.classList.add('on'); requestAnimationFrame(tick);
 </script>
 </body>
