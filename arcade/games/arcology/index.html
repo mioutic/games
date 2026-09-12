@@ -424,7 +424,7 @@
   function obj(kind, x, y, o) { var ob = { kind: kind, x: x, y: y, w: 1, h: 1, f: 0 }; if (o) for (var k in o) ob[k] = o[k]; objs.push(ob);
     if (!ob.walk) for (var yy = ob.y; yy < ob.y + ob.h; yy++) for (var xx = ob.x; xx < ob.x + ob.w; xx++) solid[T(xx, yy)] = 1; return ob; }
   function light(x, y, col, r, o) { var l = { x: x, y: y, col: col, r: r }; if (o) for (var k in o) l[k] = o[k]; lightsStatic.push(l); return l; }
-  function npc(id, n, look, x, y, o) { var p = { id: id, n: n, look: look, x: x + 0.5, y: y + 0.5, home: [x + 0.5, y + 0.5], face: 0, frame: 0, ph: 0, wp: [], wi: 0, wait: 0, spd: 2.0, npc: true, lines: [], sched: [] }; if (o) for (var k in o) p[k] = o[k]; npcs.push(p); return p; }
+  function npc(id, n, look, x, y, o) { look.id = look.id || id; var p = { id: id, n: n, look: look, x: x + 0.5, y: y + 0.5, home: [x + 0.5, y + 0.5], face: 0, frame: 0, ph: 0, wp: [], wi: 0, wait: 0, spd: 2.0, npc: true, lines: [], sched: [] }; if (o) for (var k in o) p[k] = o[k]; npcs.push(p); return p; }
 
   /* ---- Level 41 ---- */
   function build41() {
@@ -468,7 +468,7 @@
     obj('shopterm', 17, 22, { use: { verb: 'Browse', what: 'the commissary catalogue', kind: 'shop' }, light: '#8a8fc9' });
     obj('bin', 24, 17); obj('plant', 16, 23); obj('crate', 24, 20, { use: { verb: 'Buy', what: 'stock for the cold box · 15', kind: 'stock' } });
     light(20.5, 16.6, '#c96a8e', 150, { neon: 1 }); light(24.5, 19, '#7e9cc4', 130, { win: 1 });
-    npc('ohm', 'Ohm', { coat: '#241119', trim: '#c96a8e', hair: '#5c434a', apron: 1 }, 21, 16, { fixed: 1, face: 1, reach: 2.4,
+    npc('ohm', 'Ohm', { coat: '#241119', trim: '#c96a8e', hair: '#5c434a', apron: 1 }, 21, 16, { fixed: 1, vendor: 1, face: 1, reach: 2.4,
       lines: [['Sit. The broth has been on since the shift change; it knows things.', 'Twelve credits. Or tell me something about 4107 I do not know, and eight.'],
               ['The warden came through with a scanner. I gave him a bowl and he forgot what he was scanning.', 'Vesna talks about you. Not badly.'],
               ['Rain again on the deck. The planters like it. Nobody else does.', 'Eat before your shift. Working hungry is how the tower gets you.']],
@@ -537,7 +537,7 @@
       deep: [['I have run this desk for eleven years. I know which lift sticks and which tenants lie.', 'You do not lie. Not well, anyway.']], idle: ['Name and level.', 'Parcels for 41.', 'The board is behind you.'] });
     obj('bar', 3, 11, { w: 3, h: 1, use: { verb: 'Drink', what: 'something warm from Sol · 6', kind: 'drink', cost: 6, reach: 2.4 } }); obj('stool', 3, 12); obj('stool', 4, 12); obj('stool', 5, 12); obj('table', 3, 15); obj('stool', 2, 15); obj('stool', 4, 15); obj('table', 6, 15); obj('stool', 7, 15);
     deco('N', 3, 10, 'shelf'); deco('N', 5, 10, 'neon', { text: 'SUMP', ink: 'pink' }); deco('N', 6, 10, 'shelf'); deco('W', 2, 12, 'poster', { ink: 'violet' }); light(4.5, 10.6, '#c96a8e', 130, { neon: 1 });
-    npc('sol', 'Sol', { coat: '#241119', trim: '#c96a8e', hair: '#0b0609', apron: 1 }, 4, 10, { fixed: 1, face: 1, reach: 2.4,
+    npc('sol', 'Sol', { coat: '#241119', trim: '#c96a8e', hair: '#0b0609', apron: 1 }, 4, 10, { fixed: 1, vendor: 1, face: 1, reach: 2.4,
       lines: [['Warm, or strong, or both. Both is nine.', 'Nobody comes to the Sump because it is nice. They come because it is down here.'], ['The rail workers drink at six. The night watch at seven. You drink whenever, which tells me something.', 'It tells me you are new.']],
       deep: [['I poured for the man who built the roof garden. He drank here every night for a year and then he stopped coming.', 'The tree is his. Tam is his. Nobody tells her.']], idle: ['Warm or strong?', 'Nine for both.', 'Sit anywhere.'] });
     obj('cart', 13, 24, { w: 2, h: 1, use: { verb: 'Eat', what: 'from the cart · 6', kind: 'eat', cost: 6, hot: 1, reach: 1.8 }, light: '#d9a441' });
@@ -612,7 +612,7 @@
   // whereupon a person walked to the waypoint through the walls.
   var pfG = new Float32Array(MW*MH), pfCame = new Int32Array(MW*MH), pfStamp = new Int32Array(MW*MH), pfState = new Uint8Array(MW*MH),
       pfSeq = 0, pfHN = 0, pfHeap = new Int32Array(MW*MH*4 + 1), pfHeapF = new Float32Array(MW*MH*4 + 1), pfExp = 0, pfMs = 0;
-  function pfPush(node, f) { var i = pfHN++; pfHeap[i] = node; pfHeapF[i] = f;
+  function pfPush(node, f) { var i = pfHN++; if (i >= pfHeap.length) { pfHN--; return; } pfHeap[i] = node; pfHeapF[i] = f;
     while (i > 0) { var pi = (i - 1) >> 1; if (pfHeapF[pi] <= pfHeapF[i]) break;
       var tn = pfHeap[pi], tf = pfHeapF[pi]; pfHeap[pi] = pfHeap[i]; pfHeapF[pi] = pfHeapF[i]; pfHeap[i] = tn; pfHeapF[i] = tf; i = pi; } }
   function pfPop() { var top = pfHeap[0]; pfHN--;
@@ -659,8 +659,10 @@
   // what makes the cut silhouette straight by construction: the set only
   // changes when you cross a threshold, never sub-tile, and one eased scalar
   // drives every segment of it.
+  var runMap = {}, runLevel = '';
   function findRuns() {
-    var x, y, i, map = {}, owner = []; for (i = 0; i < runOf.length; i++) runOf[i] = -1; runN = 0;
+    var keep = runLevel === meta.level;   // carry the ease across a purchase, never across a lift ride
+    var x, y, i, map = {}, owner = [], was = keep ? runMap : {}, wasCut = keep ? runCut : null; for (i = 0; i < runOf.length; i++) runOf[i] = -1; runN = 0;
     for (y = 0; y < MH; y++) for (x = 0; x < MW; x++) { var ti = T(x, y);
       if (wallN[ti] || (decoN[ti] && decoN[ti].kind)) { var rn = nearRoom(x, y, 0);
         if (rn) { var kn = 'N' + rn + ':' + y; if (map[kn] === undefined) { map[kn] = runN++; owner.push(rn); } runOf[ti*2] = map[kn]; } }
@@ -668,6 +670,10 @@
         if (rw) { var kw = 'W' + rw + ':' + x; if (map[kw] === undefined) { map[kw] = runN++; owner.push(rw); } runOf[ti*2 + 1] = map[kw]; } } }
     runCut = new Float32Array(runN); runHit = new Uint8Array(runN); runRoom = new Int16Array(runN);
     for (i = 0; i < runN; i++) { runCut[i] = WH; runRoom[i] = owner[i]; }
+    // a rebuild is usually a shop purchase, not a level change: keep the eased
+    // heights for runs that still exist, or every cut wall flashes to full
+    for (var kk in map) if (was[kk] !== undefined && wasCut && wasCut[was[kk]] !== undefined) runCut[map[kk]] = wasCut[was[kk]];
+    runMap = map; runLevel = meta.level;
     openRm = new Uint8Array(rooms.length + 1);
   }
   // The room you are walking into: step up to two tiles along your facing,
@@ -990,7 +996,8 @@
     g.strokeStyle = 'rgba(11,6,9,' + (full ? 0.5 : 0.68) + ')'; g.lineWidth = 0.8; g.stroke(); g.restore();
   }
   function drawDeco(g, d, lit, t, hgt) {
-    var k = d.kind, ink = INK[d.ink] || INK.bone;
+    var k = d.kind, ink = INK[d.ink] || INK.bone, a0 = g.globalAlpha;
+    g.save();   // no branch may leak alpha, shadow or transform onto the next deco
     if (k === 'door') { // a frame, and a leaf that swings when someone comes through
       g.fillStyle = '#1a0d12'; g.fillRect(0, -hgt + 4, 5, hgt - 4); g.fillRect(59, -hgt + 4, 5, hgt - 4); g.fillRect(0, -hgt + 4, 64, 5); g.fillStyle = 'rgba(233,216,197,.2)'; g.fillRect(5, -hgt + 8, 1, hgt - 12);
       var a = d.open || 0, lw = 54*Math.cos(a*1.2), lg2 = g.createLinearGradient(5, 0, 5 + lw, 0); lg2.addColorStop(0, lit ? '#3a262c' : '#2c1c22'); lg2.addColorStop(1, lit ? '#2a1a20' : '#1e1216');
@@ -1005,7 +1012,7 @@
     else if (k === 'screen') { g.fillStyle = '#0b0609'; g.fillRect(8, -70, 48, 30); var on = Math.floor(t*0.5) % 6 !== 5 && !(ev && ev.kind === 'blackout'); if (on) { var sg = g.createLinearGradient(0, -70, 0, -40); sg.addColorStop(0, '#3a3a6a'); sg.addColorStop(1, '#1a1a3a'); g.fillStyle = sg; g.fillRect(10, -68, 44, 26);
         g.fillStyle = 'rgba(138,143,201,.55)'; for (var r = 0; r < 4; r++) g.fillRect(14, -64 + r*6, 12 + ((t*3 + r) % 3)*8, 2); g.fillStyle = 'rgba(233,216,197,.15)'; g.fillRect(10, -68 + ((t*30) % 26), 44, 1); } }
     else if (k === 'panelscreen') { g.fillStyle = '#0b0609'; g.fillRect(14, -72, 36, 44); g.fillStyle = '#132020'; g.fillRect(16, -70, 32, 40); g.fillStyle = 'rgba(111,179,171,.7)'; g.save(); g.scale(0.5, 1); g.font = '500 7px ui-monospace, Menlo, monospace'; g.fillText('LVL 41', 38, -60); g.fillText('LIFT ' + (Math.floor(t) % 2 ? 'UP' : '··'), 38, -50); g.restore(); g.fillRect(19, -44, 10 + (Math.floor(t*2) % 4)*5, 2); }
-    else if (k === 'poster') { g.fillStyle = mixh(ink, '#0b0609', 0.6); g.fillRect(18, -66, 28, 36); g.fillStyle = ink; g.globalAlpha = 0.8; g.fillRect(20, -64, 24, 8); g.globalAlpha = 0.4; g.fillRect(20, -52, 24, 3); g.fillRect(20, -46, 18, 3); g.fillRect(20, -40, 22, 3); g.globalAlpha = 1; g.strokeStyle = 'rgba(233,216,197,.2)'; g.lineWidth = 1; g.strokeRect(18.5, -66.5, 28, 36); }
+    else if (k === 'poster') { g.fillStyle = mixh(ink, '#0b0609', 0.6); g.fillRect(18, -66, 28, 36); g.fillStyle = ink; g.globalAlpha = a0*0.8; g.fillRect(20, -64, 24, 8); g.globalAlpha = a0*0.4; g.fillRect(20, -52, 24, 3); g.fillRect(20, -46, 18, 3); g.fillRect(20, -40, 22, 3); g.globalAlpha = a0; g.strokeStyle = 'rgba(233,216,197,' + (0.2*a0).toFixed(2) + ')'; g.lineWidth = 1; g.strokeRect(18.5, -66.5, 28, 36); }
     else if (k === 'neon') { g.save(); g.scale(0.5, 1); g.font = '500 11px Georgia, serif'; g.textAlign = 'center'; g.fillStyle = ink; g.shadowColor = ink; g.shadowBlur = 10; var flick = Math.sin(t*13) > 0.96 ? 0.5 : 1; g.globalAlpha = flick; g.fillText(d.text, 64, -62); g.shadowBlur = 0; g.globalAlpha = 1; g.restore(); g.strokeStyle = 'rgba(233,216,197,.25)'; g.lineWidth = 1; g.strokeRect(6.5, -74.5, 51, 18); }
     else if (k === 'menu') { g.fillStyle = '#0b0609'; g.fillRect(10, -70, 44, 26); g.fillStyle = 'rgba(217,164,65,.7)'; g.save(); g.scale(0.5, 1); g.font = '500 6px ui-monospace, Menlo, monospace'; g.fillText('BROTH  12', 26, -62); g.fillText('COLD    4', 26, -55); g.fillText('SHIFT +90', 26, -48); g.restore(); }
     else if (k === 'shelf') { g.fillStyle = '#2a141c'; g.fillRect(6, -60, 52, 3); g.fillRect(6, -44, 52, 3); g.fillStyle = INK.teal; g.fillRect(10, -70, 4, 10); g.fillStyle = INK.gold; g.fillRect(16, -68, 3, 8); g.fillStyle = INK.pink; g.fillRect(21, -71, 5, 11); g.fillStyle = INK.bone; g.fillRect(30, -66, 6, 6); g.fillStyle = INK.violet; g.fillRect(40, -54, 4, 10); g.fillStyle = INK.ash; g.fillRect(46, -52, 8, 8); }
@@ -1017,6 +1024,7 @@
     else if (k === 'billboard') { g.fillStyle = '#0b0609'; g.fillRect(2, -88, 60, 40); var bg = g.createLinearGradient(0, -88, 60, -48); bg.addColorStop(0, '#2a1a3a'); bg.addColorStop(1, '#1a2a3a'); g.fillStyle = bg; g.fillRect(4, -86, 56, 36);
       g.save(); g.scale(0.5, 1); g.fillStyle = INK.peri; g.shadowColor = INK.peri; g.shadowBlur = 8; g.font = '400 13px Georgia, serif'; g.textAlign = 'center'; var ph = Math.floor(t/4) % 3; g.fillText(['ASCEND', 'LEVEL 90', 'APPLY'][ph], 64, -64); g.restore();
       g.fillStyle = 'rgba(233,216,197,.4)'; g.fillRect(8, -56, 20 + ph*12, 1.5); g.fillStyle = 'rgba(233,216,197,.1)'; g.fillRect(4, -86 + ((t*24) % 36), 56, 1); }
+    g.restore();
   }
 
   /* ---- furniture ----
@@ -1247,15 +1255,59 @@
      Small figures in long coats, four facings from two drawings mirrored, a
      four-frame walk. The key light is the same one the walls use. */
   var FIGC = {};
+  /* Frame indices, obeyed by every producer and consumer:
+       0        stand / neutral
+       1..8     walk, phase th = (frame - 1)*PI/4 — 1 and 5 are the contacts,
+                3 and 7 the passings
+       9        idle breath
+       10       idle weight shift
+       Busy poses (sit, work, cook, eat, eatsit, shower, talk, floor) use 0,1,2.
+       Pose 'lie' ignores frame entirely and is always keyed 0. */
+  function figDraw(g, c, fs, fx, fy, mir) {
+    var lean = c.lean || 0, land = c.land || 0, pop = c.pop || 0, spin = c.spin || 0;
+    if (c.pose === 'lie' || (!lean && !land && !pop && !spin && !mir)) { g.drawImage(fs.c, fx - fs.ax, fy - fs.ay, fs.w, fs.h); return; }
+    g.save(); g.translate(fx, fy);
+    if (lean) g.transform(1, 0, -lean, 1, 0, 0);                       // shear about the feet, in screen space
+    if (land || pop || spin) g.scale((1 + land*0.05 - pop*0.02)*(1 - Math.abs(spin)*0.18), 1 - land*0.05 + pop*0.06);
+    if (mir) g.scale(-1, 1);                                           // innermost, or the lean tips the wrong way
+    g.drawImage(fs.c, -fs.ax, -fs.ay, fs.w, fs.h); g.restore();
+  }
+  // Lean into the direction of travel, with anticipation on a start and
+  // recovery on a stop; a compression on each footfall; a pivot on a turn.
+  function figAnim(c, dt) {
+    var dx = c.x - (c.lx === undefined ? c.x : c.lx), dy = c.y - (c.ly === undefined ? c.y : c.ly);
+    var svx = (dx - dy)*32/Math.max(dt, 1e-3), acc = (svx - (c.svx || 0))/Math.max(dt, 1e-3);
+    var tgt = clamp(svx/170, -1, 1)*0.035 + clamp(acc/2600, -1, 1)*0.05;
+    c.lean = (c.lean || 0) + (clamp(tgt, -0.085, 0.085) - (c.lean || 0))*Math.min(1, dt*10);
+    c.svx = svx; c.lx = c.x; c.ly = c.y;
+    c.land = Math.max(0, (c.land || 0) - dt*6.5);
+    c.pop = Math.max(0, (c.pop || 0) - dt*4);
+    c.spin = (c.spin || 0)*Math.max(0, 1 - dt*9);
+  }
+  // Standing still is not one metronome for everybody: each person breathes and
+  // shifts their weight on their own irregular clock.
+  function idleAnim(c, dt) {
+    c.idleT = (c.idleT === undefined ? Math.random()*2 : c.idleT) - dt;
+    if (c.idleT <= 0) { var r = Math.random(); c.idleF = r < 0.52 ? 0 : r < 0.84 ? 9 : 10; c.idleT = 1.1 + r*2.6; }
+    c.frame = c.idleF || 0;
+  }
+  function lookAt(n, dt) { var ax2 = P.x - n.x, ay2 = P.y - n.y;
+    if (ax2*ax2 + ay2*ay2 < 9 && !n.talking) { var w = faceFrom(ax2, ay2);
+      if (w !== undefined && w !== n.face) { n.faceT = (n.faceT || 0) + dt; if (n.faceT > 0.25) { n.face = w; n.faceT = 0; n.spin = 0.8; } } else n.faceT = 0; } }
   function figSprite(look, face, frame, pose) {
-    pose = pose || ''; var key = (look.id || JSON.stringify(look)) + '|' + (look.coat || '') + '|' + face + '|' + frame + '|' + pose + '@' + dpr;
+    pose = pose || ''; var kf = pose === 'lie' ? 0 : frame; frame = kf;
+    var key = (look.id || JSON.stringify(look)) + '|' + (look.coat || '') + '|' + face + '|' + kf + '|' + pose + '@' + dpr;
     if (FIGC[key]) return FIGC[key];
     var W = 72, H = 88, c = document.createElement('canvas'); c.width = W*dpr; c.height = H*dpr; var g = c.getContext('2d');
     var mirror = face === 1 || face === 3, back = face >= 2, sc = look.small ? 0.8 : 1;
     g.setTransform(dpr*(mirror ? -1 : 1), 0, 0, dpr, (mirror ? W : 0)*dpr, 0); g.translate(W/2, H - 6); g.scale(sc, sc);
     var coat = look.coat || '#3d1f28', trim = look.trim || INK.bone, skin = look.skin || '#d9c8b5', hair = look.hair || '#0b0609';
-    var cl = mixh(coat, '#e9d8c5', 0.18), cd = mixh(coat, '#0b0609', 0.45), idle = frame === 5, walk = frame >= 1 && frame <= 4;
-    var sw = walk ? Math.sin(frame/4*6.283) : 0, bob = walk ? Math.abs(Math.cos(frame/4*6.283))*1.2 : idle ? -0.7 : 0;
+    var cl = mixh(coat, '#e9d8c5', 0.18), cd = mixh(coat, '#0b0609', 0.45);
+    var walk = (pose === '' || pose === 'carry') && frame >= 1 && frame <= 8, th = walk ? (frame - 1)*0.7854 : 0;
+    // positive bob is DOWN here, so cos(2th) puts the hips down at the
+    // contacts and up at the passings — which is what a gait does
+    var sw = walk ? Math.cos(th) : 0, bob = walk ? Math.cos(th*2)*1.15 : frame === 9 ? -0.7 : frame === 10 ? -0.15 : 0;
+    var wsh = frame === 10 && !walk ? 1.6 : 0;
     g.lineJoin = 'round'; g.lineCap = 'round';
     if (pose === 'lie') { // under the cover, head on the pillow: drawn over the bed
       var d = [0.894, 0.447], nx = -d[1], ny = d[0], i; g.save(); g.translate(0, -6);
@@ -1269,15 +1321,26 @@
     g.scale(S, S); // the figure is drawn at roughly seven heads
     shadowEllipse(g, 0, 2, 11, 4.5, seated ? 0.35 : 0.5); g.fillStyle = 'rgba(0,0,0,.2)'; g.beginPath(); g.ellipse(7, 3, 12, 3.6, 0.3, 0, 6.283); g.fill();
     if (pose === 'work') { g.fillStyle = '#2a2a30'; g.fillRect(-7, -30, 14, 3); g.fillStyle = '#1a1a20'; g.fillRect(-7, -30, 14, 16); }
-    var trous = mixh(coat, '#0b0609', 0.55), boot = '#1a0d12', yb = bob + lift, hem = seated ? -15 : -19;
+    var trous = mixh(coat, '#0b0609', 0.42), boot = mixh(coat, '#0b0609', 0.68), yb = bob + lift, hem = seated ? -15 : -19;
     // legs: hip to knee to foot, the knee leading on the swing
-    function leg(sideX, swing) { var hx = sideX*3.2, hy0 = -20 + lift, kx = hx + swing*2.2, ky = -11 + lift - Math.abs(swing)*1.2, fx = seated ? sideX*6.5 : hx + swing*3.6, fy = seated ? -1 : -1;
+    // The hip rides the bob and the planted foot does not, so the support leg
+    // extends and compresses; the swinging foot leaves the floor between the
+    // contacts. Without both of those a figure skates.
+    function leg(sideX, phase, bend) { var bb = seated ? 0 : bob;
+      var sx2 = walk ? Math.sin(phase) : 0, lf2 = walk ? Math.pow(Math.max(0, Math.cos(phase)), 1.2)*2.8 : 0;
+      var hx = sideX*3.2 + wsh*sideX*0.4, hy0 = -20 + lift + bb;
+      var kx = hx + sx2*2.2 + (bend || 0)*sideX, ky = -11 + lift + bb - lf2*0.5;
+      var fx = seated ? sideX*6.5 : hx + sx2*3.6, fy = seated ? -1 : -1 - lf2;
       if (seated) { kx = sideX*6.5; ky = -13 + lift; } if (pose === 'floor') { ky = -8; fy = -6; fx = sideX*8; }
       g.strokeStyle = trous; g.lineWidth = 4.6; g.beginPath(); g.moveTo(hx, hy0); g.lineTo(kx, ky); g.lineTo(fx, fy); g.stroke();
-      g.strokeStyle = boot; g.lineWidth = 4.2; g.beginPath(); g.moveTo(fx, fy - 4); g.lineTo(fx, fy); g.lineTo(fx + sideX*1.6 + (seated ? 0 : swing*0.6), fy + 0.4); g.stroke(); }
-    leg(-1, -sw); leg(1, sw);
+      g.strokeStyle = 'rgba(233,216,197,.13)'; g.lineWidth = 1; g.beginPath(); g.moveTo(hx - 1.6, hy0); g.lineTo(kx - 1.6, ky); g.lineTo(fx - 1.6, fy); g.stroke();
+      var toe = sideX*1.6*(1 - (walk ? Math.cos(phase)*0.35 : 0)) + (seated ? 0 : sx2*0.6);
+      var ty = fy + 0.4 + (walk ? Math.max(0, -Math.cos(phase))*0.8 : 0);
+      g.strokeStyle = boot; g.lineWidth = 4.2; g.beginPath(); g.moveTo(fx, fy - 4); g.lineTo(fx, fy); g.lineTo(fx + toe, ty); g.stroke();
+      g.strokeStyle = 'rgba(233,216,197,.22)'; g.lineWidth = 0.9; g.beginPath(); g.moveTo(fx - sideX*1.6, fy + 1.4); g.lineTo(fx + toe, ty + 1.2); g.stroke(); }
+    leg(-1, th - 1.5708, wsh ? 0.5 : 0); leg(1, th + 1.5708, wsh ? -0.2 : 0);
     // the coat: shoulders wider than the hem, an A-line skirt, lapels and a collar
-    g.beginPath(); g.moveTo(-9.5, hem + yb); g.lineTo(-8, -26 + yb); g.lineTo(-9, -40 + yb); g.quadraticCurveTo(-8, -45 + yb, -4, -46 + yb); g.lineTo(4, -46 + yb); g.quadraticCurveTo(8, -45 + yb, 9, -40 + yb); g.lineTo(8, -26 + yb); g.lineTo(10.5, hem + yb); g.quadraticCurveTo(0, hem + 2.5 + yb, -9.5, hem + yb); g.closePath();
+    g.beginPath(); g.moveTo(-9.5 + wsh, hem + yb); g.lineTo(-8, -26 + yb); g.lineTo(-9 - sw*0.8, -40 + yb); g.quadraticCurveTo(-8 - sw*0.8, -45 + yb, -4 - sw*0.8, -46 + yb); g.lineTo(4 - sw*0.8, -46 + yb); g.quadraticCurveTo(8 - sw*0.8, -45 + yb, 9 - sw*0.8, -40 + yb); g.lineTo(8, -26 + yb); g.lineTo(10.5 + wsh, hem + yb); g.quadraticCurveTo(0, hem + 2.5 + yb, -9.5, hem + yb); g.closePath();
     var cg = g.createLinearGradient(-9, 0, 10, 0); cg.addColorStop(0, cl); cg.addColorStop(0.45, coat); cg.addColorStop(1, cd); g.fillStyle = cg; g.fill(); g.strokeStyle = 'rgba(11,6,9,.7)'; g.lineWidth = 1; g.stroke();
     g.fillStyle = 'rgba(0,0,0,.16)'; g.beginPath(); g.moveTo(-9.5, hem + yb); g.quadraticCurveTo(-4, hem - 4 + yb, -6, -30 + yb); g.lineTo(-8, -26 + yb); g.closePath(); g.fill(); // a fold on the shaded side
     if (!back) { g.strokeStyle = 'rgba(11,6,9,.55)'; g.beginPath(); g.moveTo(0, -40 + yb); g.lineTo(0, hem - 1 + yb); g.stroke();
@@ -1287,15 +1350,17 @@
     else { g.strokeStyle = 'rgba(233,216,197,.12)'; g.beginPath(); g.moveTo(-5, -40 + yb); g.lineTo(-4, -20 + yb); g.stroke(); g.fillStyle = 'rgba(11,6,9,.35)'; g.fillRect(-7, -31 + yb, 14, 1); g.fillStyle = cd; g.beginPath(); g.moveTo(-6, -46 + yb); g.lineTo(6, -46 + yb); g.lineTo(0, -41 + yb); g.closePath(); g.fill(); }
     if (look.apron && !back) { g.fillStyle = '#c3a9ad'; g.beginPath(); g.moveTo(-5.5, -36 + yb); g.lineTo(5.5, -36 + yb); g.lineTo(6.5, hem - 2 + yb); g.lineTo(-6.5, hem - 2 + yb); g.closePath(); g.fill(); g.fillStyle = 'rgba(11,6,9,.25)'; g.fillRect(-5.5, -35 + yb, 11, 1); g.strokeStyle = '#c3a9ad'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(-4, -36 + yb); g.lineTo(-2, -44 + yb); g.moveTo(4, -36 + yb); g.lineTo(2, -44 + yb); g.stroke(); }
     // arms: shoulder, elbow, hand, by what the hands are doing
-    function arm(sideX, ex, ey, hx, hy) { g.strokeStyle = sideX < 0 ? cl : cd; g.lineWidth = 4; g.beginPath(); g.moveTo(sideX*8, -41 + yb); g.lineTo(ex, ey + yb); g.lineTo(hx, hy + yb); g.stroke();
+    function arm(sideX, ex, ey, hx, hy) { g.strokeStyle = sideX < 0 ? cl : cd; g.lineWidth = 4; g.beginPath(); g.moveTo(sideX*8 - sw*0.8, -41 + yb); g.lineTo(ex, ey + yb); g.lineTo(hx, hy + yb); g.stroke();
       g.strokeStyle = mixh(coat, '#0b0609', 0.3); g.lineWidth = 4; g.beginPath(); g.moveTo(hx + (ex - hx)*0.25, hy + (ey - hy)*0.25 + yb); g.lineTo(hx, hy + yb); g.stroke(); g.fillStyle = skin; g.beginPath(); g.arc(hx, hy + 1.5 + yb, 2.2, 0, 6.283); g.fill(); }
-    var tj = pose === 'work' ? (frame % 2) : 0;
-    if (pose === 'work' || pose === 'cook') { arm(-1, -10, -30, -4, -23 + tj); arm(1, 10, -30, 4, -23 - tj); }
-    else if (pose === 'eat' || pose === 'eatsit') { arm(-1, -10, -31, -3.5, -29); arm(1, 10, -31, 3.5, -29); }
+    var tj = pose === 'work' ? (frame === 1 ? 1 : frame === 2 ? 2 : 0) : 0;
+    var st2 = pose === 'cook' ? [0, 1.4, -1.1][frame] || 0 : 0;
+    if (pose === 'work' || pose === 'cook') { arm(-1, -10, -30, -4 + st2, -23 + tj); arm(1, 10, -30, 4 + st2, -23 - tj); }
+    else if (pose === 'eat' || pose === 'eatsit') { var eh = [-29, -33, -37][frame] === undefined ? -29 : [-29, -33, -37][frame], ew = [-3.5, -3.5, -2.5][frame] === undefined ? -3.5 : [-3.5, -3.5, -2.5][frame];
+      arm(-1, -10, -31, ew, eh); arm(1, 10, -31, -ew, eh); }
     else if (pose === 'shower') { arm(-1, -12, -47, -5, -52); arm(1, 12, -47, 5, -52); }
-    else if (pose === 'talk') { var up = frame % 2 ? 4 : 0; arm(-1, -10.5, -30, -11, -22); arm(1, 12, -34, 14, -31 - up); }
+    else if (pose === 'talk') { var up = [0, 4, 2][frame] || 0; arm(-1, -10.5, -30, -11, -22); arm(1, 12, -34, 14, -31 - up); }
     else if (seated) { arm(-1, -10, -30, -9, -22); arm(1, 10, -30, 9, -22); }
-    else { arm(-1, -10 + sw*1.5, -30, -10.5 + sw*3, -21); arm(1, 10 - sw*1.5, -30, 10.5 - sw*3, -21); }
+    else { arm(-1, -10 + sw*2.4, -30 + Math.abs(sw)*1.2, -10.5 + sw*4.2, -21); arm(1, 10 - sw*2.4, -30 + Math.abs(sw)*1.2, 10.5 - sw*4.2, -21); }
     if (pose === 'eat' || pose === 'eatsit') { g.fillStyle = '#c3a9ad'; g.beginPath(); g.ellipse(0, -28 + yb, 6, 2.8, 0, 0, 6.283); g.fill(); g.strokeStyle = 'rgba(11,6,9,.5)'; g.lineWidth = 1; g.stroke(); }
     if (look.scarf) { g.strokeStyle = trim; g.lineWidth = 3.2; g.beginPath(); g.moveTo(-7, -44 + yb); g.quadraticCurveTo(0, -39 + yb, 7, -44 + yb); g.stroke(); if (!back) { g.beginPath(); g.moveTo(3, -42 + yb); g.lineTo(5.5, -28 + yb); g.stroke(); } }
     if (look.bag) { g.fillStyle = mixh('#d9a441', '#0b0609', 0.4); g.fillRect(7, -30 + yb, 6, 8); g.strokeStyle = 'rgba(217,164,65,.6)'; g.lineWidth = 1; g.beginPath(); g.moveTo(-4, -45 + yb); g.lineTo(10, -30 + yb); g.stroke(); }
@@ -1436,7 +1501,7 @@
   $('jobs').addEventListener('click', function (e) { if (e.target === $('jobs')) $('bJobsClose').click(); });
   function counterShift() { var ohm = npcs.filter(function (n) { return n.id === 'ohm'; })[0]; if (!ohm) return; var served = 0, spawnT = 2, custs = [];
     startAct('Serve', 'the lunch counter · 2h', 120, function () { for (var i = 0; i < custs.length; i++) { var ci = npcs.indexOf(custs[i]); if (ci >= 0) npcs.splice(ci, 1); } var pay = 60 + skillLv('cooking')*4 + served*2; meta.creds += pay; meta.earned += pay; meta.shifts++; gainSkill('cooking', 10); gainSkill('charm', 4); wantDone('shift'); toast('', served + ' served. ' + pay + ' credits, and your hands smell of broth.'); }, 'cook', null, [22.5, 16.5], 0);
-    P.act.tick = function (dt) { spawnT -= dt; if (spawnT <= 0 && custs.length < 3) { spawnT = 3.5 + Math.random()*3; var r = Math.random(), cN = npc('c' + Date.now(), 'A customer', { coat: r < 0.5 ? '#2a2a30' : '#3a2a3a', trim: r < 0.5 ? INK.teal : INK.gold, hair: r < 0.3 ? '#5c434a' : '#0b0609', bag: r < 0.4 }, 16, 18, { spd: 2.2, wait: 0, pause: 0, sched: [{ from: 0, to: 1440, wp: [[20.5 + Math.floor(Math.random()*3), 19.3], [16.5, 18.5]] }] }); cN.cust = 1; custs.push(cN); }
+    P.act.tick = function (dt) { spawnT -= dt; if (spawnT <= 0 && custs.length < 3) { spawnT = 3.5 + Math.random()*3; var r = Math.random(), cN = npc('c' + Date.now(), 'A customer', { id: 'cust' + (r < 0.3 ? 0 : r < 0.4 ? 1 : r < 0.5 ? 2 : 3), coat: r < 0.5 ? '#2a2a30' : '#3a2a3a', trim: r < 0.5 ? INK.teal : INK.gold, hair: r < 0.3 ? '#5c434a' : '#0b0609', bag: r < 0.4 }, 16, 18, { spd: 2.2, wait: 0, pause: 0, sched: [{ from: 0, to: 1440, wp: [[20.5 + Math.floor(Math.random()*3), 19.3], [16.5, 18.5]] }] }); cN.cust = 1; custs.push(cN); }
       for (var i = custs.length - 1; i >= 0; i--) { var c = custs[i]; if (c.wi === 1 && !c.servedAt) { c.servedAt = 1; served++; c.say = ['Thanks.', 'Hot. Good.', 'Same again tomorrow.'][served % 3]; c.sayT = 2; Snd.buy(); } if (c.wi >= 2) { var ci = npcs.indexOf(c); if (ci >= 0) npcs.splice(ci, 1); custs.splice(i, 1); } } }; }
   var ev = null;
   function startEvent(kind) {
@@ -1478,18 +1543,28 @@
     var wx = (ix + iy*2)*0.5, wy = (iy*2 - ix)*0.5, spd = (3.7 + skillLv('fitness')*0.07 - (meta.needs.rest < 15 ? 0.9 : 0) - (meta.needs.hunger < 10 ? 0.4 : 0))*dt;
     if (m > 0.08 && !P.act && !P.freeze) { var mv = Math.hypot(wx, wy); wx /= mv; wy /= mv; var k = Math.min(1, m*1.3);
       var sx = wx*spd*k, sy = wy*spd*k, n = Math.max(1, Math.ceil(Math.max(Math.abs(sx), Math.abs(sy))/0.12)), moved = false;
+      var mx0 = P.x, my0 = P.y;
       for (var si = 0; si < n; si++) { moved = tryMove(sx/n, 0) || moved; moved = tryMove(0, sy/n) || moved; }
       for (si = 0; si < npcs.length; si++) { var nn = npcs[si], ddx = P.x - nn.x, ddy = P.y - nn.y, dd = Math.hypot(ddx, ddy); if (dd < 0.5 && dd > 0.001) { tryMove(ddx/dd*(0.5 - dd), 0); tryMove(0, ddy/dd*(0.5 - dd)); } }
-      P.moving = moved; if (moved) { P.face = faceFrom(wx, wy); P.ph += dt*8.5*k; P.frame = 1 + Math.floor(P.ph) % 4; if (Math.floor(P.ph*2) !== Math.floor((P.ph - dt*7.5*k)*2)) Snd.step(isOutdoor(P.x, P.y)); } }
-    else { P.moving = false; P.frame = P.act ? (Math.floor(P.actT*3) % 2) : (Math.floor(performance.now()/1300) % 2 ? 5 : 0); P.ph = 0; }
-    meta.px = P.x; meta.py = P.y;
+      P.moving = moved; P.stillT = 0;
+      if (moved) { var pf0 = P.face; P.face = faceFrom(wx, wy); if (P.face !== pf0) P.spin = 0.8;
+        var pfr = P.frame; P.ph += Math.hypot(P.x - mx0, P.y - my0)*4.6; P.frame = 1 + Math.floor(P.ph) % 8;
+        if (P.frame !== pfr && (P.frame === 1 || P.frame === 5)) { P.land = 1; Snd.step(isOutdoor(P.x, P.y)); } } }
+    else { P.moving = false;
+      if (P.act) P.frame = Math.floor(P.actT*(ACTHZ[P.pose] || 2)) % 3;
+      else if (P.pose === 'talk') P.frame = Math.floor(performance.now()/310) % 3;
+      else idleAnim(P, dt);
+      P.stillT = (P.stillT || 0) + dt; if (P.stillT > 0.25) P.ph = 0; }
+    figAnim(P, dt); meta.px = P.x; meta.py = P.y;
   }
   function updateNpcs(dt) {
-    for (var i = 0; i < npcs.length; i++) { var n = npcs[i]; if (n.fixed) continue; var s = null;
+    for (var i = 0; i < npcs.length; i++) { var n = npcs[i]; figAnim(n, dt);
+      if (n.fixed) { if (n.vendor) { n.pose = 'cook'; n.frame = Math.floor(performance.now()/420 + i*97) % 3; } else if (!n.talking) idleAnim(n, dt); lookAt(n, dt); continue; }
+      var s = null;
       for (var j = 0; j < n.sched.length; j++) if (meta.min >= n.sched[j].from && meta.min < n.sched[j].to) s = n.sched[j];
       var wp = s ? s.wp : [n.home]; if (n.route !== wp) { n.route = wp; n.wi = 0; }
       if (n.say) { n.sayT -= dt; if (n.sayT <= 0) n.say = null; }
-      if (n.wait > 0) { n.wait -= dt; n.frame = Math.floor(performance.now()/1400 + i*300) % 2 ? 5 : 0; continue; }
+      if (n.wait > 0) { n.wait -= dt; idleAnim(n, dt); lookAt(n, dt); continue; }
       if (n.talking) { n.frame = Math.floor(performance.now()/450) % 2; n.pose = 'talk'; continue; } n.pose = '';
       if (!n.say && n.idle && Math.hypot(P.x - n.x, P.y - n.y) < 2.4 && Math.random() < dt*0.12) { n.say = n.idle[Math.floor(Math.random()*n.idle.length)]; n.sayT = 2.8; }
       var tg = wp[n.wi % wp.length];
@@ -1500,7 +1575,9 @@
       var pt = n.path[n.pi], dx = pt[0] - n.x, dy = pt[1] - n.y, d = Math.hypot(dx, dy);
       if (d < 0.06) { n.pi++; continue; }
       if (Math.hypot(P.x - n.x, P.y - n.y) < 0.55 && (P.x - n.x)*dx + (P.y - n.y)*dy > 0) { n.frame = 0; continue; } // you are in the way; they wait
-      var st = Math.min(d, n.spd*dt); n.x += dx/d*st; n.y += dy/d*st; n.ph += dt*7; n.frame = 1 + Math.floor(n.ph) % 4; var f = faceFrom(dx, dy); if (f !== undefined) n.face = f; }
+      var st = Math.min(d, n.spd*dt); n.x += dx/d*st; n.y += dy/d*st;
+      var pf2 = n.frame; n.ph += st*4.6; n.frame = 1 + Math.floor(n.ph) % 8; if (n.frame !== pf2 && (n.frame === 1 || n.frame === 5)) n.land = 1;
+      var f = faceFrom(dx, dy); if (f !== undefined) { if (f !== n.face) n.spin = 0.7; n.face = f; } }
   }
   function updateDoors(dt) {
     var k, i, sets = [decoN, decoW];
@@ -1525,13 +1602,15 @@
 
   /* ---- doing things ---- */
   function toast(who, line, secs) { toastEl.innerHTML = (who ? '<span class="who">' + who + '</span>' : '') + line; toastEl.classList.add('on'); toastT = secs || 3.2; }
+  var ACTHZ = { work: 2.2, cook: 2.6, eat: 1.8, eatsit: 1.8, shower: 1.1, talk: 3.2, sit: 0.7, floor: 0.7 };
   function setPose(pose, ob, seat, face) { if (seat && !P.sx) { P.sx = P.x; P.sy = P.y; } P.pose = pose || ''; P.onObj = ob || null; if (seat) { P.x = seat[0]; P.y = seat[1]; } if (face !== undefined) P.face = face; }
   function clearPose() { P.pose = ''; P.onObj = null; if (P.sx) { P.x = P.sx; P.y = P.sy; P.sx = 0; P.sy = 0; } P.freeze = false; }
   function seatOf(ob) { return [ob.x + ob.w/2, ob.y + ob.h/2 + (ob.kind === 'bed' ? 0 : 0.1)]; }
   function startAct(verb, what, mins, done, pose, ob, seat, face) { P.act = { verb: verb, what: what, mins: mins, t: 0, done: done }; P.actT = 0; P.moving = false; P.frame = 0; setPose(pose, ob, seat, face); Snd.open(); buzz(8); }
   function moment(pose, ob, seat, face, secs, then) { P.freeze = true; setPose(pose, ob, seat, face); P.momT = secs; P.momFn = then; }
   function skip(mins, what, done) { skipping = { mins: mins, t: 0, dur: 1.8 + Math.min(2.2, mins/240), from: meta.min, what: what, done: done }; $('fadeWhat').textContent = what; $('fadeClock').textContent = fmtClock(meta.min); fadeEl.classList.add('on'); Snd.lift(); }
-  function travel(level, mins, what) { var to = LEVELS[level]; skip(mins, what || 'in the lift', function () { advance(mins); meta.level = level; rebuild(); clearPose(); P.x = to.lift[0]; P.y = to.lift[1]; camX = PX(P.x, P.y); camY = PY(P.x, P.y) - 24; bedKey = -1; toast('', to.n + '.'); Snd.lift(); saveMeta(); }); }
+  function prewarm() { var vr = visibleRange(); for (var cy = Math.floor(vr.y0/CH); cy <= Math.floor(vr.y1/CH); cy++) for (var cx = Math.floor(vr.x0/CH); cx <= Math.floor(vr.x1/CH); cx++) { if (cx < 0 || cy < 0 || cx*CH >= MW || cy*CH >= MH) continue; chunkAt(cx, cy); } }
+  function travel(level, mins, what) { var to = LEVELS[level]; skip(mins, what || 'in the lift', function () { advance(mins); meta.level = level; rebuild(); clearPose(); P.x = to.lift[0]; P.y = to.lift[1]; camX = PX(P.x, P.y); camY = PY(P.x, P.y) - 24; prewarm(); bedKey = -1; toast('', to.n + '.'); Snd.lift(); saveMeta(); }); }
   var LIFT_STOPS = [['lobby', 'Ground', 'the lobby, the Sump, the plaza', 2], ['l41', 'Level 41', 'home', 2], ['roof', 'Roof', 'the top of the tower', 1]];
   function openLift() { var L = $('liftList'); L.innerHTML = ''; LIFT_STOPS.forEach(function (st) { if (st[0] === meta.level) return; var mins = st[3] + (meta.level === 'roof' || st[0] === 'roof' ? 1 : 0), b = document.createElement('button'); b.className = 'item';
       b.innerHTML = '<div class="t"><span class="n">' + st[1] + '</span><span class="d">' + st[2] + ' · ' + mins + ' min</span></div><span class="p">' + (ev && ev.kind === 'liftout' ? 'out' : '▸') + '</span>';
@@ -1587,7 +1666,9 @@
     if (P.freeze && P.momT > 0) { P.momT -= dt; if (P.momT <= 0) { var f = P.momFn; P.momFn = null; if (f) f(); } }
     if (!P.act) return; var a = P.act, rate = 6; // six game minutes a second while you are busy
     P.actT += dt; var step = Math.min(rate*dt, a.mins - a.t); a.t += step; advance(step); ring(a.t/a.mins); if (a.tick) a.tick(dt);
-    if (a.t >= a.mins - 1e-6) { var d = a.done; P.act = null; ring(0); Snd.done(); buzz([6, 20, 6]); clearPose(); d(); dirty = true; }
+    if (a.t >= a.mins - 1e-6) { var d = a.done, wasP = P.pose; P.act = null; ring(0); Snd.done(); buzz([6, 20, 6]); P.pop = 1;
+        for (var q = 0; q < 3; q++) spawnPart(P.x + (Math.random() - 0.5)*0.4, P.y + (Math.random() - 0.5)*0.4, 44 + Math.random()*18, (wasP === 'cook' || wasP === 'eat' || wasP === 'eatsit') ? 'ember' : 'mote');
+        clearPose(); d(); dirty = true; }
   }
   function updateSkip(dt) {
     if (!skipping) return; var s = skipping; s.t += dt; var k = clamp((s.t - 0.4)/(s.dur - 0.8), 0, 1);
@@ -1635,7 +1716,7 @@
       b.addEventListener('click', function () { if (meta.own[it.id] || meta.creds < it.p) return; meta.creds -= it.p; meta.own[it.id] = 1; Snd.buy(); buzz([6, 20, 6]); rebuild(); paintShop(); toast('', it.n + '. It will be there when you get home.'); saveMeta(); }); L.appendChild(b); }); }
   $('bShopClose').addEventListener('click', function () { shopEl.classList.remove('on'); paused = false; Snd.tick(); });
   shopEl.addEventListener('click', function (e) { if (e.target === shopEl) $('bShopClose').click(); });
-  function rebuild() { floor.fill(0); wallN.fill(0); wallW.fill(0); roomOf.fill(0); solid.fill(0); outdoor.fill(0); decoN = {}; decoW = {}; rooms = []; objs = []; lightsStatic = []; npcs = []; chunks = {}; chunkUse = {}; parts = []; towerA = 0; if (!LEVELS[meta.level]) meta.level = 'l41'; grade = LEVELS[meta.level].grade ? 1 : 0; LEVELS[meta.level].build(); seedTraffic();
+  function rebuild() { floor.fill(0); wallN.fill(0); wallW.fill(0); roomOf.fill(0); solid.fill(0); outdoor.fill(0); decoN = {}; decoW = {}; rooms = []; objs = []; FIGC = {}; lightsStatic = []; npcs = []; chunks = {}; chunkUse = {}; parts = []; towerA = 0; if (!LEVELS[meta.level]) meta.level = 'l41'; grade = LEVELS[meta.level].grade ? 1 : 0; LEVELS[meta.level].build(); seedTraffic();
     if (meta.level === 'l41') { if (meta.own.plant2) obj('plant', 10, 13); if (meta.own.deck) obj('deck', 11, 12, { use: { verb: 'Listen', what: 'to the one record', kind: 'listen' }, light: '#c96a8e' });
       if (meta.own.lamp2) for (var i = 0; i < objs.length; i++) if (objs[i].kind === 'lamp' && objs[i].x === 11 && objs[i].y === 8) objs[i].light = '#e9d8c5'; }
     findRuns(); findEdges(); }
@@ -1664,14 +1745,14 @@
     // floors
     // Exact screen-rect reject, so the number of chunks blitted is a function
     // of the screen and never of how big the map is.
-    bakedThisFrame = 0;
+    bakedThisFrame = 0; bakeMs *= 0.9;
     var bw = CH*TW + 4, bh = CH*TH + 4, vx0 = camX - cssW/(2*zoom), vx1 = camX + cssW/(2*zoom), vy0 = camY - cssH/(2*zoom), vy1 = camY + cssH/(2*zoom);
     for (var cy = Math.floor(vr.y0/CH); cy <= Math.floor(vr.y1/CH); cy++) for (var cx = Math.floor(vr.x0/CH); cx <= Math.floor(vr.x1/CH); cx++) {
       if (cx < 0 || cy < 0 || cx*CH >= MW || cy*CH >= MH) continue;
       var bx = PX(cx*CH, cy*CH) - CH*32 - 2, by = PY(cx*CH, cy*CH) - 2;
       if (bx + bw < vx0 || bx > vx1 || by + bh < vy0 || by > vy1) continue;
       var ck = cx + ',' + cy;
-      if (!chunks[ck] && bakedThisFrame >= 2) { g.fillStyle = '#12080c'; g.fillRect(bx, by, bw, bh); continue; }
+      if (!chunks[ck] && bakedThisFrame >= 2) continue;   // it arrives next frame; the ground is already under it
       var ch = chunkAt(cx, cy); if (ch.empty) continue; g.drawImage(ch.c, ch.x, ch.y, ch.w, ch.h); }
     sweepChunks();
     // rain on the open decks lands somewhere
@@ -1687,21 +1768,22 @@
     // Which rooms are open to the camera, and therefore which runs are cut.
     // Decided from the player alone, before anything is queued, so the answer
     // cannot depend on what happens to be on screen this frame.
-    var ri; for (ri = 0; ri < runN; ri++) runHit[ri] = 0;
-    if (settings.cutaway) { openRooms(); for (ri = 0; ri < runN; ri++) if (openRm[runRoom[ri]]) runHit[ri] = 1; }
+    var ri; for (ri = 0; ri < runN; ri++) runHit[ri] = 0; openRooms();
+    if (settings.cutaway) for (ri = 0; ri < runN; ri++) if (openRm[runRoom[ri]]) runHit[ri] = 1;
     for (ri = 0; ri < runN; ri++) { var tgt = runHit[ri] ? CUT : WH; runCut[ri] += clamp(tgt - runCut[ri], -CUTV*dt, CUTV*dt); }
-    var items = [], pk = P.x + P.y, pkey = pk, cutY = co && towerA > 0.5 ? co.hide : -1;
+    var items = [], pk = P.x + P.y, cutY = co && towerA > 0.5 ? co.hide : -1;
+    if (P.onObj) { var ok = P.onObj.x + P.onObj.w - 1 + P.onObj.y + P.onObj.h - 1 + 0.9; pk = ok + (P.pose === 'shower' ? -0.05 : 0.05); }
+    var pkey = pk;
     for (y = vr.y0; y <= vr.y1; y++) for (x = vr.x0; x <= vr.x1; x++) { var ti = T(x, y);
       if (y < cutY) continue;
       if (wallW[ti] || decoW[ti]) items.push({ k: x + y - 0.5, w: 1, x: x, y: y, m: wallW[ti] });
       if (wallN[ti] || decoN[ti]) items.push({ k: x + y - 0.49, w: 0, x: x, y: y, m: wallN[ti] }); }
     for (i = 0; i < objs.length; i++) { var ob = objs[i]; if (ob.x + ob.w < vr.x0 || ob.x > vr.x1 || ob.y + ob.h < vr.y0 || ob.y > vr.y1 || ob.y < cutY) continue; items.push({ k: ob.kind === 'rug' || ob.kind === 'crossing' ? ob.x + ob.y - 0.45 : ob.x + ob.w - 1 + ob.y + ob.h - 1 + 0.9, ob: ob }); }
     for (i = 0; i < traffic.length; i++) { var tc = traffic[i]; if (tc.x + 2 < vr.x0 || tc.x > vr.x1 + 2 || tc.y < vr.y0 - 2 || tc.y > vr.y1 + 2) continue; items.push({ k: tc.x + 1 + tc.y + 0.9, ob: tc }); }
-    if (P.onObj) { var ok = P.onObj.x + P.onObj.w - 1 + P.onObj.y + P.onObj.h - 1 + 0.9; pk = ok + (P.pose === 'shower' ? -0.05 : 0.05); }
-    items.push({ k: pk, ch: P }); for (i = 0; i < npcs.length; i++) if (!(npcs[i].y < cutY)) items.push({ k: npcs[i].x + npcs[i].y, ch: npcs[i] });
+    items.push({ k: pk, ch: P }); for (i = 0; i < npcs.length; i++) { var np2 = npcs[i]; if (np2.y < cutY || np2.x < vr.x0 - 2 || np2.x > vr.x1 + 2 || np2.y < vr.y0 - 2 || np2.y > vr.y1 + 2) continue; items.push({ k: np2.x + np2.y, ch: np2 }); }
     for (i = 0; i < parts.length; i++) items.push({ k: parts[i].x + parts[i].y + 0.02, pa: parts[i] });
     items.push({ k: 1e9, mk: 1 });
-    var psx = PX(P.x, P.y), psy = PY(P.x, P.y), occl = false, pfs = null;
+    var psx = PX(P.x, P.y), psy = PY(P.x, P.y), occl = false, pfs = null, pmir = false;
     var SAMP = [[0, -4], [-9, -26], [9, -26], [0, -50], [0, -70]], sj;
     items.sort(function (a, b) { return a.k - b.k; });
     for (i = 0; i < items.length; i++) { var it = items[i];
@@ -1721,13 +1803,15 @@
         // Furniture in front of you keeps its colour — you show through it instead.
         if (it.k > pkey && it.ob.kind !== 'rug' && psx > ox + 10 && psx < ox + s.w - 10 && psy > oy + s.oy - 74 && psy < oy + s.h) occl = true;
         g.drawImage(s.c, ox, oy, s.w, s.h); }
-      else { var c = it.ch, fs = figSprite(c.look || PLAYER_LOOK, c.face, c.frame, c.pose), fx = PX(c.x, c.y), fy = PY(c.x, c.y); if (c === P) pfs = fs; g.drawImage(fs.c, fx - fs.ax, fy - fs.ay, fs.w, fs.h);
+      else { var c = it.ch, mir = (c.face & 1) === 1, fs = figSprite(c.look || PLAYER_LOOK, c.face & 2, c.frame, c.pose), fx = PX(c.x, c.y), fy = PY(c.x, c.y); if (c === P) { pfs = fs; pmir = mir; } figDraw(g, c, fs, fx, fy, mir);
         if (c.pose === 'shower') { g.strokeStyle = 'rgba(126,156,196,.35)'; g.lineWidth = 1; g.beginPath(); for (var wi = 0; wi < 7; wi++) { var wx = fx - 9 + wi*3, wy = fy - 74 + ((t*160 + wi*11) % 56); g.moveTo(wx, wy); g.lineTo(wx, wy + 5); } g.stroke(); }
         if (c.say && c.sayT > 0) { g.font = '400 8px Georgia, serif'; var tw = g.measureText(c.say).width + 12; g.fillStyle = 'rgba(11,6,9,.82)'; g.fillRect(fx - tw/2, fy - 90, tw, 15); g.strokeStyle = 'rgba(61,31,40,1)'; g.lineWidth = 1; g.strokeRect(fx - tw/2 + 0.5, fy - 89.5, tw, 15); g.fillStyle = INK.bone; g.textAlign = 'center'; g.fillText(c.say, fx, fy - 79); g.textAlign = 'left'; }
-        if (c === P && P.act && P.pose !== 'lie') { g.strokeStyle = INK.bone; g.globalAlpha = 0.5; g.lineWidth = 1; g.beginPath(); g.arc(fx, fy - 74, 5, -1.57, -1.57 + 6.283*(P.act.t/P.act.mins)); g.stroke(); g.globalAlpha = 1; } }
+        if (c === P && P.act && P.pose !== 'lie') { g.strokeStyle = INK.bone; g.globalAlpha = 0.5; g.lineWidth = 1; g.beginPath(); g.arc(fx, fy - 74, 5, -1.57, -1.57 + 6.283*(P.act.t/P.act.mins)); g.stroke();
+          g.globalAlpha = 0.22; g.beginPath(); for (var qk = 0; qk < 4; qk++) { var qa = -1.57 + qk*1.5708; g.moveTo(fx + Math.cos(qa)*6.5, fy - 74 + Math.sin(qa)*6.5); g.lineTo(fx + Math.cos(qa)*8.5, fy - 74 + Math.sin(qa)*8.5); } g.stroke(); g.globalAlpha = 1; }
+        if (c === P && P.pop > 0) { g.globalAlpha = P.pop*0.5; g.strokeStyle = INK.bone; g.lineWidth = 1; g.beginPath(); g.arc(fx, fy - 74, 5 + (1 - P.pop)*13, 0, 6.283); g.stroke(); g.globalAlpha = 1; } }
     }
     // Behind something? A ghost of you, over the top, so you are never lost.
-    if (occl && pfs) { g.save(); g.globalAlpha = 0.34; g.drawImage(pfs.c, psx - pfs.ax, psy - pfs.ay, pfs.w, pfs.h);
+    if (occl && pfs) { g.save(); g.globalAlpha = 0.34; figDraw(g, P, pfs, psx, psy, pmir);
       g.globalAlpha = 0.5; g.strokeStyle = INK.bone; g.lineWidth = 1; g.beginPath(); g.ellipse(psx, psy + 1, 9, 4, 0, 0, 6.283); g.stroke(); g.restore(); }
   }
   function wantTarget(id) { if (id.indexOf('talk:') === 0) { var who = id.slice(5); return { level: NPC_LEVEL[who], npc: who, label: npcName(who) }; } var at = WANT_AT[id]; if (!at) return null; return { level: at[0], kind: at[1], label: WANTS.filter(function (q) { return q.id === id; })[0].t }; }
