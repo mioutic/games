@@ -272,7 +272,7 @@
   function saveSettings() { try { localStorage.setItem(SKEY, JSON.stringify(settings)); } catch (e) {} mirrorSave(); }
   function buzz(p) { if (settings.haptics && navigator.vibrate) navigator.vibrate(p); }
   // The tenancy: everything that persists between sessions.
-  function freshMeta() { return { v: 2, savedAt: 0, day: 1, min: 22*60, creds: 40, needs: { rest: 62, hunger: 55, hygiene: 70, spirit: 58, warmth: 66 }, own: {}, px: 0, py: 0, earned: 0, shifts: 0, talks: 0, met: {}, seen: {}, skills: { focus: 0, cooking: 0, charm: 0, fitness: 0 }, rel: { vesna: 0, ohm: 0, warden: 0, kid: 0, mira: 0, sol: 0, pell: 0, w1: 0, w2: 0 }, stock: 1, wants: [], wantDay: 0, rentDay: 4, owed: 0, evPlan: null, cooked: 0, level: 'l41', job: null, jobsDone: 0, look: null }; }
+  function freshMeta() { return { v: 2, savedAt: 0, day: 1, min: 22*60, creds: 40, needs: { rest: 62, hunger: 55, hygiene: 70, spirit: 58, warmth: 66 }, own: {}, px: 0, py: 0, earned: 0, shifts: 0, talks: 0, met: {}, seen: {}, skills: { focus: 0, cooking: 0, charm: 0, fitness: 0 }, rel: { vesna: 0, ohm: 0, warden: 0, kid: 0, mira: 0, sol: 0, pell: 0, w1: 0, w2: 0, fen: 0, nessa: 0, doro: 0, tace: 0, hale: 0, bram: 0, nib: 0, tov: 0, ruta: 0 }, stock: 1, wants: [], wantDay: 0, rentDay: 4, owed: 0, evPlan: null, cooked: 0, level: 'l41', job: null, jobsDone: 0, look: null }; }
   var meta = freshMeta();
   function absorb(m) { if (!m || (m.v !== 1 && m.v !== 2)) return false; var f = freshMeta(); for (var k in f) if (m[k] !== undefined) meta[k] = m[k]; if (meta.needs.warmth === undefined) meta.needs.warmth = 66; for (k in f.skills) if (meta.skills[k] === undefined) meta.skills[k] = 0; for (k in f.rel) if (meta.rel[k] === undefined) meta.rel[k] = 0;
     if (m.v === 1) { meta.px = 0; meta.py = 0; }   // the grid moved under this save; let the builder place them
@@ -428,13 +428,18 @@
 
   /* ---- Level 41 ---- */
   function build41() {
-    // The slab: a corridor spine with rooms hung off it, and two open decks at the ends over the drop.
+    var i;
+    /* The slab, as a circuit. The spine runs north-south past your door; at its
+       foot the corridor turns east, crosses the level, climbs the far side and
+       comes back along the top, so there is a way round and not only a way out. */
+
+    /* ---- the spine, and home ---- */
     room('Corridor', 12, 6, 4, 26, FL.concrete, WM.panel, { light: 0.55, lightCol: '#e9d8c5' });
-    // Your flat: two rooms and a bathroom, on the west side of the spine.
     room('Your flat', 5, 8, 7, 6, FL.lino, WM.plaster, { light: 0.6, lightCol: '#e9d8c5' });
     room('Your bathroom', 5, 14, 3, 4, FL.tile, WM.tile, { light: 0.5, lightCol: '#c3d9e0' });
     room('Your bedroom', 8, 14, 4, 4, FL.carpet, WM.plaster, { light: 0.45, lightCol: '#e9d8c5' });
-    door('W', 12, 10); door('N', 6, 14); door('N', 9, 14); wallW[T(8, 15)] = 0; wallW[T(8, 16)] = WM.tile; wallW[T(8, 17)] = WM.tile; wallW[T(8, 14)] = WM.tile; decoW[T(8, 15)] = { kind: 'door' };
+    door('W', 12, 10); door('N', 6, 14); door('N', 9, 14);
+    wallW[T(8, 15)] = 0; wallW[T(8, 16)] = WM.tile; wallW[T(8, 17)] = WM.tile; wallW[T(8, 14)] = WM.tile; decoW[T(8, 15)] = { kind: 'door' };
     deco('W', 5, 9, 'window'); deco('W', 5, 10, 'window'); deco('W', 5, 15, 'window'); deco('N', 10, 8, 'screen'); deco('N', 7, 8, 'poster', { ink: 'pink' }); deco('W', 8, 17, 'mirror');
     obj('bed', 9, 16, { w: 2, h: 2, use: { verb: 'Sleep', what: 'until morning', kind: 'sleep' } });
     obj('desk', 6, 8, { w: 2, h: 1, use: { verb: 'Work', what: 'a remote shift · 8h', kind: 'work' }, f: 0 });
@@ -446,155 +451,632 @@
     obj('toilet', 7, 17, { use: { verb: 'Use', what: 'the necessary', kind: 'toilet' } });
     obj('sink', 5, 17, { use: { verb: 'Wash', what: 'hands and face', kind: 'sink' } });
     obj('rug', 7, 10, { w: 3, h: 2, walk: 1 }); obj('wardrobe', 11, 14, { use: { verb: 'Change', what: 'into something dry', kind: 'change' } });
+    obj('bin', 11, 13);
     light(6.5, 9, '#7e9cc4', 150, { win: 1 }); light(10, 8.6, '#8a8fc9', 110, { screen: 1 }); light(6, 15.5, '#c3d9e0', 100);
-    // The neighbour across the corridor: a mirror of yours, someone else's things.
+
+    /* ---- Vesna, across the corridor ---- */
     room('Vesna’s flat', 16, 8, 7, 6, FL.lino, WM.plaster, { light: 0.5, lightCol: '#d9c8b5' });
-    door('W', 16, 10); deco('W', 16, 12, 'poster', { ink: 'teal' }); deco('N', 19, 8, 'shelf'); deco('W', 23, 9, 'window'); deco('W', 23, 10, 'window');
+    door('W', 16, 10); deco('W', 16, 12, 'poster', { ink: 'teal' }); deco('N', 19, 8, 'shelf'); deco('N', 17, 8, 'window'); deco('N', 21, 8, 'window'); deco('W', 23, 11, 'poster', { ink: 'rose' });
     obj('sofa', 19, 12, { w: 2, h: 1, f: 1 }); obj('table', 18, 10); obj('plant', 22, 8); obj('lamp', 17, 8, { light: '#c96a8e' }); obj('desk', 20, 8, { w: 2, h: 1 }); obj('bed', 21, 12, { w: 2, h: 1, f: 2 });
-    light(22.5, 9, '#7e9cc4', 140, { win: 1 });
+    light(19, 8.6, '#7e9cc4', 150, { win: 1 });
+
+    /* ---- the commissary ---- */
+    room('Commissary', 16, 16, 9, 8, FL.terrazzo, WM.shutter, { light: 0.55, lightCol: '#e9d8c5' });
+    door('W', 16, 18); door('W', 16, 19); deco('N', 19, 16, 'neon', { text: 'NOODLE', ink: 'pink' }); deco('N', 22, 16, 'menu'); deco('W', 25, 17, 'shelf'); deco('W', 25, 19, 'pipes'); deco('W', 25, 22, 'vent'); deco('N', 17, 16, 'vent');
+    obj('noodle', 20, 17, { w: 3, h: 1, use: { verb: 'Eat', what: 'a bowl from Ohm · 12', kind: 'eat', cost: 12, hot: 1, reach: 2.5 } });
+    obj('stool', 20, 18); obj('stool', 21, 18); obj('stool', 22, 18); obj('table', 18, 21); obj('stool', 17, 21); obj('stool', 19, 21); obj('table', 22, 21); obj('stool', 23, 21); obj('stool', 21, 21);
+    obj('vend', 24, 22, { use: { verb: 'Buy', what: 'a can of something · 4', kind: 'eat', cost: 4, small: 1 }, light: '#6fb3ab' });
+    obj('shopterm', 17, 22, { use: { verb: 'Browse', what: 'the commissary catalogue', kind: 'shop' }, light: '#8a8fc9' });
+    obj('bin', 24, 17); obj('plant', 16, 23); obj('crate', 24, 19, { use: { verb: 'Buy', what: 'stock for the cold box · 15', kind: 'stock' } });
+    obj('crates', 24, 16);
+    light(20.5, 16.6, '#c96a8e', 150, { neon: 1 }); light(24, 19, '#d9a441', 110);
+
+    /* ---- laundry, drying room, lift ---- */
+    room('Laundry', 16, 24, 4, 5, FL.tile, WM.tile, { light: 0.5, lightCol: '#c3d9e0' });
+    door('W', 16, 27); obj('washer', 18, 26, { use: { verb: 'Wash', what: 'the coat · 30 min', kind: 'laundry' } }); obj('washer', 19, 26); obj('washer', 18, 24); obj('bin', 16, 28); obj('crates', 19, 24);
+    obj('bench', 16, 25, { w: 1, h: 2, f: 3, use: { verb: 'Sit', what: 'while the drum turns', kind: 'rest', short: 1 } });
+    deco('N', 17, 24, 'pipes'); deco('W', 16, 24, 'vent');
+    room('Drying room', 20, 24, 5, 5, FL.tile, WM.tile, { light: 0.34, lightCol: '#c3d9e0' });
+    door('W', 20, 27);
+    obj('washline', 20, 24, { w: 3, h: 1 }); obj('washline', 20, 26, { w: 3, h: 1 }); obj('waterbutt', 24, 24); obj('crates', 23, 26); obj('bin', 24, 28);
+    deco('N', 21, 24, 'pipes'); deco('W', 20, 25, 'poster', { ink: 'violet' });
+    light(22, 26, '#c3d9e0', 110, { ceil: 1 });
+
+    room('Corridor', 10, 18, 2, 2, FL.concrete, WM.panel, { light: 0.5, lightCol: '#e9d8c5' });
+    room('Lift', 10, 20, 2, 2, FL.metal, WM.panel, { light: 0.7, lightCol: '#d9a441' });
+    room('Corridor', 10, 22, 2, 2, FL.concrete, WM.panel, { light: 0.5, lightCol: '#e9d8c5' });
+    wallW[T(12, 18)] = 0; wallW[T(12, 19)] = 0; wallW[T(12, 22)] = 0; wallW[T(12, 23)] = 0;
+    wallW[T(12, 20)] = 0; wallW[T(12, 21)] = 0; decoW[T(12, 20)] = { kind: 'lift', mat: WM.panel, open: 0 }; decoW[T(12, 21)] = { kind: 'lift', mat: WM.panel, open: 0 };
+    obj('liftcall', 10, 20, { w: 2, h: 2, walk: 1, use: { verb: 'Ride', what: 'the lift', kind: 'lift', reach: 0.35 } });
+    obj('bench', 10, 22, { w: 1, h: 2, f: 3, use: { verb: 'Sit', what: 'and wait for the lift', kind: 'rest', short: 1 } });
+    deco('W', 10, 19, 'panelscreen');
+    light(10.9, 18.8, '#e9d8c5', 90, { ceil: 1 }); light(12.4, 20.9, '#d9a441', 90, { lift: 1 });
+
+    /* ---- 4103, the flat past the lift ---- */
+    room('Flat 4103', 5, 18, 5, 6, FL.lino, WM.plaster, { light: 0.4, lightCol: '#d9c8b5' });
+    door('W', 10, 18);
+    obj('bed', 5, 18, { w: 2, h: 1, f: 2 }); obj('fridge', 7, 18); obj('lamp', 5, 19, { light: '#6fb3ab' });
+    obj('desk', 8, 20, { w: 2, h: 1 }); obj('sofa', 5, 22, { w: 2, h: 1, f: 1 }); obj('table', 8, 22); obj('plant', 9, 23);
+    obj('rug', 6, 20, { w: 2, h: 2, walk: 1 });
+    deco('W', 5, 19, 'window'); deco('W', 5, 21, 'window'); deco('N', 7, 18, 'poster', { ink: 'teal' });
+    light(6, 19.5, '#7e9cc4', 130, { win: 1 });
+
+    /* ---- the stairwell and the plant room ---- */
+    room('Stairwell', 5, 24, 7, 5, FL.metal, WM.panel, { light: 0.36, lightCol: '#c3d9e0' });
+    door('W', 12, 26);
+    obj('stairs', 5, 24, { w: 3, h: 3 }); obj('crates', 5, 28); obj('bin', 6, 28); obj('duct', 9, 24, { w: 3, h: 1 });
+    deco('N', 7, 24, 'pipes'); deco('W', 5, 26, 'poster', { ink: 'gold' });
+    light(9, 27, '#c3d9e0', 120, { ceil: 1 });
+    room('Plant room', 5, 29, 7, 3, FL.grate, WM.panel, { light: 0.3, lightCol: '#d9a441' });
+    door('W', 12, 30);
+    obj('plantroom', 5, 29, { w: 4, h: 2 }); obj('tank', 9, 29, { w: 2, h: 2 }); obj('waterbutt', 11, 29); obj('duct', 5, 31, { w: 3, h: 1 });
+    deco('N', 6, 29, 'pipes'); deco('W', 5, 30, 'vent');
+    light(9, 31, '#d9a441', 100, { ceil: 1 });
+
+    /* ---- the spine's fittings ---- */
+    deco('W', 12, 28, 'poster', { ink: 'violet' }); deco('W', 12, 14, 'pipes'); deco('W', 12, 24, 'poster', { ink: 'gold' }); deco('W', 16, 13, 'vent'); deco('W', 12, 8, 'panelscreen');
+    obj('bench', 12, 16, { w: 1, h: 2, f: 3, use: { verb: 'Sit', what: 'and watch the corridor', kind: 'rest', short: 1 } });
+    obj('plant', 15, 6); obj('bin', 12, 31); obj('plant', 15, 31);
+    light(13.8, 9, '#e9d8c5', 120, { ceil: 1 }); light(13.8, 16, '#e9d8c5', 120, { ceil: 1 }); light(13.8, 23, '#e9d8c5', 120, { ceil: 1 }); light(13.8, 30, '#e9d8c5', 120, { ceil: 1 });
+
+    /* ---- the service spur, 4109, and the service corridor behind the counter ---- */
+    room('Service spur', 16, 14, 9, 2, FL.concrete, WM.panel, { light: 0.4, lightCol: '#e9d8c5', south: WM.shutter });
+    room('Flat 4109', 23, 8, 5, 6, FL.lino, WM.plaster, { light: 0.24, lightCol: '#d9a441' });
+    room('Service corridor', 25, 14, 3, 15, FL.grate, WM.panel, { light: 0.3, lightCol: '#8f6f76' });
+    wallW[T(16, 14)] = 0; wallW[T(16, 15)] = 0; wallW[T(25, 14)] = 0; wallW[T(25, 15)] = 0;
+    door('W', 25, 20);
+    deco('N', 25, 14, 'flatdoor', { text: '4109' });
+    obj('sign', 20, 14, { sign: 'EAST WING', ink: 'teal' }); obj('bin', 24, 14);
+    obj('bed', 23, 8, { w: 2, h: 1, f: 2 }); obj('lamp', 26, 9, { light: '#d9a441' }); obj('sofa', 25, 12, { w: 2, h: 1, f: 1 }); obj('table', 23, 11);
+    deco('N', 25, 8, 'shelf'); deco('W', 23, 12, 'poster', { ink: 'rose' });
+    obj('crates', 25, 16); obj('pallet', 25, 22, { w: 1, h: 2 }); obj('bin', 27, 25); obj('duct', 26, 14, { w: 2, h: 1 });
+    deco('W', 25, 22, 'pipes'); deco('N', 27, 14, 'vent');
+    light(18, 15, '#e9d8c5', 110, { ceil: 1 }); light(26, 11, '#d9a441', 90); light(26.5, 18, '#8f6f76', 110, { ceil: 1 }); light(26.5, 26, '#8f6f76', 110, { ceil: 1 });
+
+    /* ---- the inner flats and the refuse room, between the two spines ---- */
+    room('Flat 4111', 28, 8, 6, 6, FL.lino, WM.plaster, { light: 0.24, lightCol: '#d9a441' });
+    obj('bed', 28, 8, { w: 2, h: 1, f: 2 }); obj('sofa', 30, 12, { w: 2, h: 1, f: 1 }); obj('lamp', 32, 9, { light: '#d9a441' }); obj('table', 28, 11);
+    light(31, 10, '#d9a441', 95);
+    room('Flat 4113', 28, 14, 6, 5, FL.lino, WM.plaster, { light: 0.18, lightCol: '#7e9cc4' });
+    door('W', 28, 16);
+    obj('bed', 28, 14, { w: 2, h: 1, f: 2 }); obj('wardrobe', 33, 14); obj('bin', 32, 18); obj('crates', 28, 18);
+    deco('N', 30, 14, 'poster', { ink: 'rose' });
+    room('Flat 4115', 28, 19, 6, 5, FL.lino, WM.plaster, { light: 0.24, lightCol: '#d9a441' });
+    obj('bed', 28, 19, { w: 2, h: 1, f: 2 }); obj('sofa', 31, 22, { w: 2, h: 1, f: 1 }); obj('lamp', 33, 19, { light: '#c96a8e' }); obj('table', 29, 22);
+    light(31, 21, '#c96a8e', 95);
+    room('Refuse', 28, 24, 6, 5, FL.grate, WM.panel, { light: 0.28, lightCol: '#5fa777' });
+    door('W', 28, 26);
+    obj('dumpster', 29, 24, { w: 2, h: 2 }); obj('dumpster', 32, 24, { w: 2, h: 2 }); obj('pallet', 29, 27, { w: 2, h: 1 }); obj('crates', 32, 27); obj('bin', 33, 28);
+    deco('N', 30, 24, 'vent'); deco('W', 28, 27, 'pipes');
+    light(30.5, 26, '#5fa777', 110, { ceil: 1 });
+
+    /* ---- the south deck, open to the rain ---- */
+    room('South deck', 8, 32, 14, 6, FL.wet, WM.rail, { open: 1, south: WM.rail, east: WM.rail });
+    wallN[T(12, 32)] = 0; wallN[T(13, 32)] = 0; wallN[T(14, 32)] = 0; wallN[T(15, 32)] = 0;
+    for (i = 8; i < 12; i++) wallN[T(i, 32)] = WM.panel; for (i = 16; i < 22; i++) wallN[T(i, 32)] = WM.panel;
+    deco('N', 9, 32, 'billboard'); deco('N', 17, 32, 'neon', { text: 'TRANSIT', ink: 'teal' }); deco('N', 20, 32, 'poster', { ink: 'rose' });
+    obj('gate', 18, 33, { w: 2, h: 1, use: { verb: 'Ride', what: 'the rail to work · 8h', kind: 'commute' }, light: '#6fb3ab' });
+    obj('bench', 9, 35, { w: 2, h: 1, use: { verb: 'Sit', what: 'over the city', kind: 'rest', short: 1, view: 1 } }); obj('bench', 14, 35, { w: 2, h: 1, use: { verb: 'Sit', what: 'over the city', kind: 'rest', short: 1, view: 1 } });
+    obj('lamppost', 12, 34, { light: '#d9a441', tall: 1 }); obj('vent', 11, 36, { walk: 1 }); obj('lamppost', 17, 36, { light: '#d9a441', tall: 1 }); obj('bin', 8, 37); obj('planter', 20, 35, { w: 1, h: 2 });
+    obj('satdish', 8, 33); obj('waterbutt', 21, 33);
+    light(10.5, 32.8, '#8a8fc9', 170, { screen: 1 }); light(18, 32.8, '#6fb3ab', 120, { neon: 1 });
+
+    /* ---- the roof garden at the north end ---- */
+    room('Roof garden', 8, 1, 13, 5, FL.deck, WM.rail, { open: 1 });
+    wallN[T(12, 6)] = 0; wallN[T(13, 6)] = 0; wallN[T(14, 6)] = 0; wallN[T(15, 6)] = 0;
+    for (i = 8; i < 12; i++) wallN[T(i, 6)] = WM.brick; for (i = 16; i < 21; i++) wallN[T(i, 6)] = WM.brick;
+    obj('planter', 9, 1, { w: 3, h: 1, soil: 1 }); obj('planter', 16, 1, { w: 3, h: 1, soil: 1 }); obj('tree', 13, 2, { w: 2, h: 2 });
+    obj('bench', 10, 3, { w: 2, h: 1, use: { verb: 'Sit', what: 'under the tree', kind: 'rest', short: 1, view: 1 } });
+    obj('bench', 14, 4, { w: 2, h: 1, use: { verb: 'Sit', what: 'under the tree', kind: 'rest', short: 1, view: 1 } });
+    obj('shrine', 17, 4, { use: { verb: 'Tend', what: 'the lights someone left', kind: 'shrine' }, light: '#d9a441' });
+    obj('lamppost', 10, 5, { light: '#d9a441', tall: 1 }); obj('lamppost', 17, 5, { light: '#d9a441', tall: 1 });
+    obj('waterbutt', 8, 1); obj('compost', 8, 3, { w: 1, h: 2 }); obj('bedplot', 19, 1, { w: 2, h: 3 });
+
+    /* ---- the east corridor ---- */
+    room('East corridor', 34, 8, 4, 21, FL.concrete, WM.panel, { light: 0.5, lightCol: '#e9d8c5' });
+    deco('W', 34, 10, 'flatdoor', { text: '4111' }); deco('W', 34, 21, 'flatdoor', { text: '4115' });
+    obj('bench', 34, 12, { w: 1, h: 2, f: 3, use: { verb: 'Sit', what: 'where nobody passes', kind: 'rest', short: 1 } });
+    obj('plant', 37, 9); obj('bin', 37, 27); obj('sign', 34, 24, { sign: 'CROSS ▾', ink: 'gold' });
+    deco('W', 34, 16, 'pipes'); deco('N', 35, 8, 'vent'); deco('W', 34, 26, 'poster', { ink: 'teal' });
+    light(35.8, 12, '#e9d8c5', 120, { ceil: 1 }); light(35.8, 20, '#e9d8c5', 120, { ceil: 1 }); light(35.8, 27, '#e9d8c5', 120, { ceil: 1 });
+
+    /* ---- the tenants' room, the shrine alcove, 4117 ---- */
+    room('Tenants’ room', 38, 12, 6, 8, FL.carpet, WM.plaster, { light: 0.42, lightCol: '#d9c8b5' });
+    door('W', 38, 15);
+    obj('sofa', 39, 12, { w: 2, h: 1, f: 1 }); obj('sofa', 41, 18, { w: 2, h: 1 }); obj('table', 41, 15); obj('stool', 42, 16); obj('stool', 40, 16);
+    obj('lamp', 43, 12, { light: '#d9a441' }); obj('plant', 38, 19); obj('bin', 43, 19);
+    deco('N', 40, 12, 'screen'); deco('N', 42, 12, 'poster', { ink: 'gold' }); deco('W', 38, 13, 'shelf');
+    light(41, 15.5, '#8a8fc9', 110, { screen: 1 }); light(41, 16, '#d9c8b5', 130, { ceil: 1 });
+    room('Shrine alcove', 38, 20, 6, 4, FL.terrazzo, WM.brick, { light: 0.3, lightCol: '#d9a441' });
+    door('W', 38, 21);
+    obj('shrine', 41, 20, { light: '#d9a441' }); obj('planter', 42, 22, { w: 2, h: 1 }); obj('bench', 38, 22, { w: 2, h: 1, use: { verb: 'Sit', what: 'with the lights', kind: 'rest', short: 1 } });
+    deco('N', 40, 20, 'poster', { ink: 'violet' }); deco('N', 42, 20, 'shelf');
+    light(41.5, 21, '#d9a441', 120, { neon: 1 });
+    room('Flat 4117', 38, 24, 6, 5, FL.lino, WM.plaster, { light: 0.24, lightCol: '#d9a441' });
+    deco('N', 40, 29, 'flatdoor', { text: '4117' });
+    obj('bed', 38, 24, { w: 2, h: 1, f: 2 }); obj('sofa', 41, 27, { w: 2, h: 1, f: 1 }); obj('lamp', 43, 24, { light: '#d9a441' }); obj('table', 38, 27);
+    light(41, 26, '#d9a441', 95);
+
+    /* ---- the north gallery and the flats above it ---- */
+    room('North gallery', 38, 8, 16, 4, FL.concrete, WM.panel, { light: 0.5, lightCol: '#e9d8c5' });
+    wallW[T(38, 8)] = 0; wallW[T(38, 9)] = 0; wallW[T(38, 10)] = 0; wallW[T(38, 11)] = 0;
+    room('Flat 4125', 38, 2, 6, 6, FL.lino, WM.plaster, { light: 0.24, lightCol: '#d9a441' });
+    obj('bed', 38, 2, { w: 2, h: 1, f: 2 }); obj('sofa', 41, 6, { w: 2, h: 1, f: 1 }); obj('lamp', 43, 2, { light: '#c96a8e' });
+    deco('N', 40, 2, 'window'); deco('W', 38, 4, 'window');
+    light(41, 4, '#c96a8e', 95);
+    room('Flat 4127', 44, 2, 6, 6, FL.lino, WM.plaster, { light: 0.24, lightCol: '#d9a441' });
+    obj('bed', 44, 2, { w: 2, h: 1, f: 2 }); obj('desk', 47, 6, { w: 2, h: 1 }); obj('lamp', 49, 2, { light: '#d9a441' });
+    deco('N', 46, 2, 'window'); deco('N', 48, 2, 'window');
+    light(47, 4, '#d9a441', 95);
+    room('Flat 4129', 50, 2, 4, 6, FL.lino, WM.plaster, { light: 0.2, lightCol: '#7e9cc4' });
+    obj('bed', 50, 2, { w: 2, h: 1, f: 2 }); obj('plant', 53, 6); obj('table', 52, 4);
+    deco('N', 51, 2, 'window'); deco('W', 50, 5, 'poster', { ink: 'violet' });
+    light(52, 4, '#7e9cc4', 90, { win: 1 });
+    deco('N', 40, 8, 'flatdoor', { text: '4125' }); deco('N', 46, 8, 'flatdoor', { text: '4127' }); deco('N', 51, 8, 'flatdoor', { text: '4129' });
+    obj('bench', 41, 10, { w: 2, h: 1, f: 0, use: { verb: 'Sit', what: 'under the gallery lights', kind: 'rest', short: 1 } });
+    obj('plant', 39, 11); obj('bin', 52, 11); obj('sign', 49, 11, { sign: '4125–4129', ink: 'gold' });
+    deco('N', 43, 8, 'poster', { ink: 'rose' }); deco('N', 49, 8, 'poster', { ink: 'teal' });
+    light(45, 10, '#e9d8c5', 130, { ceil: 1 }); light(52, 10, '#e9d8c5', 130, { ceil: 1 });
+
+    /* ---- the far corridor, down the east side ---- */
+    room('Far corridor', 50, 12, 4, 26, FL.concrete, WM.panel, { light: 0.48, lightCol: '#e9d8c5' });
+    wallN[T(50, 12)] = 0; wallN[T(51, 12)] = 0; wallN[T(52, 12)] = 0; wallN[T(53, 12)] = 0;
+    room('Flat 4119', 44, 12, 6, 6, FL.lino, WM.plaster, { light: 0.24, lightCol: '#d9a441' });
+    deco('W', 50, 14, 'flatdoor', { text: '4119' });
+    obj('bed', 44, 12, { w: 2, h: 1, f: 2 }); obj('sofa', 47, 16, { w: 2, h: 1, f: 1 }); obj('lamp', 49, 12, { light: '#d9a441' }); obj('table', 44, 16);
+    light(47, 14, '#d9a441', 95);
+    room('Flat 4121', 44, 18, 6, 6, FL.lino, WM.plaster, { light: 0.44, lightCol: '#d9c8b5' });
+    door('W', 50, 20);
+    obj('bed', 44, 18, { w: 2, h: 1, f: 2 }); obj('desk', 47, 18, { w: 2, h: 1 }); obj('sofa', 44, 22, { w: 2, h: 1, f: 1 }); obj('table', 47, 22); obj('lamp', 49, 18, { light: '#c96a8e' }); obj('plant', 49, 23);
+    obj('rug', 46, 20, { w: 2, h: 2, walk: 1 });
+    deco('N', 46, 18, 'shelf'); deco('W', 44, 20, 'poster', { ink: 'gold' });
+    light(47, 20, '#c96a8e', 110);
+    room('Flat 4123', 44, 24, 6, 5, FL.lino, WM.plaster, { light: 0.22, lightCol: '#7e9cc4' });
+    deco('W', 50, 26, 'flatdoor', { text: '4123' });
+    obj('bed', 44, 24, { w: 2, h: 1, f: 2 }); obj('sofa', 47, 27, { w: 2, h: 1, f: 1 }); obj('lamp', 49, 24, { light: '#7e9cc4' });
+    light(47, 26, '#7e9cc4', 90);
+    room('Shrine alcove', 54, 14, 4, 4, FL.terrazzo, WM.brick, { light: 0.3, lightCol: '#d9a441' });
+    door('W', 54, 15);
+    obj('shrine', 56, 14, { light: '#d9a441' }); obj('bench', 54, 16, { w: 2, h: 1, use: { verb: 'Sit', what: 'at the far end of the level', kind: 'rest', short: 1 } }); obj('plant', 57, 17);
+    deco('N', 55, 14, 'poster', { ink: 'violet' });
+    light(56, 15, '#d9a441', 120, { neon: 1 });
+    obj('bin', 53, 13); obj('plant', 50, 28); obj('sign', 53, 33, { sign: 'DECK ▾', ink: 'teal' });
+    deco('W', 50, 22, 'pipes'); deco('W', 50, 33, 'poster', { ink: 'rose' });
+    light(51.8, 16, '#e9d8c5', 120, { ceil: 1 }); light(51.8, 24, '#e9d8c5', 120, { ceil: 1 }); light(51.8, 31, '#e9d8c5', 120, { ceil: 1 }); light(51.8, 36, '#e9d8c5', 120, { ceil: 1 });
+
+    /* ---- the cross corridor, the bend at the foot of the spine ---- */
+    room('Cross corridor', 16, 29, 34, 3, FL.concrete, WM.panel, { light: 0.5, lightCol: '#e9d8c5' });
+    wallW[T(16, 29)] = 0; wallW[T(16, 30)] = 0; wallW[T(16, 31)] = 0;
+    wallN[T(25, 29)] = 0; wallN[T(26, 29)] = 0; wallN[T(27, 29)] = 0;
+    wallN[T(34, 29)] = 0; wallN[T(35, 29)] = 0; wallN[T(36, 29)] = 0; wallN[T(37, 29)] = 0;
+    wallW[T(50, 29)] = 0; wallW[T(50, 30)] = 0; wallW[T(50, 31)] = 0;
+    door('N', 22, 29);
+    obj('bench', 20, 31, { w: 2, h: 1, use: { verb: 'Sit', what: 'and let the level go past', kind: 'rest', short: 1 } });
+    obj('plant', 19, 29); obj('bin', 33, 29); obj('plant', 43, 31); obj('sign', 30, 31, { sign: '◂ HOME', ink: 'gold' });
+    deco('N', 18, 29, 'poster', { ink: 'gold' }); deco('N', 31, 29, 'poster', { ink: 'teal' }); deco('N', 45, 29, 'billboard'); deco('N', 43, 29, 'pipes');
+    light(19, 30, '#e9d8c5', 120, { ceil: 1 }); light(27, 30, '#e9d8c5', 120, { ceil: 1 }); light(35, 30, '#e9d8c5', 120, { ceil: 1 }); light(42, 30, '#e9d8c5', 120, { ceil: 1 }); light(47, 30, '#8a8fc9', 140, { screen: 1 });
+
+    /* ---- the drying deck and the east deck, hung off the far corner ---- */
+    room('Drying deck', 38, 32, 12, 6, FL.deck, WM.rail, { open: 1, south: WM.rail, east: WM.panel });
+    for (i = 38; i < 42; i++) wallN[T(i, 32)] = WM.panel; for (i = 46; i < 50; i++) wallN[T(i, 32)] = WM.panel;
+    wallN[T(42, 32)] = 0; wallN[T(43, 32)] = 0; wallN[T(44, 32)] = 0; wallN[T(45, 32)] = 0;
+    door('W', 50, 34);
+    obj('washline', 38, 33, { w: 3, h: 1 }); obj('washline', 38, 36, { w: 3, h: 1 }); obj('washline', 46, 33, { w: 3, h: 1 });
+    obj('planter', 48, 36, { w: 2, h: 1 }); obj('lamppost', 42, 34, { light: '#d9a441', tall: 1 }); obj('bin', 49, 32);
+    deco('N', 40, 32, 'neon', { text: 'DRY', ink: 'gold' });
+    light(42, 32.8, '#d9a441', 120, { neon: 1 });
+    room('East deck', 44, 38, 18, 12, FL.wet, WM.rail, { open: 1, south: WM.rail, east: WM.rail });
+    for (i = 44; i < 54; i++) wallN[T(i, 38)] = 0;
+    obj('bench', 46, 43, { w: 2, h: 1, use: { verb: 'Sit', what: 'over the far side', kind: 'rest', short: 1, view: 1 } });
+    obj('bench', 52, 41, { w: 2, h: 1, use: { verb: 'Sit', what: 'over the far side', kind: 'rest', short: 1, view: 1 } });
+    obj('bench', 57, 46, { w: 2, h: 1, use: { verb: 'Sit', what: 'over the far side', kind: 'rest', short: 1, view: 1 } });
+    obj('shelter', 57, 38, { w: 3, h: 2 }); obj('crates', 54, 38); obj('satdish', 61, 38); obj('mast', 60, 42, { light: '#ff5470', tall: 1 });
+    obj('lamppost', 49, 40, { light: '#d9a441', tall: 1 }); obj('lamppost', 55, 44, { light: '#d9a441', tall: 1 }); obj('lamppost', 46, 47, { light: '#d9a441', tall: 1 });
+    obj('planter', 44, 40, { w: 1, h: 3 }); obj('planter', 56, 41, { w: 2, h: 1 }); obj('planter', 51, 48, { w: 2, h: 1 });
+    obj('tank', 60, 47, { w: 2, h: 2 }); obj('duct', 44, 45, { w: 3, h: 1 }); obj('waterbutt', 48, 44); obj('vent', 51, 44, { walk: 1 }); obj('bin', 44, 49);
+    light(50, 42, '#8a8fc9', 170, { screen: 1 }); light(58, 44, '#7e9cc4', 150, { win: 1 });
+
+    /* ---- the people ---- */
     npc('vesna', 'Vesna', { coat: '#3d1f28', trim: '#6fb3ab', hair: '#0b0609', scarf: 1 }, 19, 11, {
       lines: [['Forty-one floors up and the rain still finds the corridor. Mind the drip by the lift.', 'You are the new one in 4107. I am next door. I keep odd hours; forgive the music.'],
               ['The commissary noodles are the only honest thing on this level.', 'The deck at the south end. Go at night. The city looks like it forgives you.'],
               ['Ohm says the warden is checking permits again. Keep yours on you.', 'Sleep. You look like the corridor.']],
       deep: [['I used to live on 90. I am not going to tell you why I am on 41. You would not believe the reason and the truth is worse.', 'It was the quiet. There is no quiet on 90.'], ['The tree on the roof. Tam thinks it climbed. I think somebody carried it, one floor a year, and died before it was done.', 'Somebody should finish the job.']],
       idle: ['Mind the drip.', 'Odd hours, forgive me.', 'The broth is honest.', 'You look like the corridor.'],
-      sched: [{ from: 7*60, to: 9*60, wp: [[19.5, 11.5], [16.5, 10.5], [13.5, 10.5], [13.5, 24.5], [13.5, 10.5], [16.5, 10.5], [19.5, 11.5]] }, { from: 18*60, to: 22*60, wp: [[19.5, 11.5], [21.5, 10.5], [18.5, 9.5], [19.5, 11.5]] }] });
-    // The commissary: a counter, stools, a shop terminal and a neon sign. Ohm runs it.
-    room('Commissary', 16, 16, 9, 8, FL.terrazzo, WM.shutter, { light: 0.55, lightCol: '#e9d8c5' });
-    door('W', 16, 18); door('W', 16, 19); deco('N', 19, 16, 'neon', { text: 'NOODLE', ink: 'pink' }); deco('N', 22, 16, 'menu'); deco('W', 25, 18, 'window'); deco('W', 25, 19, 'window'); deco('W', 25, 20, 'window'); deco('N', 17, 16, 'vent');
-    obj('noodle', 20, 17, { w: 3, h: 1, use: { verb: 'Eat', what: 'a bowl from Ohm · 12', kind: 'eat', cost: 12, hot: 1, reach: 2.5 } });
-    obj('stool', 20, 18); obj('stool', 21, 18); obj('stool', 22, 18); obj('table', 18, 21); obj('stool', 17, 21); obj('stool', 19, 21); obj('table', 22, 21); obj('stool', 23, 21); obj('stool', 21, 21);
-    obj('vend', 24, 22, { use: { verb: 'Buy', what: 'a can of something · 4', kind: 'eat', cost: 4, small: 1 }, light: '#6fb3ab' });
-    obj('shopterm', 17, 22, { use: { verb: 'Browse', what: 'the commissary catalogue', kind: 'shop' }, light: '#8a8fc9' });
-    obj('bin', 24, 17); obj('plant', 16, 23); obj('crate', 24, 20, { use: { verb: 'Buy', what: 'stock for the cold box · 15', kind: 'stock' } });
-    light(20.5, 16.6, '#c96a8e', 150, { neon: 1 }); light(24.5, 19, '#7e9cc4', 130, { win: 1 });
-    npc('ohm', 'Ohm', { coat: '#241119', trim: '#c96a8e', hair: '#5c434a', apron: 1 }, 21, 16, { fixed: 1, vendor: 1, face: 1, reach: 2.4,
+      sched: [{ from: 7*60, to: 9*60, wp: [[19.5, 11.5], [16.5, 10.5], [13.5, 10.5], [13.5, 24.5], [16.5, 18.5], [18.5, 19.5], [16.5, 18.5], [13.5, 24.5], [13.5, 10.5], [16.5, 10.5], [19.5, 11.5]] },
+              { from: 18*60, to: 22*60, wp: [[19.5, 11.5], [16.5, 10.5], [13.5, 27.5], [15.5, 30.5], [22.5, 27.5], [15.5, 30.5], [13.5, 27.5], [13.5, 10.5], [16.5, 10.5], [19.5, 11.5]] }] });
+
+    npc('ohm', 'Ohm', { coat: '#241119', trim: '#c96a8e', hair: '#5c434a', apron: 1 }, 21, 16, { fixed: 1, face: 1, reach: 2.4,
       lines: [['Sit. The broth has been on since the shift change; it knows things.', 'Twelve credits. Or tell me something about 4107 I do not know, and eight.'],
               ['The warden came through with a scanner. I gave him a bowl and he forgot what he was scanning.', 'Vesna talks about you. Not badly.'],
               ['Rain again on the deck. The planters like it. Nobody else does.', 'Eat before your shift. Working hungry is how the tower gets you.']],
       deep: [['I fed the whole level for a week once, when the lift was out for a month. Nobody paid. Nobody asked me to.', 'It is the only week I remember properly.'], ['You cook now. I can smell it on you. Good. A tower with one cook is a tower with a problem.', 'Stock is fifteen. For you, still fifteen. I am not a charity, I am a counter.']],
       idle: ['Broth is on.', 'Sit. Eat.', 'Twelve credits.', 'The Warden ate. He forgot to scan.'] });
-    // Laundry alcove and the lift lobby on the spine.
-    room('Laundry', 16, 26, 4, 3, FL.tile, WM.tile, { light: 0.5, lightCol: '#c3d9e0' });
-    door('W', 16, 27); obj('washer', 18, 26, { use: { verb: 'Wash', what: 'the coat · 30 min', kind: 'laundry' } }); obj('washer', 19, 26); obj('bin', 16, 28); deco('N', 17, 26, 'pipes');
-    room('Lift', 10, 20, 2, 2, FL.metal, WM.panel, { light: 0.7, lightCol: '#d9a441' });
-    wallW[T(12, 20)] = 0; wallW[T(12, 21)] = 0; decoW[T(12, 20)] = { kind: 'lift', mat: WM.panel, open: 0 }; decoW[T(12, 21)] = { kind: 'lift', mat: WM.panel, open: 0 };
-    obj('liftcall', 10, 20, { w: 2, h: 2, walk: 1, use: { verb: 'Ride', what: 'the lift', kind: 'lift', reach: 0.35 } });
-    deco('W', 16, 30, 'poster', { ink: 'violet' }); deco('W', 12, 14, 'pipes'); deco('W', 12, 24, 'poster', { ink: 'gold' }); deco('W', 16, 13, 'vent'); deco('W', 12, 8, 'panelscreen');
-    obj('bench', 12, 16, { w: 1, h: 2, f: 3, use: { verb: 'Sit', what: 'and watch the corridor', kind: 'rest', short: 1 } }); obj('plant', 15, 6); obj('bin', 12, 30); obj('plant', 15, 31);
-    light(13.8, 9, '#e9d8c5', 120, { ceil: 1 }); light(13.8, 16, '#e9d8c5', 120, { ceil: 1 }); light(13.8, 23, '#e9d8c5', 120, { ceil: 1 }); light(13.8, 30, '#e9d8c5', 120, { ceil: 1 }); light(12.4, 20.9, '#d9a441', 90, { lift: 1 });
-    // The south deck: open to the rain, railings over the drop, the transit gate and a billboard.
-    room('South deck', 8, 32, 14, 6, FL.wet, WM.rail, { open: 1, south: WM.rail, east: WM.rail });
-    wallN[T(12, 32)] = 0; wallN[T(13, 32)] = 0; wallN[T(14, 32)] = 0; wallN[T(15, 32)] = 0;
-    for (var i = 8; i < 12; i++) wallN[T(i, 32)] = WM.panel; for (i = 16; i < 22; i++) wallN[T(i, 32)] = WM.panel;
-    deco('N', 9, 32, 'billboard'); deco('N', 17, 32, 'neon', { text: 'TRANSIT', ink: 'teal' }); deco('N', 20, 32, 'poster', { ink: 'rose' });
-    obj('gate', 18, 33, { w: 2, h: 1, use: { verb: 'Ride', what: 'the rail to work · 8h', kind: 'commute' }, light: '#6fb3ab' });
-    obj('bench', 9, 35, { w: 2, h: 1, use: { verb: 'Sit', what: 'over the city', kind: 'rest', short: 1, view: 1 } }); obj('bench', 14, 35, { w: 2, h: 1, use: { verb: 'Sit', what: 'over the city', kind: 'rest', short: 1, view: 1 } });
-    obj('lamppost', 12, 34, { light: '#d9a441', tall: 1 }); obj('vent', 11, 36, { walk: 1 }); obj('lamppost', 17, 36, { light: '#d9a441', tall: 1 }); obj('bin', 8, 37); obj('planter', 20, 35, { w: 1, h: 2 });
-    light(10.5, 32.8, '#8a8fc9', 170, { screen: 1 }); light(18, 32.8, '#6fb3ab', 120, { neon: 1 });
+
     npc('warden', 'The Warden', { coat: '#1a2330', trim: '#8a8fc9', hair: '#0b0609', cap: 1 }, 13, 34, {
       lines: [['Permit.', 'Fine. Keep off the rail; the wind takes people and the paperwork takes me.'], ['The rail is running. It is always running. That is the one thing that is.', 'Go home. It is not a good hour for anything but going home.']],
       deep: [['Twenty years on this deck. I have seen four people go over. Two jumped. Two were pushed by the wind. I write the same form for both.', 'Keep off the rail. I mean that as a kindness.'], ['I had a flat on 41 once. 4107, as it happens.', 'Keep the window shut in the small hours. That is all I will say about it.']],
       idle: ['Permit.', 'Off the rail.', 'Rail is running.', 'Not a good hour.'],
-      sched: [{ from: 0, to: 24*60, wp: [[13.5, 34.5], [10.5, 34.5], [10.5, 36.5], [19.5, 36.5], [19.5, 34.5], [13.5, 34.5]] }], wait: 40 });
-    // The roof garden at the north end: planters, a tree that should not be alive up here, a shrine of sorts.
-    room('Roof garden', 9, 1, 10, 5, FL.deck, WM.rail, { open: 1 });
-    wallN[T(12, 6)] = 0; wallN[T(13, 6)] = 0; wallN[T(14, 6)] = 0; wallN[T(15, 6)] = 0;
-    for (i = 9; i < 12; i++) wallN[T(i, 6)] = WM.brick; for (i = 16; i < 19; i++) wallN[T(i, 6)] = WM.brick;
-    obj('planter', 9, 1, { w: 3, h: 1, soil: 1 }); obj('planter', 16, 1, { w: 3, h: 1, soil: 1 }); obj('tree', 13, 2, { w: 2, h: 2 });
-    obj('bench', 10, 3, { w: 2, h: 1, use: { verb: 'Sit', what: 'under the tree', kind: 'rest', short: 1, view: 1 } }); obj('shrine', 17, 4, { use: { verb: 'Tend', what: 'the lights someone left', kind: 'shrine' }, light: '#d9a441' });
-    obj('lamppost', 10, 5, { light: '#d9a441', tall: 1 }); obj('lamppost', 17, 5, { light: '#d9a441', tall: 1 });
+      sched: [{ from: 0, to: 24*60, wp: [[13.5, 34.5], [10.5, 34.5], [10.5, 36.5], [19.5, 36.5], [19.5, 34.5], [13.5, 33.5], [13.5, 30.5], [18.5, 30.5], [13.5, 30.5], [13.5, 33.5], [13.5, 34.5]] }], wait: 40, pause: 26 });
+
     npc('kid', 'Tam', { coat: '#2a1a3a', trim: '#a884c9', hair: '#0b0609', hood: 1, small: 1 }, 15, 3, {
       lines: [['The tree is older than the tower. My mother says they built around it. I say it climbed.', 'If you stand right here the rain misses you. Right here. No, here.'], ['I saw a bird once. Not a drone. A bird.', 'Do you have credits? Not for me. For the shrine. It likes them.']],
       deep: [['The Warden pretends he does not know me. He knew my mother. He wrote her form.', 'I put a light on the shrine for her. You can too, if you want. It counts.'], ['When I am tall I am going to carry the tree up one more floor. Vesna says somebody has to.', 'You can help. You are already tall.']],
       idle: ['The bird was real.', 'Stand here. The rain misses.', 'It climbed.', 'The shrine likes credits.'],
-      sched: [{ from: 6*60, to: 20*60, wp: [[15.5, 3.5], [12.5, 4.5], [16.5, 2.5], [15.5, 3.5]] }], wait: 90 });
-    // Where you start: the corridor outside your door.
+      sched: [{ from: 6*60, to: 20*60, wp: [[15.5, 3.5], [12.5, 4.5], [19.5, 4.5], [13.5, 7.5], [12.5, 2.5], [15.5, 3.5]] }], wait: 90, pause: 50 });
+
+    npc('fen', 'Fen', { coat: '#243028', trim: '#6fb3ab', hair: '#5c434a', cap: 1 }, 6, 21, { spd: 2.2,
+      lines: [['4103. The one past the lift, so I hear the lift all night. You get used to the cable and never to the doors.', 'If it stops with you in it, do not press anything. Sit down. I will come.'],
+              ['The plant room keeps this floor at nineteen degrees whatever the tower says. That is me. Nobody knows that is me.', 'Your flat runs cold on the west wall. I will look at it. Not today.'],
+              ['They put the refuse room next to the noodle counter. Forty-one floors of engineering and nobody walked it once.', 'Ohm has never said a word about it. That is either manners or a blocked nose.']],
+      deep: [['I was on the lift crew for the whole shaft. Ninety floors of the same eight sounds. You learn where a tower is lying to you.', 'This one lies about the water. Never the wind.'], ['I keep the stair lights burning because one night the lift will not come and somebody will be carrying a child.', 'That is the whole of my religion.']],
+      idle: ['Cable is singing.', 'Nineteen degrees.', 'Do not press anything.', 'Stairs are lit.'],
+      sched: [{ from: 8*60, to: 18*60, wp: [[6.5, 21.5], [10.5, 18.5], [13.5, 19.5], [13.5, 30.5], [10.5, 31.5], [13.5, 30.5], [13.5, 26.5], [9.5, 26.5], [13.5, 26.5], [13.5, 19.5], [10.5, 18.5], [6.5, 21.5]] },
+              { from: 18*60, to: 22*60, wp: [[6.5, 21.5], [10.5, 18.5], [13.5, 18.5], [16.5, 18.5], [21.5, 19.5], [16.5, 18.5], [13.5, 18.5], [10.5, 18.5], [6.5, 21.5]] }] });
+
+    npc('nessa', 'Nessa', { coat: '#3a3238', trim: '#d9a441', hair: '#0b0609', bag: 1 }, 26, 21, { spd: 2.35, pause: 8,
+      lines: [['Porter. Forty-one is mine, corner to corner, and I walk all of it twice a shift.', 'If a door is shut it is shut for a reason. If it is open, that is also a reason.'],
+              ['You came the long way round, past the shrine. Everyone does once. Then never again.', 'It is shorter through the service run behind the counter. Do not tell Ohm I told you.'],
+              ['4113 is empty. Has been empty. They keep the light on so the corridor does not feel like a corridor.', 'Do not get ideas. The tower counts its empty rooms.']],
+      deep: [['I have carried out the things of eleven people who stopped answering their doors. Eleven, on this floor, in six years.', 'I put a light on the alcove shrine for each. Nobody asked me to and nobody has ever noticed.'], ['The circuit takes nineteen minutes if nobody talks to me. You have cost me four.', 'Cost me four again tomorrow.']],
+      idle: ['Corner to corner.', 'Mind your feet.', 'Shut for a reason.', 'Nineteen minutes.'],
+      sched: [{ from: 0, to: 24*60, wp: [[26.5, 21.5], [26.5, 28.5], [20.5, 30.5], [30.5, 30.5], [35.5, 30.5], [45.5, 30.5], [51.5, 30.5], [51.5, 16.5], [51.5, 13.5], [44.5, 10.5], [39.5, 10.5], [35.5, 12.5], [35.5, 22.5], [35.5, 28.5], [30.5, 30.5], [20.5, 30.5], [15.5, 30.5], [13.5, 25.5], [13.5, 17.5], [13.5, 25.5], [15.5, 30.5], [26.5, 28.5], [26.5, 21.5]] }] });
+
+    npc('doro', 'Old Doro', { coat: '#3a2a3a', trim: '#a884c9', hair: '#c3a9ad', scarf: 1 }, 46, 20, { spd: 1.7, pause: 40,
+      lines: [['4121. The far side. You have walked a long way to stand in my doorway, so it is something, or you are lost.', 'Lost, then. Sit in the alcove. The bench knows the way back.'],
+              ['I hang the washing out on the deck even in this. It comes in wetter and smelling of the city, and I do it anyway.', 'My mother did it on a balcony with actual weather. I am keeping something going.'],
+              ['They were going to put a second counter on this side. Twenty years of they were going to.', 'So we sit in the tenants’ room with the screen on and pretend it is a place.']],
+      deep: [['I have been on 41 longer than the Warden has been on the deck. I remember the lift going in.', 'I remember the tree arriving. One man, one floor a year. I told him he was mad. He agreed with me.'], ['When my hands go I will not be able to do the line, and the deck will be empty, and that is how a floor dies.', 'So come and hang something. Anything. It does not have to be yours.']],
+      idle: ['Long way to walk.', 'It comes in wetter.', 'Sit, then.', 'Twenty years of going to.'],
+      sched: [{ from: 9*60, to: 17*60, wp: [[46.5, 20.5], [51.5, 20.5], [51.5, 30.5], [45.5, 30.5], [44.5, 33.5], [40.5, 35.5], [44.5, 33.5], [45.5, 30.5], [51.5, 30.5], [51.5, 20.5], [46.5, 20.5]] },
+              { from: 17*60, to: 23*60, wp: [[46.5, 20.5], [51.5, 20.5], [51.5, 13.5], [44.5, 10.5], [39.5, 10.5], [35.5, 12.5], [35.5, 15.5], [41.5, 16.5], [35.5, 15.5], [35.5, 12.5], [39.5, 10.5], [44.5, 10.5], [51.5, 13.5], [51.5, 20.5], [46.5, 20.5]] }] });
+
+    /* Where you start: the corridor outside your door. */
     meta.px = meta.px || 13.5; meta.py = meta.py || 10.5;
   }
   /* ---- the ground: a lobby, a bar, and the plaza in the rain ---- */
   function buildLobby() {
-    room('Lobby', 8, 8, 16, 12, FL.terrazzo, WM.panel, { light: 0.75, lightCol: '#e9d8c5' });
-    room('The Sump', 2, 10, 6, 8, FL.carpet, WM.brick, { light: 0.35, lightCol: '#c96a8e' }); door('W', 8, 13); door('W', 8, 14);
-    room('Lift', 24, 12, 2, 2, FL.metal, WM.panel, { light: 0.7, lightCol: '#d9a441' }); wallW[T(24, 12)] = 0; wallW[T(24, 13)] = 0; decoW[T(24, 12)] = { kind: 'lift', mat: WM.panel, open: 0 }; decoW[T(24, 13)] = { kind: 'lift', mat: WM.panel, open: 0 };
-    obj('liftcall', 24, 12, { w: 2, h: 2, walk: 1, use: { verb: 'Ride', what: 'the lift', kind: 'lift', reach: 0.35 } });
-    // Grade. No railing anywhere out here — a railing is the signal that there
-    // is a drop beyond it, and beyond this there is a street. Nothing tall goes
-    // south or east of where you walk: that is between you and the camera.
-    room('Plaza', 4, 20, 24, 6, FL.wet, 0, { open: 1 });
-    room('Kerb', 2, 26, 28, 2, FL.paving, 0, { open: 1 });
-    room('Ash Street', 0, 28, 34, 4, FL.asphalt, 0, { open: 1 });
-    room('Far kerb', 0, 32, 34, 3, FL.paving, 0, { open: 1 });
-    light(15.5, 20.6, '#e9d8c5', 260, { screen: 1 }); light(16, 26, '#7e9cc4', 420, { win: 1 });
-    for (var i = 8; i < 24; i++) wallN[T(i, 20)] = WM.panel; for (i = 24; i < 28; i++) wallN[T(i, 20)] = WM.panel; door('N', 15, 20); door('N', 16, 20);
-    deco('N', 12, 8, 'billboard'); deco('N', 18, 8, 'screen'); deco('N', 21, 8, 'panelscreen'); deco('W', 8, 9, 'poster', { ink: 'teal' }); deco('W', 8, 17, 'pipes'); deco('N', 10, 20, 'billboard'); deco('N', 24, 20, 'neon', { text: 'TRANSIT', ink: 'teal' }); deco('N', 20, 20, 'poster', { ink: 'gold' }); deco('N', 8, 20, 'vent');
-    obj('desk2', 10, 10, { w: 3, h: 1 }); obj('jobterm', 20, 9, { use: { verb: 'Browse', what: 'the job board', kind: 'jobs' }, light: '#6fb3ab' });
-    obj('pillar', 12, 15); obj('pillar', 19, 15); obj('bench', 14, 17, { w: 2, h: 1, use: { verb: 'Sit', what: 'and watch the doors', kind: 'rest', short: 1 } }); obj('bench', 17, 17, { w: 2, h: 1, use: { verb: 'Sit', what: 'and watch the doors', kind: 'rest', short: 1 } });
-    obj('plant', 9, 19); obj('plant', 22, 19); obj('bin', 23, 9); obj('stall', 21, 17, { w: 2, h: 1, use: { verb: 'Browse', what: 'the coat rail', kind: 'wear' }, light: '#c96a8e' });
-    light(16, 10, '#e9d8c5', 200, { ceil: 1 }); light(16, 16, '#e9d8c5', 200, { ceil: 1 }); light(20.5, 9.6, '#6fb3ab', 90, { screen: 1 }); light(24.4, 12.9, '#d9a441', 90, { lift: 1 });
-    npc('mira', 'Mira', { coat: '#1a2330', trim: '#e9d8c5', hair: '#3d1f28', shirt: '#e9d8c5' }, 11, 9, { fixed: 1, face: 1, reach: 2.2,
+    var i;
+    /* The tower at grade. Everything north of y=22 is inside the podium and is
+       culled while the core slab is up, so nothing that belongs to the street
+       may live up there. The podium's street face is the single wallN run
+       along y=22; the plaza, the parade, the road and the square hang south of
+       it, and nothing taller than a lamp stands between you and the camera. */
+    room('Lobby', 20, 8, 18, 14, FL.terrazzo, WM.panel, { light: 0.75, lightCol: '#e9d8c5' });
+    room('The Sump', 12, 11, 8, 11, FL.carpet, WM.brick, { light: 0.35, lightCol: '#c96a8e' });
+    door('W', 20, 15); door('W', 20, 16);
+    room('Lift', 38, 14, 2, 2, FL.metal, WM.panel, { light: 0.7, lightCol: '#d9a441' });
+    wallW[T(38, 14)] = 0; wallW[T(38, 15)] = 0;
+    decoW[T(38, 14)] = { kind: 'lift', mat: WM.panel, open: 0 }; decoW[T(38, 15)] = { kind: 'lift', mat: WM.panel, open: 0 };
+    obj('liftcall', 38, 14, { w: 2, h: 2, walk: 1, use: { verb: 'Ride', what: 'the lift', kind: 'lift', reach: 0.35 } });
+    // The podium face: one continuous run across the whole block, with the two
+    // lobby doors and the Sump's own street door punched out of it.
+    for (i = 12; i < 46; i++) wallN[T(i, 22)] = WM.panel;
+    door('N', 28, 22); door('N', 29, 22); door('N', 15, 22);
+    deco('N', 12, 22, 'pipes'); deco('N', 13, 22, 'neon', { text: 'SUMP', ink: 'pink' }); deco('N', 17, 22, 'window'); deco('N', 18, 22, 'window');
+    deco('N', 22, 22, 'billboard'); deco('N', 26, 22, 'poster', { ink: 'gold' }); deco('N', 31, 22, 'screen'); deco('N', 34, 22, 'panelscreen');
+    deco('N', 40, 22, 'neon', { text: 'TRANSIT', ink: 'teal' }); deco('N', 43, 22, 'vent'); deco('N', 45, 22, 'poster', { ink: 'violet' });
+    light(13.5, 22.8, '#c96a8e', 130, { neon: 1 }); light(22.5, 22.8, '#8a8fc9', 190, { screen: 1 }); light(31.5, 22.8, '#8a8fc9', 160, { screen: 1 }); light(40.5, 22.8, '#6fb3ab', 130, { neon: 1 });
+    // The ground plates of the street, laid before anything stands on them.
+    room('Ash Row', 0, 28, 64, 4, FL.paving, 0, { open: 1 });
+    room('Ash Street', 0, 32, 64, 6, FL.asphalt, 0, { open: 1 });
+    room('Far kerb', 0, 38, 64, 3, FL.paving, 0, { open: 1 });
+    /* ---- the lobby: Mira's desk, the board, the pillars, the coat rail ---- */
+    deco('N', 24, 8, 'billboard'); deco('N', 30, 8, 'screen'); deco('N', 33, 8, 'panelscreen');
+    deco('W', 20, 9, 'poster', { ink: 'teal' }); deco('W', 20, 20, 'pipes'); deco('W', 38, 10, 'shelf'); deco('W', 38, 19, 'vent');
+    obj('desk2', 23, 10, { w: 3, h: 1 }); obj('jobterm', 32, 10, { use: { verb: 'Browse', what: 'the job board', kind: 'jobs' }, light: '#6fb3ab' });
+    obj('pillar', 23, 15); obj('pillar', 34, 15); obj('pillar', 23, 19); obj('pillar', 34, 19);
+    obj('bench', 27, 18, { w: 2, h: 1, use: { verb: 'Sit', what: 'and watch the doors', kind: 'rest', short: 1 } });
+    obj('bench', 30, 18, { w: 2, h: 1, use: { verb: 'Sit', what: 'and watch the doors', kind: 'rest', short: 1 } });
+    obj('stall', 34, 12, { w: 2, h: 1, use: { verb: 'Browse', what: 'the coat rail', kind: 'wear' }, light: '#c96a8e' });
+    obj('vend', 21, 12, { use: { verb: 'Buy', what: 'a can of something · 4', kind: 'eat', cost: 4, small: 1 }, light: '#8a8fc9' });
+    obj('plant', 21, 20); obj('plant', 36, 20); obj('bin', 36, 9);
+    light(29, 12, '#e9d8c5', 210, { ceil: 1 }); light(29, 18, '#e9d8c5', 210, { ceil: 1 }); light(32.5, 10.6, '#6fb3ab', 90, { screen: 1 }); light(38.4, 14.9, '#d9a441', 90, { lift: 1 });
+    npc('mira', 'Mira', { coat: '#1a2330', trim: '#e9d8c5', hair: '#3d1f28', shirt: '#e9d8c5' }, 24, 9, { fixed: 1, face: 1, reach: 2.2,
       lines: [['Forty-one? Then you are one of mine. Everything above thirty goes through this desk.', 'Parcels, permits, complaints. Mostly parcels.'], ['The board takes couriers. It always takes couriers. Nobody stays a courier.', 'Take one. See the building. Come back with the receipt and I will remember your name.']],
       deep: [['I have run this desk for eleven years. I know which lift sticks and which tenants lie.', 'You do not lie. Not well, anyway.']], idle: ['Name and level.', 'Parcels for 41.', 'The board is behind you.'] });
-    obj('bar', 3, 11, { w: 3, h: 1, use: { verb: 'Drink', what: 'something warm from Sol · 6', kind: 'drink', cost: 6, reach: 2.4 } }); obj('stool', 3, 12); obj('stool', 4, 12); obj('stool', 5, 12); obj('table', 3, 15); obj('stool', 2, 15); obj('stool', 4, 15); obj('table', 6, 15); obj('stool', 7, 15);
-    deco('N', 3, 10, 'shelf'); deco('N', 5, 10, 'neon', { text: 'SUMP', ink: 'pink' }); deco('N', 6, 10, 'shelf'); deco('W', 2, 12, 'poster', { ink: 'violet' }); light(4.5, 10.6, '#c96a8e', 130, { neon: 1 });
-    npc('sol', 'Sol', { coat: '#241119', trim: '#c96a8e', hair: '#0b0609', apron: 1 }, 4, 10, { fixed: 1, vendor: 1, face: 1, reach: 2.4,
+    /* ---- the Sump, under the podium, with a street door of its own ---- */
+    obj('bar', 13, 13, { w: 3, h: 1, use: { verb: 'Drink', what: 'something warm from Sol · 6', kind: 'drink', cost: 6, reach: 2.4 } });
+    obj('stool', 13, 14); obj('stool', 14, 14); obj('stool', 15, 14);
+    obj('table', 13, 17); obj('stool', 12, 17); obj('stool', 14, 17);
+    obj('table', 17, 17); obj('stool', 16, 17); obj('stool', 18, 17);
+    obj('table', 14, 20); obj('stool', 13, 20); obj('stool', 15, 20);
+    obj('bin', 18, 12); obj('plant', 12, 21);
+    deco('N', 13, 11, 'shelf'); deco('N', 15, 11, 'neon', { text: 'SUMP', ink: 'pink' }); deco('N', 17, 11, 'shelf');
+    deco('W', 12, 15, 'poster', { ink: 'violet' }); deco('W', 12, 18, 'pipes');
+    light(15.5, 11.6, '#c96a8e', 130, { neon: 1 });
+    npc('sol', 'Sol', { coat: '#241119', trim: '#c96a8e', hair: '#0b0609', apron: 1 }, 14, 12, { fixed: 1, face: 1, reach: 2.4,
       lines: [['Warm, or strong, or both. Both is nine.', 'Nobody comes to the Sump because it is nice. They come because it is down here.'], ['The rail workers drink at six. The night watch at seven. You drink whenever, which tells me something.', 'It tells me you are new.']],
       deep: [['I poured for the man who built the roof garden. He drank here every night for a year and then he stopped coming.', 'The tree is his. Tam is his. Nobody tells her.']], idle: ['Warm or strong?', 'Nine for both.', 'Sit anywhere.'] });
-    obj('cart', 13, 24, { w: 2, h: 1, use: { verb: 'Eat', what: 'from the cart · 6', kind: 'eat', cost: 6, hot: 1, reach: 1.8 }, light: '#d9a441' });
-    obj('bench', 8, 27, { w: 2, h: 1, use: { verb: 'Sit', what: 'in the rain', kind: 'rest', short: 1, view: 1 } }); obj('bench', 20, 27, { w: 2, h: 1, use: { verb: 'Sit', what: 'in the rain', kind: 'rest', short: 1, view: 1 } });
-    obj('lamppost', 10, 24, { light: '#d9a441', tall: 1 }); obj('lamppost', 18, 27, { light: '#d9a441', tall: 1 }); obj('lamppost', 24, 25, { light: '#d9a441', tall: 1 });
-    obj('vent', 12, 27, { walk: 1 }); obj('bin', 26, 27); obj('planter', 4, 22, { w: 1, h: 3 }); obj('planter', 26, 21, { w: 1, h: 2 });
-    obj('bollard', 5, 27); obj('bollard', 9, 27); obj('bollard', 13, 27); obj('bollard', 22, 27); obj('bollard', 27, 27);
-    obj('crossing', 15, 28, { w: 2, h: 4, walk: 1 });
-    obj('bench', 4, 33, { w: 2, h: 1, use: { verb: 'Sit', what: 'across the road', kind: 'rest', short: 1, view: 1 } });
-    obj('bench', 27, 33, { w: 2, h: 1, use: { verb: 'Sit', what: 'across the road', kind: 'rest', short: 1, view: 1 } });
-    obj('shelter', 10, 32, { w: 3, h: 2 }); obj('kiosk', 20, 32, { w: 2, h: 2, light: '#d9a441', use: { verb: 'Eat', what: 'a bowl from the kiosk \u00b7 5', kind: 'eat', cost: 5, hot: 1, reach: 1.9 } });
-    obj('hydrant', 7, 32); obj('hydrant', 25, 32); obj('bin', 14, 32); obj('bin', 23, 27);
-    obj('trafficlight', 16, 32, { tall: 1, light: '#5fa777' }); obj('trafficlight', 15, 27, { tall: 1, light: '#ff5470' });
-    obj('lamppost', 6, 33, { light: '#d9a441', tall: 1 }); obj('lamppost', 17, 33, { light: '#d9a441', tall: 1 }); obj('lamppost', 29, 33, { light: '#d9a441', tall: 1 });
-    obj('planter', 12, 26, { w: 2, h: 1 }); obj('planter', 19, 26, { w: 2, h: 1 });
-    light(20.5, 32.8, '#d9a441', 120, { neon: 1 }); light(10.5, 32.6, '#8a8fc9', 100, { screen: 1 });
-    obj('gate', 25, 22, { w: 2, h: 1, use: { verb: 'Ride', what: 'the rail to work · 8h', kind: 'commute' }, light: '#6fb3ab' });
-    light(26, 22.8, '#6fb3ab', 120, { neon: 1 }); light(11, 20.8, '#8a8fc9', 170, { screen: 1 });
-    npc('w1', 'A commuter', { coat: '#2a2a30', trim: '#8f6f76', hair: '#0b0609', bag: 1 }, 16, 25, { spd: 2.3, wait: 2, pause: 4,
+
+    /* ---- the parade, west of the podium ----
+       Open-fronted units. Their shopfront is the wallN run along y=28 — the
+       only side of a block this projection ever shows — and they stay outdoor
+       rooms so the tower slab never blinks off when you step under an awning. */
+    room('Halcyon Wash', 0, 22, 5, 6, FL.tile, WM.tile, { open: 1, light: 0.5, lightCol: '#c3d9e0' });
+    door('N', 2, 28); deco('N', 0, 28, 'window'); deco('N', 1, 28, 'neon', { text: 'WASH', ink: 'teal' }); deco('N', 3, 28, 'window'); deco('N', 4, 28, 'window'); deco('N', 2, 22, 'pipes');
+    obj('washer', 0, 22, { use: { verb: 'Wash', what: 'the coat · 30 min', kind: 'laundry' } }); obj('washer', 1, 22); obj('washer', 2, 22); obj('washer', 3, 22);
+    obj('bench', 4, 24, { w: 1, h: 2, f: 3, use: { verb: 'Sit', what: 'while it spins', kind: 'rest', short: 1 } }); obj('bin', 0, 26);
+    obj('awning', 0, 28, { w: 5, h: 1, walk: 1, ink: 'blood' });
+    light(2.5, 25, '#c3d9e0', 150); light(1.5, 27.7, '#6fb3ab', 110, { neon: 1 });
+    npc('tace', 'Tace', { coat: '#2a2a30', trim: '#6fb3ab', hair: '#c3a9ad', apron: 1 }, 2, 25, { spd: 1.7, wait: 8, pause: 30,
+      idle: ['Machines eat coins.', 'Dry by nine.', 'Rain again.'],
+      lines: [['Six machines, four of them honest. The two by the door take your coin and give you a wet coat back.', 'Use the far one. Tell nobody.'], ['You live up the tower. I can tell. Tower coats smell of the lift.', 'Down here we smell of the street. It is the better smell.']],
+      deep: [['I opened this place the year they put the rail in. Forty years of other people’s clothes.', 'You learn a street from its laundry. I know who on this road is sleeping badly.']],
+      sched: [{ from: 6*60, to: 23*60, wp: [[2.5, 25.5], [2.5, 27.5], [2.5, 29.5], [12.5, 29.5], [24.5, 26.5], [12.5, 29.5], [2.5, 29.5], [2.5, 25.5]] }] });
+    room('Ward Six', 5, 22, 4, 6, FL.lino, WM.plaster, { open: 1, light: 0.55, lightCol: '#7e9cc4' });
+    door('N', 6, 28); deco('N', 5, 28, 'window'); deco('N', 7, 28, 'window'); deco('N', 8, 28, 'screen'); deco('N', 6, 22, 'vent');
+    obj('sink', 5, 22, { use: { verb: 'Wash', what: 'hands and face', kind: 'sink' } }); obj('counter', 6, 22);
+    obj('bench', 8, 24, { w: 1, h: 2, f: 3, use: { verb: 'Sit', what: 'and wait to be called', kind: 'rest', short: 1 } });
+    obj('shopterm', 5, 26, { use: { verb: 'Browse', what: 'the ward dispensary', kind: 'shop' }, light: '#7e9cc4' });
+    obj('sign', 8, 30, { ink: 'moon', sign: 'CLINIC', light: '#7e9cc4' }); obj('awning', 5, 28, { w: 4, h: 1, walk: 1, ink: 'blood' });
+    light(6.5, 25, '#7e9cc4', 150); light(8.5, 27.7, '#8a8fc9', 100, { screen: 1 });
+    npc('hale', 'Hale', { coat: '#1e3a3a', trim: '#c3d9e0', hair: '#0b0609', shirt: '#e9d8c5' }, 6, 25, { spd: 1.9, wait: 5, pause: 16,
+      idle: ['Ten minutes.', 'Sit if you are waiting.', 'It is only rain.'],
+      lines: [['Ward Six. Two beds, one machine and me. You are not bleeding, so you can wait like everybody else.', 'Sit. The bench is dry, which is more than the street is.'], ['The tower sends us its falls and its coughs. The street sends us its hands. You can name a level by the injury.', 'Forty-one is coughs. Keep the window shut.']],
+      deep: [['I trained for a hospital on ninety. They took the hospital away and left the ward.', 'I stayed. Somebody has to be the one who stayed.']],
+      sched: [{ from: 0, to: 1440, wp: [[6.5, 25.5], [6.5, 27.5], [6.5, 29.5], [6.5, 30.5], [6.5, 29.5], [6.5, 27.5], [6.5, 25.5]] }] });
+    /* Cinder Lane: the service slot between the ward and the podium. Its east
+       wall belongs to the lane, so it drops to a stub when you step in; its
+       west wall belongs to the ward and stands behind you. The fire door is
+       drawn on that west flank and opens east, into the lane. */
+    room('Cinder Lane', 9, 22, 3, 6, FL.gravel, WM.brick, { open: 1 });
+    wallN[T(9, 28)] = 0; wallN[T(10, 28)] = 0; wallN[T(11, 28)] = 0;
+    obj('firedoor', 9, 24, { h: 2 }); obj('dumpster', 10, 22, { w: 2, h: 1 }); obj('waterbutt', 11, 24); obj('crates', 11, 25);
+    obj('washline', 9, 27, { w: 3, h: 1, walk: 1 }); obj('duct', 10, 26, { w: 2, h: 1, walk: 1 });
+    deco('W', 9, 23, 'poster', { ink: 'rose' }); deco('W', 9, 26, 'pipes'); deco('W', 12, 25, 'vent');
+    light(10.5, 24, '#d9a441', 80);
+
+    /* ---- the plaza: the podium forecourt, the cart and the rail gate ---- */
+    room('Tower plaza', 12, 22, 32, 6, FL.wet, 0, { open: 1 });
+    room('Marrow walk', 44, 22, 2, 6, FL.paving, 0, { open: 1 });
+    obj('gate', 40, 25, { w: 2, h: 1, use: { verb: 'Ride', what: 'the rail to work · 8h', kind: 'commute' }, light: '#6fb3ab' });
+    obj('cart', 24, 25, { w: 2, h: 1, use: { verb: 'Eat', what: 'from the cart · 6', kind: 'eat', cost: 6, hot: 1, reach: 1.8 }, light: '#d9a441' });
+    obj('bench', 18, 26, { w: 2, h: 1, use: { verb: 'Sit', what: 'in the rain', kind: 'rest', short: 1, view: 1 } });
+    obj('bench', 30, 26, { w: 2, h: 1, use: { verb: 'Sit', what: 'in the rain', kind: 'rest', short: 1, view: 1 } });
+    obj('bench', 35, 23, { w: 1, h: 2, f: 3, use: { verb: 'Sit', what: 'out of the wind', kind: 'rest', short: 1, view: 1 } });
+    obj('lamppost', 15, 25, { light: '#d9a441', tall: 1 }); obj('lamppost', 28, 24, { light: '#d9a441', tall: 1 }); obj('lamppost', 38, 27, { light: '#d9a441', tall: 1 });
+    obj('planter', 13, 23, { w: 1, h: 3 }); obj('planter', 21, 22, { w: 2, h: 1 }); obj('planter', 32, 27, { w: 2, h: 1 }); obj('planter', 43, 23, { w: 1, h: 3 });
+    obj('bin', 20, 27); obj('bin', 42, 26); obj('vent', 27, 27, { walk: 1 }); obj('plant', 44, 27);
+    light(41, 25.8, '#6fb3ab', 130, { neon: 1 }); light(24.9, 25.5, '#d9a441', 120);
+
+    /* ---- the parade, east of the podium ---- */
+    room('Marrow & Pell', 46, 22, 4, 6, FL.lino, WM.brick, { open: 1, light: 0.4, lightCol: '#d9a441' });
+    door('N', 48, 28); deco('N', 46, 28, 'window'); deco('N', 47, 28, 'neon', { text: 'PAWN', ink: 'gold' }); deco('N', 49, 28, 'window'); deco('N', 47, 22, 'shelf');
+    obj('shopterm', 46, 23, { use: { verb: 'Browse', what: 'what the street left behind', kind: 'shop' }, light: '#8a8fc9' });
+    obj('crates', 49, 22); obj('crate', 48, 22);
+    obj('deck', 49, 25, { use: { verb: 'Listen', what: 'to a record the shop never sold', kind: 'listen' }, light: '#d9557a' });
+    obj('awning', 46, 28, { w: 4, h: 1, walk: 1, ink: 'blood' }); obj('sign', 46, 30, { ink: 'gold', sign: 'PAWN', light: '#d9a441' });
+    light(47.5, 25, '#d9a441', 140); light(47.5, 27.7, '#d9a441', 110, { neon: 1 });
+    room('The Nephew', 50, 22, 4, 6, FL.concrete, WM.shutter, { open: 1, light: 0.5, lightCol: '#c96a8e' });
+    door('N', 51, 28); deco('N', 50, 28, 'neon', { text: 'NOODLE', ink: 'pink' }); deco('N', 52, 28, 'menu'); deco('N', 53, 28, 'window'); deco('N', 51, 22, 'vent');
+    obj('noodle', 50, 24, { w: 3, h: 1, use: { verb: 'Eat', what: 'a bowl from Bram · 7', kind: 'eat', cost: 7, hot: 1, reach: 2.5 } });
+    obj('stool', 50, 25); obj('stool', 51, 25); obj('stool', 52, 25);
+    obj('vend', 50, 22, { use: { verb: 'Buy', what: 'a can of something · 4', kind: 'eat', cost: 4, small: 1 }, light: '#6fb3ab' });
+    obj('crate', 53, 22, { use: { verb: 'Buy', what: 'stock for the cold box · 15', kind: 'stock' } }); obj('bin', 53, 27);
+    obj('awning', 50, 28, { w: 4, h: 1, walk: 1, ink: 'blood' });
+    light(51.5, 27.7, '#c96a8e', 130, { neon: 1 }); light(51.5, 24, '#d9a441', 120);
+    npc('bram', 'Bram', { coat: '#241119', trim: '#d9a441', hair: '#5c434a', apron: 1 }, 51, 23, { fixed: 1, face: 1, reach: 2.4,
+      idle: ['Seven. Always seven.', 'Broth is on.', 'Stand under the sheet.'],
+      lines: [['My uncle keeps the counter on forty-one. I have the pavement. Guess which of us is warm.', 'Seven credits. He charges twelve and calls it a tower price.'], ['You eat standing up down here. That is the whole difference between the street and the levels.', 'Stand. Eat. It is better hot and worse cold, like everything.']],
+      deep: [['Ohm sent me the starter for this broth in a flask, on the rail, eleven years ago. It has not been off the heat since.', 'If the power goes I lose the one continuous thing on this road. Do not let the power go.']] });
+    room('East walk', 54, 22, 10, 6, FL.paving, 0, { open: 1 });
+    obj('shopfront', 54, 22, { w: 6, h: 4, col: '#2c1c22', sign: 'TALLOW', ink: 'violet' });
+    obj('shopfront', 60, 22, { w: 4, h: 4, col: '#241119', sign: 'HOLLOWAY', ink: 'peri' });
+    obj('lamppost', 56, 27, { light: '#d9a441', tall: 1 }); obj('lamppost', 62, 27, { light: '#d9a441', tall: 1 });
+    obj('bin', 59, 27); obj('planter', 54, 27, { w: 1, h: 1 }); obj('bollard', 58, 27);
+
+    /* ---- the kerb, Ash Street, and what is parked on it ---- */
+    obj('kerb', 0, 31, { w: 6, h: 1, walk: 1 }); obj('kerb', 6, 31, { w: 6, h: 1, walk: 1 }); obj('kerb', 12, 31, { w: 6, h: 1, walk: 1 });
+    obj('kerb', 18, 31, { w: 6, h: 1, walk: 1 }); obj('kerb', 24, 31, { w: 3, h: 1, walk: 1 }); obj('kerb', 30, 31, { w: 6, h: 1, walk: 1 });
+    obj('kerb', 36, 31, { w: 6, h: 1, walk: 1 }); obj('kerb', 42, 31, { w: 6, h: 1, walk: 1 }); obj('kerb', 48, 31, { w: 6, h: 1, walk: 1 });
+    obj('kerb', 54, 31, { w: 6, h: 1, walk: 1 }); obj('kerb', 60, 31, { w: 4, h: 1, walk: 1 });
+    obj('kerb', 0, 38, { w: 6, h: 1, walk: 1 }); obj('kerb', 6, 38, { w: 6, h: 1, walk: 1 }); obj('kerb', 12, 38, { w: 6, h: 1, walk: 1 });
+    obj('kerb', 18, 38, { w: 6, h: 1, walk: 1 }); obj('kerb', 24, 38, { w: 3, h: 1, walk: 1 }); obj('kerb', 30, 38, { w: 6, h: 1, walk: 1 });
+    obj('kerb', 36, 38, { w: 6, h: 1, walk: 1 }); obj('kerb', 42, 38, { w: 6, h: 1, walk: 1 }); obj('kerb', 48, 38, { w: 6, h: 1, walk: 1 });
+    obj('kerb', 54, 38, { w: 6, h: 1, walk: 1 }); obj('kerb', 60, 38, { w: 4, h: 1, walk: 1 });
+    obj('crossing', 27, 32, { w: 3, h: 6, walk: 1 });
+    obj('trafficlight', 30, 30, { tall: 1, light: '#5fa777' }); obj('trafficlight', 26, 39, { tall: 1, light: '#ff5470' });
+    obj('bollard', 13, 30); obj('bollard', 17, 30); obj('bollard', 22, 30); obj('bollard', 33, 30); obj('bollard', 37, 30); obj('bollard', 45, 30); obj('bollard', 51, 30); obj('bollard', 60, 30);
+    obj('hydrant', 10, 30); obj('hydrant', 47, 30); obj('hydrant', 19, 39); obj('hydrant', 57, 39);
+    obj('bin', 24, 30); obj('bin', 40, 30); obj('bin', 12, 39); obj('bin', 41, 39); obj('bin', 61, 39);
+    obj('lamppost', 20, 30, { light: '#d9a441', tall: 1 }); obj('lamppost', 43, 30, { light: '#d9a441', tall: 1 }); obj('lamppost', 56, 30, { light: '#d9a441', tall: 1 });
+    obj('lamppost', 9, 39, { light: '#d9a441', tall: 1 }); obj('lamppost', 30, 39, { light: '#d9a441', tall: 1 }); obj('lamppost', 52, 39, { light: '#d9a441', tall: 1 });
+    obj('car', 16, 32, { w: 2, h: 1, light: '#d9a441' }); obj('car', 19, 32, { w: 2, h: 1, light: '#d9a441' });
+    obj('car', 33, 32, { w: 2, h: 1, light: '#d9a441' }); obj('car', 36, 32, { w: 2, h: 1, light: '#ff5470' });
+    obj('car', 22, 37, { w: 2, h: 1, light: '#7e9cc4' }); obj('car', 48, 37, { w: 2, h: 1, light: '#7e9cc4' }); obj('car', 58, 32, { w: 2, h: 1, light: '#7e9cc4' });
+    obj('shelter', 33, 39, { w: 4, h: 2 });
+    obj('kiosk', 44, 39, { w: 2, h: 2, light: '#d9a441', use: { verb: 'Eat', what: 'a bowl from the kiosk · 5', kind: 'eat', cost: 5, hot: 1, reach: 1.9 } });
+    obj('bench', 4, 39, { w: 2, h: 1, use: { verb: 'Sit', what: 'across the road', kind: 'rest', short: 1, view: 1 } });
+    obj('bench', 54, 39, { w: 2, h: 1, use: { verb: 'Sit', what: 'across the road', kind: 'rest', short: 1, view: 1 } });
+    light(34.5, 39.8, '#6fb3ab', 130, { neon: 1 }); light(44.8, 39.8, '#d9a441', 120, { neon: 1 });
+
+    /* ---- Cistern Square: the wet square across the road. Nothing tall stands
+       between the road and the camera except what belongs here. ---- */
+    room('Cistern Square', 4, 41, 40, 10, FL.wet, 0, { open: 1 });
+    room('The green', 14, 42, 12, 5, FL.grass, 0, { open: 1 });
+    obj('fountain', 27, 43, { w: 4, h: 4 });
+    obj('tree', 16, 43, { w: 2, h: 2 }); obj('tree', 22, 45, { w: 2, h: 2 }); obj('tree', 35, 42, { w: 2, h: 2 });
+    obj('bench', 24, 47, { w: 2, h: 1, use: { verb: 'Sit', what: 'by the water', kind: 'rest', short: 1, view: 1 } });
+    obj('bench', 31, 42, { w: 2, h: 1, use: { verb: 'Sit', what: 'by the water', kind: 'rest', short: 1, view: 1 } });
+    obj('bench', 33, 45, { w: 1, h: 2, f: 3, use: { verb: 'Sit', what: 'by the water', kind: 'rest', short: 1, view: 1 } });
+    obj('bench', 8, 49, { w: 2, h: 1, use: { verb: 'Sit', what: 'by the water', kind: 'rest', short: 1, view: 1 } });
+    obj('lamppost', 11, 42, { light: '#d9a441', tall: 1 }); obj('lamppost', 20, 48, { light: '#d9a441', tall: 1 });
+    obj('lamppost', 38, 45, { light: '#d9a441', tall: 1 }); obj('lamppost', 30, 49, { light: '#d9a441', tall: 1 });
+    obj('planter', 8, 44, { w: 1, h: 3 }); obj('planter', 37, 47, { w: 2, h: 1 }); obj('planter', 12, 47, { w: 2, h: 1 }); obj('planter', 20, 50, { w: 2, h: 1 });
+    obj('bin', 10, 48); obj('bin', 39, 41); obj('bin', 43, 50); obj('bollard', 5, 41); obj('bollard', 39, 48); obj('bollard', 4, 50);
+    // the allotment in the square's east corner: the only thing on this street
+    // anybody grows on purpose
+    obj('shed', 41, 44, { w: 2, h: 2 }); obj('bedplot', 40, 47, { w: 3, h: 2 }); obj('compost', 43, 47); obj('waterbutt', 43, 44); obj('crates', 43, 45);
+    obj('washline', 40, 46, { w: 3, h: 1, walk: 1 });
+    light(29, 45, '#7e9cc4', 200); light(18, 44.5, '#5fa777', 130); light(41.8, 44.8, '#d9a441', 90);
+
+    /* ---- the people of the street ---- */
+    npc('w1', 'A commuter', { coat: '#2a2a30', trim: '#8f6f76', hair: '#0b0609', bag: 1 }, 29, 30, { spd: 2.3, wait: 2, pause: 4,
       idle: ['Late. Late.', 'Rail is running.'], lines: [['The rail is late. It is never late. Something is happening on ninety.', 'Do not go up there today.']],
-      sched: [{ from: 0, to: 1440, wp: [[16.5, 25.5], [15.5, 19.5], [15.5, 16.5], [19.5, 12.5], [15.5, 16.5], [16.5, 21.5], [25.5, 23.5], [16.5, 25.5]] }] });
-    npc('w2', 'A commuter', { coat: '#3a3a42', trim: '#6fb3ab', hair: '#5c434a', scarf: 1 }, 24, 24, { spd: 2.1, wait: 6, pause: 5,
+      sched: [{ from: 0, to: 1440, wp: [[29.5, 30.5], [29.5, 24.5], [29.5, 20.5], [33.5, 16.5], [29.5, 20.5], [29.5, 26.5], [41.5, 26.5], [29.5, 30.5]] }] });
+    npc('w2', 'A commuter', { coat: '#3a3a42', trim: '#6fb3ab', hair: '#5c434a', scarf: 1 }, 45, 26, { spd: 2.1, wait: 6, pause: 5,
       idle: ['Cold.', 'Every night.'], lines: [['Thirty years I have taken this rail and I have never once seen the ground level of the tower in daylight.', 'Nobody has. Think about that.']],
-      sched: [{ from: 0, to: 1440, wp: [[24.5, 24.5], [15.5, 25.5], [15.5, 32.5], [10.5, 33.5], [15.5, 32.5], [15.5, 25.5], [24.5, 24.5]] }] });
-    meta.px = 24.9; meta.py = 13;
+      sched: [{ from: 0, to: 1440, wp: [[45.5, 26.5], [29.5, 30.5], [28.5, 34.5], [28.5, 40.5], [22.5, 44.5], [28.5, 40.5], [28.5, 34.5], [45.5, 26.5]] }] });
+    npc('nib', 'Nib', { coat: '#2a1a3a', trim: '#a884c9', hair: '#0b0609', small: 1 }, 10, 29, { spd: 2.6, wait: 1, pause: 3,
+      idle: ['Two more.', 'Mind your feet.', 'Wet.'],
+      lines: [['Fourteen drops before the rail goes. Do not talk to me, talk at me — I can walk and hear at the same time.', 'Ward Six, the pawn, the wash, the kiosk, the square, back. Fourteen.'], ['Mira gives me the tower ones. The tower ones are heavy and nobody tips.', 'The street ones are light and everybody does. Learn the street.']],
+      deep: [['I sleep in the lane when the hostel is full. Tace leaves a dryer running so the wall stays warm.', 'She says it is a fault in the machine. It is not a fault in the machine.']],
+      sched: [{ from: 5*60, to: 23*60 + 30, wp: [[10.5, 29.5], [20.5, 29.5], [28.5, 30.5], [28.5, 34.5], [28.5, 40.5], [31.5, 45.5], [28.5, 40.5], [28.5, 34.5], [40.5, 29.5], [50.5, 29.5], [40.5, 29.5], [20.5, 29.5], [10.5, 29.5]] }] });
+    npc('tov', 'Tov', { coat: '#1a2330', trim: '#6fb3ab', hair: '#3d1f28', cap: 1 }, 39, 26, { spd: 1.8, wait: 25,
+      idle: ['Gate is open.', 'Stand clear.', 'Fare is on the gate.'],
+      lines: [['Rail marshal. I open the gate, I close the gate, and in between I watch the plaza get rained on.', 'Fare is on the gate. Do not argue with the gate.'], ['The Warden works the deck on forty-one. Same badge, different weather. He got the weather.', 'He also got the view. I got the queue.']],
+      deep: [['Nine years on this plaza and I can tell you who is leaving for good by how they carry the bag.', 'You are not leaving. You have not learned to carry it yet.']],
+      sched: [{ from: 0, to: 1440, wp: [[39.5, 26.5], [20.5, 26.5], [14.5, 24.5], [20.5, 26.5], [32.5, 24.5], [39.5, 26.5]] }] });
+    meta.px = 37.9; meta.py = 15;
   }
   /* ---- the roof: the top of the tower, in the weather ---- */
   function buildRoof() {
-    room('Open air', 6, 6, 24, 20, FL.wet, WM.rail, { open: 1, south: WM.rail, east: WM.rail });
-    light(18, 16, '#7e9cc4', 520, { win: 1 }); light(11, 11, '#7e9cc4', 300, { win: 1 }); light(24, 22, '#7e9cc4', 300, { win: 1 });
-    room('Lift', 6, 22, 2, 2, FL.metal, WM.panel, { light: 0.7, lightCol: '#d9a441' }); wallW[T(8, 22)] = 0; wallW[T(8, 23)] = 0; decoW[T(8, 22)] = { kind: 'lift', mat: WM.panel, open: 0 }; decoW[T(8, 23)] = { kind: 'lift', mat: WM.panel, open: 0 };
-    obj('liftcall', 6, 22, { w: 2, h: 2, walk: 1, use: { verb: 'Ride', what: 'the lift', kind: 'lift', reach: 0.35 } });
-    room('Greenhouse', 20, 16, 6, 5, FL.soil, WM.glass, { light: 0.5, lightCol: '#5fa777' }); door('W', 20, 18);
-    obj('planter', 21, 16, { w: 4, h: 1, soil: 1 }); obj('planter', 21, 20, { w: 4, h: 1, soil: 1 }); obj('plant', 25, 18); obj('plant', 25, 17); obj('lamp', 21, 18, { light: '#5fa777' });
-    obj('helipad', 12, 9, { w: 5, h: 5, walk: 1 }); obj('tank', 8, 7, { w: 2, h: 2 }); obj('tank', 25, 7, { w: 2, h: 2 }); obj('mast', 28, 8, { light: '#ff5470', tall: 1 }); obj('mast', 9, 19, { light: '#ff5470', tall: 1 });
-    obj('vent', 10, 14, { walk: 1 }); obj('vent', 17, 20, { walk: 1 }); obj('vent', 26, 13, { walk: 1 }); obj('bin', 12, 24);
-    obj('beacon', 7, 7, { light: '#6fb3ab', use: { verb: 'Check', what: 'the beacon', kind: 'check' } }); obj('beacon', 28, 6, { light: '#6fb3ab', use: { verb: 'Check', what: 'the beacon', kind: 'check' } }); obj('beacon', 28, 24, { light: '#6fb3ab', use: { verb: 'Check', what: 'the beacon', kind: 'check' } }); obj('beacon', 10, 24, { light: '#6fb3ab', use: { verb: 'Check', what: 'the beacon', kind: 'check' } });
-    obj('bench', 14, 23, { w: 2, h: 1, use: { verb: 'Sit', what: 'at the top of everything', kind: 'rest', short: 1, view: 1, roof: 1 } }); obj('bench', 18, 12, { w: 2, h: 1, use: { verb: 'Sit', what: 'by the pad', kind: 'rest', short: 1, view: 1, roof: 1 } });
-    obj('lamppost', 10, 17, { light: '#d9a441', tall: 1 }); obj('lamppost', 22, 12, { light: '#d9a441', tall: 1 }); obj('lamppost', 18, 24, { light: '#d9a441', tall: 1 }); obj('lamppost', 16, 7, { light: '#d9a441', tall: 1 }); obj('lamppost', 27, 18, { light: '#d9a441', tall: 1 });
-    npc('pell', 'Old Pell', { coat: '#3a3a2a', trim: '#5fa777', hair: '#c3a9ad', hood: 1 }, 22, 18, { fixed: 1, face: 0, reach: 1.6,
-      lines: [['Nobody comes up here. That is what it is for.', 'The glass keeps the wind off the seedlings. Nothing keeps it off me.'], ['The pad has not seen a flier in six years. I sweep it anyway. Something should be ready.', 'Sit by it. It is the only flat honest thing in the city.']],
-      deep: [['I carried that tree on 41 up from the ground. One floor a year. I am not finished.', 'You are young. Carry the next one.']], idle: ['Mind the wind.', 'The glass holds.', 'Sweep the pad.'] });
-    meta.px = 6.9; meta.py = 23;
+    /* The top of the tower: a whole slab of roof, sixty-four tiles square,
+       with the weather on it. One rule governs the whole level: anything
+       opaque up here is an OBJECT, never a room. A room's north and west
+       walls stand in front of the open deck, and the player is always inside
+       the open deck's rect, so cutaway would stub those walls forever. Rail
+       and glass are the two materials the cut never touches — so the only two
+       rooms up here are the lift head-house (whose west wall backs onto the
+       void and so is owned by nobody) and the greenhouse, which is glass. */
+    room('Open air', 4, 4, 64, 64, FL.wet, WM.rail, { open: 1, south: WM.rail, east: WM.rail });
+    // Ground under the open air: what you are walking on, and what the HUD
+    // calls it. No walls on any of these — they are surfaces, not rooms.
+    room('The dish field', 8, 8, 16, 14, FL.gravel, 0, { open: 1 });
+    room('The tank deck', 24, 6, 4, 14, FL.concrete, 0, { open: 1 });
+    room('The pad', 35, 8, 10, 12, FL.asphalt, 0, { open: 1 });
+    room('The cooling plant', 46, 8, 18, 16, FL.grate, 0, { open: 1 });
+    room('The allotment', 8, 38, 20, 22, FL.soil, 0, { open: 1 });
+    room('The old corner', 46, 46, 18, 16, FL.deck, 0, { open: 1 });
+    // Two paved runs cross at the middle of the slab: everything hangs off them.
+    room('The long run', 6, 30, 58, 3, FL.paving, 0, { open: 1 });
+    room('The spine', 30, 6, 3, 58, FL.paving, 0, { open: 1 });
+    light(14, 14, '#7e9cc4', 420, { win: 1 }); light(39, 13, '#7e9cc4', 420, { win: 1 }); light(55, 15, '#7e9cc4', 400, { win: 1 });
+    light(17, 47, '#5fa777', 300, { win: 1 }); light(18, 54, '#7e9cc4', 380, { win: 1 }); light(54, 54, '#7e9cc4', 380, { win: 1 });
+    light(31, 32, '#e9d8c5', 320, { win: 1 }); light(26, 12, '#7e9cc4', 300, { win: 1 }); light(43, 40, '#7e9cc4', 300, { win: 1 });
+
+    // The lift head-house, on the west lip. Its west wall hides a tile that is
+    // over the drop and so belongs to no room: it is the one opaque wall up
+    // here that stands at full height, and so the only one worth a decal.
+    room('Lift', 4, 30, 2, 2, FL.metal, WM.panel, { light: 0.7, lightCol: '#d9a441' });
+    wallW[T(6, 30)] = 0; wallW[T(6, 31)] = 0;
+    decoW[T(6, 30)] = { kind: 'lift', mat: WM.panel, open: 0 }; decoW[T(6, 31)] = { kind: 'lift', mat: WM.panel, open: 0 };
+    deco('W', 4, 30, 'pipes'); deco('W', 4, 31, 'vent');
+    obj('liftcall', 4, 30, { w: 2, h: 2, walk: 1, use: { verb: 'Ride', what: 'the lift', kind: 'lift', reach: 0.35 } });
+    light(6.4, 30.9, '#d9a441', 90, { lift: 1 });
+    // The motor room for the lift you just got out of, and the ducts off it.
+    obj('plantroom', 7, 26, { w: 4, h: 3 });
+    obj('duct', 7, 23, { w: 7, h: 2 });
+    obj('vent', 11, 27, { walk: 1 }); obj('bin', 6, 27);
+    obj('lamppost', 7, 29, { light: '#d9a441', tall: 1 });
+
+    // The four night-watch beacons, one to each corner of the slab. The job
+    // walks objs[] in order, so these four obj() calls ARE the round: far
+    // corner, east corner, near corner, west corner.
+    obj('beacon', 6, 6, { light: '#6fb3ab', use: { verb: 'Check', what: 'the beacon', kind: 'check' } });
+    obj('beacon', 65, 6, { light: '#6fb3ab', use: { verb: 'Check', what: 'the beacon', kind: 'check' } });
+    obj('beacon', 65, 65, { light: '#6fb3ab', use: { verb: 'Check', what: 'the beacon', kind: 'check' } });
+    obj('beacon', 6, 65, { light: '#6fb3ab', use: { verb: 'Check', what: 'the beacon', kind: 'check' } });
+
+    // Benches. The first bench in objs[] is what the roofview want points at,
+    // so the best one on the slab is the first one built.
+    obj('bench', 31, 64, { w: 2, h: 1, use: { verb: 'Sit', what: 'at the top of everything', kind: 'rest', short: 1, view: 1, roof: 1 } });
+    obj('bench', 20, 65, { w: 2, h: 1, use: { verb: 'Sit', what: 'over the west drop', kind: 'rest', short: 1, view: 1, roof: 1 } });
+    obj('bench', 52, 64, { w: 2, h: 1, use: { verb: 'Sit', what: 'and watch the rain come in', kind: 'rest', short: 1, view: 1, roof: 1 } });
+    obj('bench', 65, 31, { w: 1, h: 2, f: 3, use: { verb: 'Sit', what: 'facing the east drop', kind: 'rest', short: 1, view: 1, roof: 1 } });
+    obj('bench', 37, 17, { w: 2, h: 1, use: { verb: 'Sit', what: 'by the pad', kind: 'rest', short: 1, view: 1, roof: 1 } });
+    obj('bench', 11, 48, { w: 2, h: 1, use: { verb: 'Sit', what: 'among the beds', kind: 'rest', short: 1, roof: 1 } });
+
+    // The dish field: the tower's ears, on gravel so it sounds different.
+    obj('satdish', 10, 10); obj('satdish', 13, 9); obj('satdish', 16, 11); obj('satdish', 19, 9); obj('satdish', 12, 15); obj('satdish', 17, 16);
+    obj('mast', 22, 7, { light: '#ff5470', tall: 1 });
+    obj('crates', 9, 19); obj('pallet', 11, 19, { w: 2, h: 2 }); obj('crate', 20, 19);
+    obj('vent', 14, 20, { walk: 1 }); obj('vent', 21, 13, { walk: 1 });
+    obj('lamppost', 8, 16, { light: '#d9a441', tall: 1 }); obj('lamppost', 22, 20, { light: '#d9a441', tall: 1 });
+    // Three tanks in a row on their own concrete strip: the tower's water.
+    obj('tank', 25, 7, { w: 2, h: 2 }); obj('tank', 25, 11, { w: 2, h: 2 }); obj('tank', 25, 15, { w: 2, h: 2 });
+    obj('vent', 27, 10, { walk: 1 }); obj('bin', 27, 18);
+
+    // The pad. Kept clear, kept swept, and nothing has landed on it in years.
+    obj('helipad', 36, 10, { w: 5, h: 5, walk: 1 });
+    obj('lamppost', 35, 9, { light: '#d9a441', tall: 1 }); obj('lamppost', 41, 9, { light: '#d9a441', tall: 1 });
+    obj('lamppost', 35, 15, { light: '#d9a441', tall: 1 }); obj('lamppost', 41, 15, { light: '#d9a441', tall: 1 });
+    obj('mast', 43, 7, { light: '#ff5470', tall: 1 }); obj('vent', 44, 18, { walk: 1 });
+    obj('sign', 33, 19, { ink: 'gold', sign: 'PAD' });
+
+    // The cooling plant: two duct runs with a railed catwalk between them and
+    // a flight of steps up to it from either end.
+    obj('duct', 48, 12, { w: 7, h: 2 }); obj('duct', 55, 12, { w: 7, h: 2 });
+    obj('duct', 48, 17, { w: 7, h: 2 }); obj('duct', 55, 17, { w: 7, h: 2 });
+    for (var cw = 48; cw <= 61; cw++) obj('catwalk', cw, 15, { walk: 1 });
+    obj('stairs', 50, 16, { walk: 1 }); obj('stairs', 59, 16, { walk: 1 });
+    obj('vent', 46, 10, { walk: 1 }); obj('vent', 62, 10, { walk: 1 }); obj('vent', 46, 21, { walk: 1 }); obj('vent', 62, 21, { walk: 1 });
+    obj('crates', 46, 14); obj('bin', 47, 21);
+    obj('lamppost', 47, 9, { light: '#d9a441', tall: 1 }); obj('lamppost', 62, 22, { light: '#d9a441', tall: 1 });
+
+    // The allotment: Pell's beds, his shed, his butt, his heap, and the glass.
+    room('Greenhouse', 14, 44, 8, 7, FL.soil, WM.glass, { light: 0.5, lightCol: '#5fa777' }); door('W', 14, 47);
+    obj('planter', 15, 44, { w: 5, h: 1, soil: 1 }); obj('planter', 15, 50, { w: 5, h: 1, soil: 1 });
+    obj('plant', 20, 45); obj('plant', 20, 47); obj('plant', 20, 49); obj('lamp', 15, 47, { light: '#5fa777' });
+    obj('bedplot', 9, 39, { w: 5, h: 3 }); obj('bedplot', 16, 39, { w: 5, h: 3 }); obj('bedplot', 22, 39, { w: 5, h: 3 });
+    obj('bedplot', 9, 53, { w: 4, h: 4 }); obj('bedplot', 14, 53, { w: 4, h: 4 }); obj('bedplot', 19, 53, { w: 4, h: 4 }); obj('bedplot', 24, 53, { w: 4, h: 4 });
+    obj('shed', 24, 44, { w: 2, h: 2 }); obj('waterbutt', 24, 47); obj('compost', 24, 49, { w: 2, h: 2 });
+    obj('tree', 9, 45, { w: 2, h: 2 }); obj('plant', 26, 46); obj('plant', 26, 48);
+    obj('crates', 26, 43); obj('bin', 27, 51); obj('vent', 20, 58, { walk: 1 });
+    obj('lamppost', 13, 43, { light: '#d9a441', tall: 1 }); obj('lamppost', 23, 51, { light: '#d9a441', tall: 1 }); obj('lamppost', 9, 58, { light: '#d9a441', tall: 1 });
+    obj('mast', 6, 56, { light: '#ff5470', tall: 1 });
+
+    // The loft, and the line somebody strung between two masts to dry on.
+    obj('loft', 38, 40, { w: 2, h: 2 }); obj('crate', 41, 41);
+    obj('mast', 43, 38, { light: '#ff5470', tall: 1 }); obj('washline', 44, 38, { w: 5, h: 1 }); obj('mast', 49, 38, { light: '#ff5470', tall: 1 });
+    obj('vent', 36, 46, { walk: 1 }); obj('lamppost', 41, 45, { light: '#d9a441', tall: 1 });
+
+    // The old corner: a front room somebody carried up one piece at a time.
+    obj('sofa', 50, 52, { w: 2, h: 1, use: { verb: 'Sit', what: 'on somebody else’s sofa', kind: 'rest', short: 1, view: 1, roof: 1 } });
+    obj('table', 53, 53); obj('stool', 52, 54); obj('stool', 54, 54);
+    obj('rug', 49, 55, { w: 3, h: 2, walk: 1 }); obj('wardrobe', 57, 50); obj('washer', 56, 58);
+    obj('crates', 58, 56); obj('pallet', 60, 52, { w: 2, h: 2 }); obj('dumpster', 60, 57, { w: 2, h: 2 }); obj('bin', 47, 57);
+    obj('vent', 55, 47, { walk: 1 });
+    obj('lamppost', 47, 48, { light: '#d9a441', tall: 1 }); obj('lamppost', 62, 60, { light: '#d9a441', tall: 1 });
+
+    npc('pell', 'Old Pell', { coat: '#3a3a2a', trim: '#5fa777', hair: '#c3a9ad', hood: 1 }, 17, 47, { fixed: 1, face: 0, reach: 1.6,
+      lines: [['Nobody comes up here. That is what it is for.', 'The glass keeps the wind off the seedlings. Nothing keeps it off me.'],
+              ['The pad has not seen a flier in six years. I sweep it anyway. Something should be ready.', 'Sit by it. It is the only flat honest thing in the city.'],
+              ['Seven beds now. It was one bed and a bucket when I started.', 'The soil came up in my coat pockets. Forty years of pockets.']],
+      deep: [['I carried that tree on 41 up from the ground. One floor a year. I am not finished.', 'You are young. Carry the next one.'],
+             ['The sapling in the west bed is a cutting off it. If I do not get there, it does.', 'That is the whole plan. It has never needed a better one.']],
+      idle: ['Mind the wind.', 'The glass holds.', 'Sweep the pad.', 'Seven beds.'] });
+
+    // Ruta keeps the loft and walks the round. By day she is asleep in the lee
+    // of the plant room, which is the only shelter on the slab; at eight she
+    // gets up and the roof has somebody on it until five.
+    npc('ruta', 'Ruta', { coat: '#1a2330', trim: '#d9a441', hair: '#5c434a', cap: 1 }, 6, 31, { spd: 2.0, wait: 4, pause: 14, reach: 1.2,
+      lines: [['You are the one off forty-one. The lift told me; it only stops here for a stranger.', 'Do not walk the east lip in a wind. It takes the rain sideways and then it takes you.'],
+              ['Four beacons, in order, every night, and every night they are fine.', 'The one night they are not, the order is the only thing that tells you which.'],
+              ['The birds are mine. Pell pretends they are a nuisance and then he feeds them.', 'Sixteen of them. They have been up here longer than either of us.']],
+      deep: [['I took the watch because it is the only job in this tower where nobody talks to you and nobody is above you.', 'Forty-one floors of people, and this is the quiet one.'],
+             ['Pell will not last another winter out here and he knows it and I know it.', 'So I learned the beds. Do not tell him I asked.']],
+      idle: ['Four, in order.', 'Mind the east lip.', 'The birds are fine.', 'Long night.'],
+      sched: [{ from: 5*60, to: 20*60, wp: [[8.5, 25.5]] },
+              { from: 20*60, to: 1440, wp: [[6.5, 31.5], [13.5, 47.5], [7.5, 64.5], [31.5, 60.5], [52.5, 56.5], [64.5, 64.5], [62.5, 31.5], [41.5, 43.5], [30.5, 31.5], [6.5, 31.5]] },
+              { from: 0, to: 5*60, wp: [[6.5, 31.5], [13.5, 47.5], [7.5, 64.5], [31.5, 60.5], [52.5, 56.5], [64.5, 64.5], [62.5, 31.5], [41.5, 43.5], [30.5, 31.5], [6.5, 31.5]] }] });
+
+    meta.px = 4.9; meta.py = 31;
   }
   var LEVELS = {
     l41: { n: 'Level 41', build: build41, lift: [10.9, 21], lane: 13, view: [14, 20],
       core: { hide: 32, room: 'South deck', slabs: [ { x0: 4, x1: 26, y: 32, up: 900, beacon: 1 } ] } },
-    lobby: { n: 'Ground', build: buildLobby, lift: [24.9, 13], grade: 1, view: [16, 26],
+    lobby: { n: 'Ground', build: buildLobby, lift: [37.9, 15], grade: 1, view: [28, 30],
       // at grade the tower is a podium you stand against and a shaft above it
-      core: { hide: 20, out: 1, slabs: [ { x0: -10, x1: 38, y: 20, up: 420, cap: 1 }, { x0: 6, x1: 26, y: 20, up: 1700, beacon: 1 } ] },
-      road: { y0: 29.2, y1: 30.6, x0: -8, x1: 38, n: 4 },
-      back: [ { x0: -14, x1: 52, y: 1, h: 1150, haze: 0.75, a: 0.85 },
+      core: { hide: 22, out: 1, slabs: [ { x0: -14, x1: 54, y: 22, up: 420, cap: 1 }, { x0: 18, x1: 40, y: 22, up: 1700, beacon: 1 } ] },
+      road: { y0: 33.4, y1: 35.6, x0: -10, x1: 74, n: 6 },
+      back: [ { x0: -20, x1: 84, y: 1, h: 1150, haze: 0.75, a: 0.85 },
               { x0: -6, x1: 34, y: 5, h: 1550, haze: 0.45, beacon: 1 },
               { x: 0, y0: 8, y1: 34, h: 760, haze: 0.6 } ] },
-    roof: { n: 'Roof', build: buildRoof, lift: [6.9, 23], view: [18, 16] }
+    roof: { n: 'Roof', build: buildRoof, lift: [4.9, 31], view: [34, 28] }
   };
-  var NPC_LEVEL = { vesna: 'l41', ohm: 'l41', warden: 'l41', kid: 'l41', mira: 'lobby', sol: 'lobby', pell: 'roof', w1: 'lobby', w2: 'lobby' };
+  var NPC_LEVEL = { vesna: 'l41', ohm: 'l41', warden: 'l41', kid: 'l41', fen: 'l41', nessa: 'l41', doro: 'l41', mira: 'lobby', sol: 'lobby', tace: 'lobby', hale: 'lobby', bram: 'lobby', nib: 'lobby', tov: 'lobby', pell: 'roof', ruta: 'roof', w1: 'lobby', w2: 'lobby' };
   /* ---- finding a way ----
      A* over tiles. A step is legal only if the tile is floor, holds no
      furniture, and no wall stands on the edge between the two tiles. The
@@ -1019,6 +1501,18 @@
     else if (k === 'pipes') { g.strokeStyle = '#3d1f28'; g.lineWidth = 4; g.beginPath(); g.moveTo(0, -80); g.lineTo(64, -80); g.moveTo(0, -20); g.lineTo(64, -20); g.moveTo(50, -80); g.lineTo(50, -20); g.stroke(); g.strokeStyle = 'rgba(233,216,197,.18)'; g.lineWidth = 1; g.beginPath(); g.moveTo(0, -82); g.lineTo(64, -82); g.moveTo(0, -22); g.lineTo(64, -22); g.stroke(); g.fillStyle = '#5c434a'; g.fillRect(12, -84, 4, 8); g.fillRect(34, -24, 4, 8); }
     else if (k === 'vent') { g.fillStyle = '#12080c'; g.fillRect(20, -78, 24, 14); g.strokeStyle = 'rgba(233,216,197,.25)'; g.lineWidth = 1; g.beginPath(); for (var vv = -76; vv < -64; vv += 3) { g.moveTo(22, vv); g.lineTo(42, vv); } g.stroke(); }
     else if (k === 'mirror') { g.fillStyle = '#1a2028'; g.fillRect(16, -68, 32, 28); g.fillStyle = 'rgba(233,216,197,.12)'; g.beginPath(); g.moveTo(18, -66); g.lineTo(30, -66); g.lineTo(18, -48); g.closePath(); g.fill(); g.strokeStyle = 'rgba(233,216,197,.3)'; g.strokeRect(16.5, -68.5, 32, 28); }
+    else if (k === 'flatdoor') { // somebody else's door: sealed, numbered, a sliver of light under it
+      g.fillStyle = '#1a0d12'; g.fillRect(0, -hgt + 4, 5, hgt - 4); g.fillRect(59, -hgt + 4, 5, hgt - 4); g.fillRect(0, -hgt + 4, 64, 5);
+      var fg2 = g.createLinearGradient(5, 0, 59, 0); fg2.addColorStop(0, lit ? '#3a262c' : '#2c1c22'); fg2.addColorStop(1, lit ? '#2a1a20' : '#1e1216');
+      g.fillStyle = fg2; g.fillRect(5, -hgt + 9, 54, hgt - 9);
+      g.strokeStyle = 'rgba(11,6,9,.6)'; g.lineWidth = 1; g.strokeRect(5.5, -hgt + 9.5, 53, hgt - 10);
+      g.fillStyle = 'rgba(233,216,197,.09)'; g.fillRect(9, -hgt + 15, 46, 20);
+      g.fillStyle = INK.gold; g.fillRect(50, -hgt/2, 3, 1.5);
+      g.save(); g.scale(0.5, 1); g.font = '500 8px ui-monospace, Menlo, monospace'; g.textAlign = 'center';
+      g.fillStyle = 'rgba(233,216,197,.5)'; g.fillText(d.text || '41--', 64, -hgt + 30); g.restore();
+      var la = 0.55 + 0.45*Math.sin(t*1.3 + (d.text ? d.text.charCodeAt(3) : 0));   // someone is in, and moving
+      g.fillStyle = 'rgba(217,164,65,' + (0.30*la).toFixed(3) + ')'; g.fillRect(7, -7, 50, 6);
+      var ug = g.createLinearGradient(0, -7, 0, -30); ug.addColorStop(0, 'rgba(217,164,65,' + (0.16*la).toFixed(3) + ')'); ug.addColorStop(1, 'rgba(217,164,65,0)'); g.fillStyle = ug; g.fillRect(7, -30, 50, 23); }
     else if (k === 'lift') { g.fillStyle = '#2a2a30'; g.fillRect(0, -hgt, 64, hgt); var lo = (d.open || 0)*26;
       g.fillStyle = '#1a1a20'; g.fillRect(6 - lo, -hgt + 6, 26, hgt - 6); g.fillRect(32 + lo, -hgt + 6, 26, hgt - 6); g.fillStyle = 'rgba(233,216,197,.16)'; g.fillRect(8, -80, 1, 80); g.fillRect(34, -80, 1, 80); g.fillStyle = INK.gold; g.globalAlpha = 0.6 + 0.4*Math.sin(t*2); g.fillRect(28, -90, 8, 3); g.globalAlpha = 1; }
     else if (k === 'billboard') { g.fillStyle = '#0b0609'; g.fillRect(2, -88, 60, 40); var bg = g.createLinearGradient(0, -88, 60, -48); bg.addColorStop(0, '#2a1a3a'); bg.addColorStop(1, '#1a2a3a'); g.fillStyle = bg; g.fillRect(4, -86, 56, 36);
@@ -1484,7 +1978,7 @@
   };
   var COURIER_TO = ['vesna', 'ohm', 'pell', 'sol', 'kid'];
   function jobText() { var j = meta.job; if (!j) return ''; if (j.id === 'courier') return j.step === 0 ? 'Collect the parcel · Mira, ground' : 'Deliver to ' + npcName(j.to) + ' · ' + LEVELS[NPC_LEVEL[j.to]].n; if (j.id === 'watch') return 'Beacon ' + (j.step + 1) + ' of 4 · roof'; return ''; }
-  function npcName(id) { return { vesna: 'Vesna', ohm: 'Ohm', warden: 'the Warden', kid: 'Tam', mira: 'Mira', sol: 'Sol', pell: 'Old Pell' }[id] || id; }
+  function npcName(id) { return { vesna: 'Vesna', ohm: 'Ohm', warden: 'the Warden', kid: 'Tam', mira: 'Mira', sol: 'Sol', pell: 'Old Pell', fen: 'Fen', nessa: 'Nessa', doro: 'Old Doro', tace: 'Tace', hale: 'Hale', bram: 'Bram', nib: 'Nib', tov: 'Tov', ruta: 'Ruta' }[id] || id; }
   function jobTarget() { var j = meta.job; if (!j) return null;
     if (j.id === 'courier') { var who = j.step === 0 ? 'mira' : j.to; return { level: NPC_LEVEL[who], npc: who, label: j.step === 0 ? 'Mira' : npcName(j.to) }; }
     if (j.id === 'watch') return { level: 'roof', kind: 'beacon', idx: j.step, label: 'beacon ' + (j.step + 1) }; return null; }
@@ -1778,7 +2272,7 @@
       if (y < cutY) continue;
       if (wallW[ti] || decoW[ti]) items.push({ k: x + y - 0.5, w: 1, x: x, y: y, m: wallW[ti] });
       if (wallN[ti] || decoN[ti]) items.push({ k: x + y - 0.49, w: 0, x: x, y: y, m: wallN[ti] }); }
-    for (i = 0; i < objs.length; i++) { var ob = objs[i]; if (ob.x + ob.w < vr.x0 || ob.x > vr.x1 || ob.y + ob.h < vr.y0 || ob.y > vr.y1 || ob.y < cutY) continue; items.push({ k: ob.kind === 'rug' || ob.kind === 'crossing' ? ob.x + ob.y - 0.45 : ob.x + ob.w - 1 + ob.y + ob.h - 1 + 0.9, ob: ob }); }
+    for (i = 0; i < objs.length; i++) { var ob = objs[i]; if (ob.x + ob.w < vr.x0 || ob.x > vr.x1 || ob.y + ob.h < vr.y0 || ob.y > vr.y1 || ob.y < cutY) continue; items.push({ k: ob.kind === 'rug' || ob.kind === 'crossing' || ob.kind === 'kerb' ? ob.x + ob.y - 0.45 : ob.x + ob.w - 1 + ob.y + ob.h - 1 + 0.9, ob: ob }); }
     for (i = 0; i < traffic.length; i++) { var tc = traffic[i]; if (tc.x + 2 < vr.x0 || tc.x > vr.x1 + 2 || tc.y < vr.y0 - 2 || tc.y > vr.y1 + 2) continue; items.push({ k: tc.x + 1 + tc.y + 0.9, ob: tc }); }
     items.push({ k: pk, ch: P }); for (i = 0; i < npcs.length; i++) { var np2 = npcs[i]; if (np2.y < cutY || np2.x < vr.x0 - 2 || np2.x > vr.x1 + 2 || np2.y < vr.y0 - 2 || np2.y > vr.y1 + 2) continue; items.push({ k: np2.x + np2.y, ch: np2 }); }
     for (i = 0; i < parts.length; i++) items.push({ k: parts[i].x + parts[i].y + 0.02, pa: parts[i] });
