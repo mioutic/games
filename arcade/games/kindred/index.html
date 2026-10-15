@@ -1,0 +1,2477 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Kindred</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<style>
+  /* Sanguine — see DESIGN.md */
+  :root {
+    --s-0: #0b0609;  --s-1: #12080c;  --s-2: #1a0d12;  --s-3: #241119;
+    --t-0: #f2e6e6;  --t-1: #c3a9ad;  --t-2: #8f6f76;  --t-3: #5c434a;
+    --accent: #e9d8c5;  --accent-2: #b81d3a;  --brand: #d9557a;
+    --line-0: #150a0e;  --line-1: #2a141c;  --line-2: #3d1f28;
+    --error: #ff5470; --warning: #d9a441; --success: #5fa777; --info: #7e9cc4; --pending: #a884c9;
+    --bloom: 0 0 12px rgba(216,58,88,.45), 0 0 26px rgba(216,58,88,.16);
+    --lit-within: inset 0 0 60px rgba(184,29,58,.05);
+    --font-display: Georgia, "Times New Roman", serif;
+    --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+    --radius: 2px;  --dur: 160ms;  --ease: cubic-bezier(.2,.6,.2,1);
+    --safe-t: 0px; --safe-r: 0px; --safe-b: 0px; --safe-l: 0px;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent;
+      user-select: none; -webkit-user-select: none; }
+  html, body {
+    margin: 0; height: 100%; overflow: hidden; touch-action: none;
+    background: var(--s-0); color: var(--t-0);
+    font: 400 16px/1.45 var(--font-ui); -webkit-font-smoothing: antialiased;
+    overscroll-behavior: none;
+  }
+  #stage { position: fixed; top: 0; left: 0; overflow: hidden; background: var(--s-0); }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .micro { font: 500 9px/1 var(--font-ui); letter-spacing: .18em; text-transform: uppercase; color: var(--t-2); }
+  .hud { position: absolute; inset: 0; pointer-events: none; z-index: 4; }
+  .panel { background: rgba(11,6,9,.72); border: 1px solid var(--line-1);
+           border-radius: var(--radius); box-shadow: var(--lit-within); }
+
+  /* the readout rail */
+  .readout { position: absolute; top: calc(var(--safe-t) + 8px); left: calc(var(--safe-l) + 8px);
+             right: calc(var(--safe-r) + 96px); display: flex; flex-wrap: nowrap; overflow: hidden; }
+  .readout .cell { padding: 6px 10px 7px; border-right: 1px solid var(--line-0); flex: none; }
+  .readout .cell:last-child { border-right: 0; }
+  .readout .v { margin-top: 4px; font: 500 15px/1 var(--font-mono); font-variant-numeric: tabular-nums; color: var(--t-0); white-space: nowrap; }
+  .readout .v.accent { color: var(--accent); }
+  .readout .who { font: 400 15px/1 var(--font-display); color: var(--accent); letter-spacing: .02em; }
+  .pips { display: flex; gap: 2px; margin-top: 5px; height: 9px; }
+  .pips i { width: 4px; height: 9px; background: var(--s-3); border: 1px solid var(--line-2); }
+  .pips i.on { background: var(--accent); border-color: var(--accent); }
+  .pips i.yum { background: var(--brand); border-color: var(--brand); }
+  .pips i.low { background: var(--error); border-color: var(--error); }
+  .gauge { position: relative; width: 58px; height: 9px; margin-top: 5px;
+           background: linear-gradient(90deg, #7e9cc4, #2a141c 35%, #2a141c 65%, #d9a441); border: 1px solid var(--line-2); }
+  .gauge b { position: absolute; top: -3px; width: 2px; height: 13px; background: var(--t-0); box-shadow: var(--bloom); left: 50%; }
+  @media (max-width: 400px) { .cell.c-gen { display: none; } }
+  @media (max-height: 460px) { .cell.c-gen { display: none; } }
+
+  .tr { position: absolute; top: calc(var(--safe-t) + 8px); right: calc(var(--safe-r) + 8px);
+        display: flex; gap: 6px; pointer-events: auto; }
+  .ib { width: 38px; height: 38px; display: grid; place-items: center; appearance: none; color: var(--t-1);
+        cursor: pointer; background: rgba(11,6,9,.72); border: 1px solid var(--line-1); border-radius: var(--radius); padding: 0; }
+  .ib:active { color: var(--accent); border-color: var(--accent-2); }
+  .dot { position: absolute; width: 6px; height: 6px; right: 4px; top: 4px; background: var(--t-3); }
+  .dot.live { background: var(--success); box-shadow: 0 0 8px rgba(95,167,119,.8); }
+  .dot.busy { background: var(--pending); box-shadow: 0 0 8px rgba(168,132,201,.9); }
+
+  /* bottom: held item + hint, actions */
+  .held { position: absolute; left: 50%; transform: translateX(-50%);
+          bottom: calc(var(--safe-b) + 10px); max-width: min(64%, 420px); padding: 7px 12px 8px; text-align: center; }
+  .held .name { font: 400 15px/1.15 var(--font-display); color: var(--accent); }
+  .held .hint { margin-top: 4px; font: 400 11px/1.4 var(--font-ui); color: var(--t-2); }
+  .held .hint b { color: var(--t-1); font-weight: 500; }
+  .acts { position: absolute; right: calc(var(--safe-r) + 10px); bottom: calc(var(--safe-b) + 12px);
+          display: flex; flex-direction: column; gap: 8px; pointer-events: auto; }
+  .act { width: 54px; height: 54px; appearance: none; display: grid; place-items: center; cursor: pointer;
+         background: rgba(11,6,9,.78); border: 1px solid var(--line-2); border-radius: var(--radius);
+         color: var(--t-1); font: 500 8px/1 var(--font-ui); letter-spacing: .14em; text-transform: uppercase; padding: 0; }
+  .act svg { display: block; margin: 0 auto 4px; }
+  .act:active { border-color: var(--accent); color: var(--accent); box-shadow: var(--bloom); }
+  .act[disabled] { opacity: .35; }
+  @media (orientation: landscape) and (max-height: 500px) {
+    .acts { flex-direction: row; }
+    .held { left: auto; right: calc(var(--safe-r) + 140px); transform: none; max-width: 40%; }
+  }
+  .stickzone { position: absolute; left: 0; bottom: 0; width: 46%; height: 42%; pointer-events: none; }
+  .stick { position: absolute; width: 104px; height: 104px; margin: -52px 0 0 -52px; border: 1px solid var(--line-2);
+           border-radius: 50%; display: none; pointer-events: none; }
+  .stick i { position: absolute; left: 50%; top: 50%; width: 38px; height: 38px; margin: -19px 0 0 -19px;
+             border-radius: 50%; background: rgba(233,216,197,.16); border: 1px solid var(--accent); }
+
+  .toast { position: absolute; left: 50%; top: calc(var(--safe-t) + 62px); transform: translateX(-50%);
+           max-width: 86%; padding: 7px 12px; font: 400 12px/1.4 var(--font-ui); color: var(--t-1);
+           text-align: center; opacity: 0; transition: opacity var(--dur) var(--ease); }
+  .toast.on { opacity: 1; }
+
+  /* speaking */
+  .say { position: absolute; left: calc(var(--safe-l) + 8px); right: calc(var(--safe-r) + 8px);
+         top: calc(var(--safe-t) + 8px); z-index: 9; display: none; gap: 6px; padding: 8px; pointer-events: auto; }
+  .say.on { display: flex; }
+  .say input { flex: 1; min-width: 0; appearance: none; background: var(--s-2); color: var(--t-0);
+               border: 1px solid var(--line-2); border-radius: var(--radius); padding: 10px;
+               font: 500 16px/1 var(--font-mono); text-transform: uppercase; user-select: text; -webkit-user-select: text; }
+  .say input:focus { outline: none; border-color: var(--accent); }
+  .say .lim { align-self: center; font: 500 11px/1 var(--font-mono); color: var(--t-2); min-width: 34px; text-align: right; }
+  .go { appearance: none; padding: 12px 16px; cursor: pointer; background: var(--accent); color: var(--s-0);
+        border: 1px solid var(--accent); border-radius: var(--radius); font: 500 11px/1 var(--font-ui);
+        letter-spacing: .18em; text-transform: uppercase; }
+  .go.ghost { background: none; color: var(--t-1); border-color: var(--line-2); }
+  .go.wide { width: 100%; margin-top: 10px; }
+  .go:active { box-shadow: var(--bloom); }
+
+  /* sheets */
+  .overlay { position: absolute; inset: 0; z-index: 8; display: flex; align-items: center; justify-content: center;
+             padding: calc(var(--safe-t) + 16px) calc(var(--safe-r) + 16px) calc(var(--safe-b) + 16px) calc(var(--safe-l) + 16px);
+             background: rgba(5,2,3,.9); }
+  .overlay.hide { display: none; }
+  .card { width: 100%; max-width: 380px; max-height: 100%; overflow-y: auto; -webkit-overflow-scrolling: touch;
+          padding: 20px 18px; background: var(--s-1); border: 1px solid var(--line-2); border-radius: var(--radius);
+          box-shadow: var(--lit-within); }
+  .card h2 { font: 400 30px/1.05 var(--font-display); letter-spacing: .04em; margin: 0 0 10px; text-align: center; }
+  .card h3 { font: 400 17px/1.2 var(--font-display); margin: 18px 0 6px; color: var(--accent); }
+  .lede { color: var(--t-2); font-size: 13.5px; line-height: 1.6; margin: 0 0 14px; }
+  .lede b { color: var(--t-1); font-weight: 500; }
+  .orn { text-align: center; color: var(--brand); letter-spacing: .5em; margin: 2px 0 10px; font-size: 12px; }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+         padding: 10px 0; border-bottom: 1px solid var(--line-0); text-align: left; }
+  .row:last-of-type { border-bottom: 0; }
+  .row .lab { font-size: 13px; color: var(--t-1); }
+  .row .sub { display: block; margin-top: 3px; font-size: 11px; color: var(--t-3); line-height: 1.4; }
+  .sw { appearance: none; flex: none; width: 44px; height: 24px; cursor: pointer; position: relative;
+        background: var(--s-3); border: 1px solid var(--line-2); border-radius: var(--radius); }
+  .sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px;
+               background: var(--t-3); transition: transform var(--dur) var(--ease), background var(--dur); }
+  .sw[aria-checked="true"] { border-color: var(--accent-2); }
+  .sw[aria-checked="true"]::after { transform: translateX(20px); background: var(--accent); }
+  .seg { display: flex; border: 1px solid var(--line-2); border-radius: var(--radius); flex: none; }
+  .seg button { appearance: none; background: none; border: 0; border-right: 1px solid var(--line-2); color: var(--t-2);
+                padding: 7px 9px; font: 500 10px/1 var(--font-mono); cursor: pointer; }
+  .seg button:last-child { border-right: 0; }
+  .seg button.on { background: var(--accent); color: var(--s-0); }
+  .field { width: 100%; margin-top: 6px; appearance: none; background: var(--s-2); color: var(--t-0);
+           border: 1px solid var(--line-2); border-radius: var(--radius); padding: 9px; font: 400 12px/1.3 var(--font-mono);
+           user-select: text; -webkit-user-select: text; }
+  textarea.field { height: 74px; resize: none; }
+  .kv { font: 400 11px/1.6 var(--font-mono); color: var(--t-2); }
+  .kv b { color: var(--t-1); font-weight: 500; }
+  .kin { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; padding: 9px 0; border-bottom: 1px solid var(--line-0); }
+  .kin .n { font: 400 15px/1.2 var(--font-display); color: var(--t-0); }
+  .kin .n em { font-style: normal; color: var(--brand); }
+  .kin .a { font: 500 11px/1.2 var(--font-mono); color: var(--t-2); text-align: right; }
+  .kin .d { grid-column: 1 / -1; font-size: 11.5px; color: var(--t-2); line-height: 1.45; }
+  .kin .d q { color: var(--t-1); }
+  .kin.dead .n { color: var(--t-3); }
+  .big { text-align: center; font: 500 46px/1 var(--font-mono); color: var(--accent); }
+  .big small { display: block; margin-top: 8px; font: 500 9px/1 var(--font-ui); letter-spacing: .18em; text-transform: uppercase; color: var(--t-2); }
+  #probe { position: absolute; left: -9999px; top: 0; width: 1px; height: 1px;
+           padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+</style>
+</head>
+<body>
+<div id="stage">
+<canvas id="cv"></canvas>
+<div id="probe"></div>
+
+<div class="hud">
+  <div class="readout panel">
+    <div class="cell"><div class="micro">Name</div><div class="v who" id="vName">—</div></div>
+    <div class="cell"><div class="micro">Age</div><div class="v accent" id="vAge">0.0</div></div>
+    <div class="cell"><div class="micro">Food</div><div class="pips" id="vFood"></div></div>
+    <div class="cell"><div class="micro">Heat</div><div class="gauge"><b id="vHeat"></b></div></div>
+    <div class="cell c-gen"><div class="micro">Gen</div><div class="v" id="vGen">1</div></div>
+  </div>
+  <div class="tr">
+    <button class="ib" id="btnKin" aria-label="Family">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="square" aria-hidden="true">
+        <circle cx="12" cy="5" r="2.4"/><path d="M12 7.4v5M6 16.5v-4h12v4"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="19" r="2"/></svg>
+    </button>
+    <button class="ib" id="btnGear" aria-label="Settings" style="position:relative">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="square" aria-hidden="true">
+        <circle cx="12" cy="12" r="3.2"/><path d="M12 2.6v3M12 18.4v3M2.6 12h3M18.4 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M18.7 5.3l-2.1 2.1M7.4 16.6l-2.1 2.1"/></svg>
+      <span class="dot" id="voiceDot"></span>
+    </button>
+  </div>
+  <div class="toast panel" id="toast"></div>
+  <div class="held panel" id="held"><div class="name" id="heldName">Bare hands</div><div class="hint" id="heldHint"></div></div>
+  <div class="acts">
+    <button class="act" id="btnSay" aria-label="Speak">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="square" aria-hidden="true"><path d="M4 5h16v11H10l-5 4v-4H4z"/></svg>Speak</button>
+    <button class="act" id="btnDrop" aria-label="Drop">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="square" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>Drop</button>
+    <button class="act" id="btnSelf" aria-label="Use on self">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="square" aria-hidden="true"><circle cx="12" cy="7" r="3.4"/><path d="M5 21v-3.5a7 7 0 0 1 14 0V21"/></svg>Self</button>
+  </div>
+  <div class="stickzone" id="stickzone"></div>
+  <div class="stick" id="stick"><i id="knob"></i></div>
+</div>
+
+<div class="say panel" id="sayBar">
+  <input id="sayIn" type="text" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" enterkeyhint="send">
+  <span class="lim" id="sayLim">1</span>
+  <button class="go" id="saySend">Say</button>
+</div>
+
+<div class="overlay" id="intro">
+  <div class="card">
+    <div class="orn">❦</div>
+    <h2>Kindred</h2>
+    <p class="lede">You are born into a village at the edge of the cold. <b>One minute is one year</b>; at sixty you are gone, and someone you raised carries on.</p>
+    <p class="lede">As a baby you can say one letter. Say <b>F</b> and your mother may come. Grow, learn the old ways from the elders, keep the fire, feed the small ones. The people nearby hear what you say and answer in their own words.</p>
+    <p class="lede"><b>Tap</b> the ground to walk, tap a thing to use what you hold on it. <b>Hold</b> on a basket to take from it. Drag in the lower left to steer.</p>
+    <button class="go wide" id="btnPlay">Be born</button>
+    <button class="go ghost wide" id="btnIntroSet">Settings</button>
+  </div>
+</div>
+
+<div class="overlay hide" id="dead">
+  <div class="card">
+    <div class="orn">✦</div>
+    <h2 id="deadHead">You died</h2>
+    <div id="deadBody"></div>
+    <button class="go wide" id="btnReborn">Be born again</button>
+  </div>
+</div>
+
+<div class="overlay hide" id="kin">
+  <div class="card">
+    <h2 style="font-size:24px">Kin</h2>
+    <div id="kinBody"></div>
+    <button class="go ghost wide" id="btnKinBack">Back</button>
+  </div>
+</div>
+
+<div class="overlay hide" id="settings">
+  <div class="card">
+    <h2 style="font-size:26px">Settings</h2>
+    <div class="row">
+      <div><span class="lab">Life length</span><span class="sub">How long one life lasts. Food burns at the same pace either way.</span></div>
+      <div class="seg" id="segLife"><button data-v="1">60m</button><button data-v="2">30m</button><button data-v="3">20m</button></div>
+    </div>
+    <div class="row">
+      <div><span class="lab">Voices</span><span class="sub" id="voiceSub">Checking…</span></div>
+      <button class="sw" id="swVoice" role="switch" aria-checked="true" aria-label="Voices"></button>
+    </div>
+    <div class="row" style="display:block">
+      <span class="lab">Voice server</span><span class="sub">Blank uses the arcade server this page came from. On the live site, an https Tailscale address of the PC.</span>
+      <input class="field" id="brainUrl" type="text" placeholder="same origin" autocomplete="off" autocapitalize="off" spellcheck="false">
+    </div>
+    <div class="row">
+      <div><span class="lab">Fullscreen</span><span class="sub">Hide the arcade bar.</span></div>
+      <button class="sw" id="swFs" role="switch" aria-checked="false" aria-label="Fullscreen"></button>
+    </div>
+    <div class="row">
+      <div><span class="lab">Sound</span><span class="sub">Wind, fire, and the small voices.</span></div>
+      <button class="sw" id="swSound" role="switch" aria-checked="true" aria-label="Sound"></button>
+    </div>
+    <div class="row">
+      <div><span class="lab">Haptics</span><span class="sub">A tap when you make something.</span></div>
+      <button class="sw" id="swHaptic" role="switch" aria-checked="true" aria-label="Haptics"></button>
+    </div>
+    <h3>The village</h3>
+    <div class="kv" id="worldInfo"></div>
+    <textarea class="field" id="sigil" placeholder="Paste a village to load it" spellcheck="false"></textarea>
+    <div style="display:flex;gap:8px">
+      <button class="go ghost wide" id="btnExport">Copy village</button>
+      <button class="go ghost wide" id="btnImport">Load pasted</button>
+    </div>
+    <button class="go ghost wide" id="btnNewWorld">New village</button>
+    <button class="go ghost wide" id="btnSetBack" style="margin-top:16px">Back</button>
+    <button class="go ghost wide" id="btnLeave">Leave to Arcade</button>
+  </div>
+</div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* =====================================================================
+     KINDRED — a life, an hour long, in a village that outlives you.
+
+     Modelled on Jason Rohrer's One Hour One Life (2018, public domain):
+     one year is one minute, food capacity is min(age,16)+4 and shrinks
+     after 44, a pip drains every 5-25s depending on body heat, the yum
+     chain rewards variety, speech is limited by age, and every craft is
+     a transition: (held, target) -> (new held, new target), plus things
+     that change on their own over time.
+
+     Two halves to every villager:
+       the body  - runs here, always, offline: eats, nurses, keeps the
+                   fire, gathers, farms, carries babies, ages, dies.
+       the voice - Claude Haiku through the arcade server's /api/brain,
+                   asked ONLY about villagers within earshot of you, and
+                   only when something happens near you. One call voices
+                   the whole nearby scene. With no server it falls back
+                   to stock lines, and the body carries on regardless.
+     ===================================================================== */
+
+  var stageEl = document.getElementById('stage');
+  var cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+  var probe = document.getElementById('probe');
+  function $(id) { return document.getElementById(id); }
+
+  var SKEY = 'kindred.settings', WKEY = 'kindred.world', CACHE = 'kindred-save';
+  var settings = { fullscreen: false, sound: true, haptics: true, voice: true, life: 1, brainUrl: '' };
+  try {
+    var sv = JSON.parse(localStorage.getItem(SKEY) || 'null');
+    if (sv) for (var sk in settings) if (typeof sv[sk] === typeof settings[sk]) settings[sk] = sv[sk];
+  } catch (e) {}
+  function saveSettings() { try { localStorage.setItem(SKEY, JSON.stringify(settings)); } catch (e) {} }
+  function buzz(p) { if (settings.haptics && navigator.vibrate) navigator.vibrate(p); }
+
+  /* ---------------- small tools ---------------- */
+
+  function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+  function lerp(a, b, t) { return a + (b - a) * t; }
+  function dist(ax, ay, bx, by) { var dx = ax - bx, dy = ay - by; return Math.sqrt(dx * dx + dy * dy); }
+  function pick(a) { return a[Math.floor(Math.random() * a.length)]; }
+  function hash2(x, y, s) {
+    var h = (x * 374761393 + y * 668265263 + s * 2147483647) | 0;
+    h = Math.imul(h ^ (h >>> 13), 1274126177);
+    return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+  }
+  function vnoise(x, y, s) {
+    var xi = Math.floor(x), yi = Math.floor(y), xf = x - xi, yf = y - yi;
+    var u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf);
+    return lerp(lerp(hash2(xi, yi, s), hash2(xi + 1, yi, s), u),
+                lerp(hash2(xi, yi + 1, s), hash2(xi + 1, yi + 1, s), u), v);
+  }
+  function fbm(x, y, s) { return vnoise(x, y, s) * 0.55 + vnoise(x * 2.1, y * 2.1, s + 7) * 0.3 + vnoise(x * 4.3, y * 4.3, s + 13) * 0.15; }
+
+  /* ---------------- sound ----------------
+     Procedural, and the context is built on the first gesture and never at
+     boot, or iOS leaves it suspended for good. */
+  var Snd = (function () {
+    var AC = window.AudioContext || window.webkitAudioContext;
+    var c = null, master = null, want = true, noiseBuf = null, bedOn = false, fireGain = null;
+    function ensure() {
+      if (c || !AC) return c;
+      try { c = new AC(); } catch (e) { return null; }
+      master = c.createGain(); master.gain.value = want ? 1 : 0.0001; master.connect(c.destination);
+      return c;
+    }
+    function unlock() { var x = ensure(); if (x && x.state === 'suspended') x.resume(); if (x && !bedOn) bed(); }
+    ['touchstart', 'mousedown', 'keydown'].forEach(function (ev) { window.addEventListener(ev, unlock, { passive: true }); });
+    function noise() {
+      if (noiseBuf) return noiseBuf;
+      var n = Math.floor(c.sampleRate * 1.2); noiseBuf = c.createBuffer(1, n, c.sampleRate);
+      var d = noiseBuf.getChannelData(0); for (var i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+      return noiseBuf;
+    }
+    function tone(freq, dur, o) {
+      if (!c || !want) return; o = o || {};
+      var t = c.currentTime, osc = c.createOscillator(), g = c.createGain();
+      osc.type = o.type || 'sine'; osc.frequency.setValueAtTime(freq, t);
+      if (o.to) osc.frequency.exponentialRampToValueAtTime(Math.max(20, o.to), t + dur);
+      var peak = o.gain == null ? 0.12 : o.gain;
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(peak, t + (o.attack || 0.006));
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      osc.connect(g); g.connect(master); osc.start(t); osc.stop(t + dur + 0.03);
+    }
+    function hit(dur, o) {
+      if (!c || !want) return; o = o || {};
+      var t = c.currentTime, src = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain();
+      src.buffer = noise(); f.type = o.type || 'bandpass'; f.frequency.value = o.freq || 900; f.Q.value = o.q || 1.1;
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(o.gain || 0.12, t + 0.004);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      src.connect(f); f.connect(g); g.connect(master); src.start(t); src.stop(t + dur + 0.03);
+    }
+    function bed() {
+      if (!c || bedOn) return; bedOn = true;
+      // wind: looped noise through a slowly wandering lowpass
+      var src = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain();
+      src.buffer = noise(); src.loop = true; f.type = 'lowpass'; f.frequency.value = 380; f.Q.value = 0.6;
+      g.gain.value = 0.05; src.connect(f); f.connect(g); g.connect(master); src.start();
+      var lfo = c.createOscillator(), la = c.createGain(); lfo.frequency.value = 0.05; la.gain.value = 180;
+      lfo.connect(la); la.connect(f.frequency); lfo.start();
+      // fire: a crackle bed whose level follows the nearest fire
+      var fs = c.createBufferSource(), ff = c.createBiquadFilter(); fireGain = c.createGain();
+      fs.buffer = noise(); fs.loop = true; ff.type = 'highpass'; ff.frequency.value = 1800;
+      fireGain.gain.value = 0.0001; fs.connect(ff); ff.connect(fireGain); fireGain.connect(master); fs.start();
+    }
+    function fire(level) {
+      if (!c || !fireGain) return;
+      var v = Math.max(0.0001, level * 0.035 * (0.6 + Math.random() * 0.8));
+      fireGain.gain.setTargetAtTime(v, c.currentTime, 0.08);
+    }
+    function enable(on) {
+      want = !!on; if (!c) return;
+      master.gain.setTargetAtTime(want ? 1 : 0.0001, c.currentTime, 0.05);
+      if (want && c.state === 'suspended') c.resume();
+    }
+    return { tone: tone, hit: hit, enable: enable, fire: fire,
+      blip: function (pitch) { tone(pitch * (0.9 + Math.random() * 0.25), 0.05, { type: 'triangle', gain: 0.035 }); },
+      craft: function () { hit(0.09, { freq: 1400, q: 2, gain: 0.1 }); tone(520, 0.12, { type: 'triangle', gain: 0.06 }); },
+      pick: function () { hit(0.05, { freq: 2200, q: 3, gain: 0.06 }); },
+      eat: function () { hit(0.08, { freq: 600, q: 1.5, gain: 0.1 }); tone(330, 0.1, { gain: 0.05 }); },
+      bell: function (f) { tone(f, 1.6, { gain: 0.09 }); tone(f * 2.01, 1.0, { gain: 0.04 }); },
+      toll: function () { tone(98, 2.4, { gain: 0.12, to: 92 }); tone(196.5, 1.6, { gain: 0.05 }); }
+    };
+  }());
+
+  /* =====================================================================
+     DATA - objects and transitions, shaped like OneLifeData7.
+
+     A transition is (actor in hand, target on the tile) -> (new actor,
+     new target). '_' is the bare hand, '' an empty tile. Objects with
+     `uses` count down per use (tu:-1) and become `spent` at zero; a
+     transition can also count up (tu:+1, a bowl filling). `decay` is a
+     time transition: [becomes, seconds]. A transition back onto the same
+     target resets its clock, which is how a fed fire keeps burning.
+     ===================================================================== */
+
+  var OB = {};
+  function O(id, name, p) { p = p || {}; p.id = id; p.name = name; OB[id] = p; }
+  // carry: can be picked up.  b: blocks walking.  food: pips.  wear: h|t|b, r: insulation.
+  O('stone', 'Round Stone', { carry: 1 });
+  O('sharp', 'Sharp Stone', { carry: 1 });
+  O('flint', 'Flint Chip', { carry: 1 });
+  O('bigrock', 'Big Hard Rock', { b: 1 });
+  O('maple', 'Maple Tree', { b: 1, tall: 1 });
+  O('maplebare', 'Maple Tree, stripped', { b: 1, tall: 1, decay: ['maple', 240] });
+  O('juniper', 'Juniper Tree', { b: 1, tall: 1 });
+  O('branch', 'Straight Branch', { carry: 1, long: 1 });
+  O('leaf', 'Leaf', { carry: 1 });
+  O('tinder', 'Juniper Tinder', { carry: 1 });
+  O('milkweed', 'Milkweed', {});
+  O('milkdebris', 'Milkweed Debris', { decay: ['milkweed', 200] });
+  O('stalk', 'Milkweed Stalk', { carry: 1 });
+  O('thread', 'Thread', { carry: 1 });
+  O('rope', 'Rope', { carry: 1 });
+  O('shaft', 'Long Shaft', { carry: 1, long: 1 });
+  O('short', 'Short Shaft', { carry: 1 });
+  O('skewer', 'Skewer', { carry: 1 });
+  O('stakes', 'Stakes', { carry: 1 });
+  O('tiedshort', 'Tied Short Shaft', { carry: 1 });
+  O('tiedlong', 'Tied Long Shaft', { carry: 1, long: 1 });
+  O('hatchet', 'Stone Hatchet', { carry: 1, uses: 8, spent: 'brokentool' });
+  O('hoe', 'Stone Hoe', { carry: 1, long: 1, uses: 8, spent: 'brokentool' });
+  O('brokentool', 'Broken Tool', { carry: 1 });
+  O('kindling', 'Kindling', { carry: 1 });
+  O('bow', 'Bow Drill Bow', { carry: 1 });
+  O('drill', 'Fire Bow Drill', { carry: 1 });
+  O('embershaft', 'Ember Shaft', { carry: 1, long: 1, decay: ['shaft', 20], heat: 0.02 });
+  O('emberleaf', 'Ember Leaf', { carry: 1, decay: ['leaf', 15], heat: 0.02 });
+  O('smolder', 'Smoldering Tinder', { decay: ['burning', 4], heat: 0.04 });
+  O('burning', 'Burning Tinder', { decay: ['', 25], heat: 0.08, light: 0.5 });
+  O('fire', 'Fire', { decay: ['coals', 100], heat: 0.3, light: 1, hearth: 1 });
+  O('bigfire', 'Large Fire', { decay: ['fire', 120], heat: 0.42, light: 1.35, hearth: 1 });
+  O('coals', 'Hot Coals', { decay: ['ashes', 150], heat: 0.14, light: 0.45, hearth: 1 });
+  O('ashes', 'Cold Hearth', { hearth: 1 });
+  O('firebrand', 'Firebrand', { carry: 1, long: 1, decay: ['', 30], heat: 0.06, light: 0.6 });
+  O('claydep', 'Clay Deposit', { uses: 4, spent: 'claypit' });
+  O('claypit', 'Clay Pit', { decay: ['claydep', 400] });
+  O('clay', 'Clay', { carry: 1 });
+  O('wetbowl', 'Wet Clay Bowl', { carry: 1 });
+  O('bowl', 'Clay Bowl', { carry: 1, nobasket: 1 });
+  O('water', 'Bowl of Water', { carry: 1, nobasket: 1 });
+  O('pond', 'Pond', { b: 1, uses: 5, spent: 'pondlow' });
+  O('pondlow', 'Muddy Pond', { b: 1, decay: ['pond', 300] });
+  O('bush', 'Gooseberry Bush', { uses: 6, spent: 'bushempty' });
+  O('bushempty', 'Picked Gooseberry Bush', { decay: ['bush', 420] });
+  O('bushwet', 'Watered Gooseberry Bush', { decay: ['bush', 90] });
+  O('berry', 'Gooseberry', { carry: 1, food: 3 });
+  O('berrybowl', 'Bowl of Gooseberries', { carry: 1, nobasket: 1, uses: 6, spent: 'bowl', fill: 1 });
+  O('wonion', 'Wild Onion', {});
+  O('wonionbare', 'Dug Onion Patch', { decay: ['wonion', 360] });
+  O('onion', 'Onion', { carry: 1, food: 4 });
+  O('wcarrot', 'Wild Carrot', {});
+  O('wcarrotdug', 'Dug Wild Carrot', { decay: ['wcarrotseed', 400] });
+  O('wcarrotseed', 'Seeding Wild Carrot', {});
+  O('seedhead', 'Carrot Seed Head', { carry: 1 });
+  O('carrot', 'Carrot', { carry: 1, food: 5 });
+  O('soil', 'Fertile Soil', {});
+  O('row', 'Tilled Row', {});
+  O('rowdry', 'Dry Planted Row', {});
+  O('rowwet', 'Wet Planted Row', { decay: ['sprouts', 90] });
+  O('sprouts', 'Carrot Sprouts', { decay: ['carrots', 90] });
+  O('carrots', 'Carrot Row', { uses: 5, spent: 'rowhard' });
+  O('rowhard', 'Hardened Row', {});
+  O('tule', 'Tule Reeds', { tall: 1 });
+  O('tuleharv', 'Cut Tule', {});
+  O('tulestump', 'Tule Stumps', { decay: ['tule', 300] });
+  O('reeds', 'Reed Bundle', { carry: 1 });
+  O('basket', 'Basket', { carry: 1, slots: 3, nobasket: 1 });
+  O('skirt', 'Reed Skirt', { carry: 1, wear: 'b', r: 0.12 });
+  O('furhat', 'Rabbit Fur Hat', { carry: 1, wear: 'h', r: 0.21 });
+  O('furwrap', 'Fur Wrap', { carry: 1, wear: 't', r: 0.3 });
+  O('snare', 'Snare', { carry: 1 });
+  O('rabbithole', 'Rabbit Hole', {});
+  O('snared', 'Set Snare', { decay: ['caught', 60] });
+  O('caught', 'Snared Rabbit', {});
+  O('deadrabbit', 'Dead Rabbit', { carry: 1 });
+  O('furrabbit', 'Rabbit, half skinned', {});
+  O('skinned', 'Skinned Rabbit', { carry: 1 });
+  O('fur', 'Rabbit Fur', { carry: 1 });
+  O('skewered', 'Skewered Rabbit', { carry: 1, long: 1 });
+  O('cooked', 'Cooked Rabbit', { carry: 1, food: 10, leaves: 'skewer', long: 1 });
+  O('burnt', 'Burnt Rabbit', { carry: 1, food: 2, leaves: 'skewer', long: 1 });
+  O('grave', 'Grave', { decay: ['bones', 1800] });
+  O('bones', 'Old Bones', {});
+
+  var TR = {};          // 'actor|target' -> transition
+  var BY_ACTOR = {};    // actor -> [transitions], for the hint line
+  function T(a, t, na, nt, o) {
+    var tr = o || {}; tr.a = a; tr.t = t; tr.na = na; tr.nt = nt;
+    TR[a + '|' + t] = tr;
+    (BY_ACTOR[a] = BY_ACTOR[a] || []).push(tr);
+  }
+  T('stone', 'bigrock', 'sharp', 'bigrock');
+  T('_', 'maple', 'branch', 'maplebare');
+  T('_', 'maplebare', 'leaf', 'maplebare');
+  T('_', 'juniper', 'tinder', 'juniper');
+  T('_', 'milkweed', 'stalk', 'milkdebris');
+  T('stalk', 'stalk', '_', 'thread');
+  T('thread', 'thread', '_', 'rope');
+  T('sharp', 'branch', 'sharp', 'shaft');
+  T('sharp', 'shaft', 'sharp', 'short');
+  T('sharp', 'short', 'sharp', 'skewer');
+  T('sharp', 'skewer', 'sharp', 'stakes');
+  T('rope', 'short', '_', 'tiedshort');
+  T('sharp', 'tiedshort', '_', 'hatchet');
+  T('rope', 'shaft', '_', 'tiedlong');
+  T('sharp', 'tiedlong', '_', 'hoe');
+  T('hatchet', 'branch', 'hatchet', 'kindling', { au: -1 });
+  T('rope', 'branch', '_', 'bow');
+  T('short', 'bow', '_', 'drill');
+  T('drill', 'shaft', 'drill', 'embershaft');
+  T('leaf', 'embershaft', 'emberleaf', 'shaft');
+  T('emberleaf', 'tinder', 'leaf', 'smolder');
+  T('emberleaf', 'ashes', 'leaf', 'coals');
+  T('kindling', 'burning', '_', 'fire');
+  T('kindling', 'fire', '_', 'bigfire');
+  T('kindling', 'bigfire', '_', 'bigfire');
+  T('branch', 'fire', '_', 'fire');
+  T('branch', 'bigfire', '_', 'bigfire');
+  T('kindling', 'coals', '_', 'fire');
+  T('branch', 'coals', '_', 'fire');
+  T('shaft', 'fire', 'firebrand', 'fire');
+  T('shaft', 'bigfire', 'firebrand', 'bigfire');
+  T('firebrand', 'ashes', '_', 'coals');
+  T('firebrand', 'tinder', '_', 'burning');
+  T('_', 'claydep', 'clay', 'claydep', { tu: -1 });
+  T('stone', 'clay', 'stone', 'wetbowl');
+  T('wetbowl', 'fire', 'bowl', 'fire');
+  T('wetbowl', 'bigfire', 'bowl', 'bigfire');
+  T('bowl', 'pond', 'water', 'pond', { tu: -1 });
+  T('water', 'bushempty', 'bowl', 'bushwet');
+  T('water', 'rowdry', 'bowl', 'rowwet');
+  T('_', 'bush', 'berry', 'bush', { tu: -1 });
+  T('berry', 'bowl', '_', 'berrybowl', { setT: 1 });
+  T('berry', 'berrybowl', '_', 'berrybowl', { tu: 1 });
+  T('_', 'berrybowl', 'berry', 'berrybowl', { tu: -1 });
+  T('bowl', 'bush', 'berrybowl', 'bush', { tu: -1, setA: 1 });
+  T('berrybowl', 'bush', 'berrybowl', 'bush', { tu: -1, au: 1 });
+  T('_', 'wonion', 'onion', 'wonionbare');
+  T('_', 'wcarrot', 'carrot', 'wcarrotdug');
+  T('_', 'wcarrotseed', 'seedhead', 'wcarrot');
+  T('skewer', 'soil', 'skewer', 'row');
+  T('hoe', 'soil', 'hoe', 'row', { au: -1 });
+  T('seedhead', 'row', '_', 'rowdry');
+  T('_', 'carrots', 'carrot', 'carrots', { tu: -1 });
+  T('skewer', 'rowhard', 'skewer', 'row');
+  T('hoe', 'rowhard', 'hoe', 'row', { au: -1 });
+  T('sharp', 'tule', 'sharp', 'tuleharv');
+  T('_', 'tuleharv', 'reeds', 'tulestump');
+  T('reeds', 'reeds', '_', 'basket');
+  T('reeds', 'rope', '_', 'skirt');
+  T('rope', 'stakes', '_', 'snare');
+  T('snare', 'rabbithole', '_', 'snared');
+  T('_', 'caught', 'deadrabbit', 'rabbithole');
+  T('flint', 'deadrabbit', 'flint', 'furrabbit');
+  T('sharp', 'deadrabbit', 'sharp', 'furrabbit');
+  T('_', 'furrabbit', 'fur', 'skinned');
+  T('skewer', 'skinned', '_', 'skewered');
+  T('skewered', 'coals', 'cooked', 'coals');
+  T('skewered', 'fire', 'burnt', 'fire');
+  T('skewered', 'bigfire', 'burnt', 'bigfire');
+  T('fur', 'fur', '_', 'furhat');
+  T('fur', 'reeds', '_', 'furwrap');
+
+  // Where an item can be had with a bare hand: item -> [source objects].
+  // The villagers' one-step planner ("go get a branch") is built from this.
+  var HAND_SRC = {};
+  Object.keys(TR).forEach(function (k) {
+    var tr = TR[k];
+    if (tr.a === '_' && tr.na !== '_' && tr.t !== tr.na) (HAND_SRC[tr.na] = HAND_SRC[tr.na] || []).push(tr.t);
+  });
+
+  // What the elders know, written into the voice's system prompt so a tip
+  // they give is a real recipe in this world, not an invented one.
+  function nm(id) { return id === '_' ? 'bare hand' : id === '' ? 'nothing' : (OB[id] ? OB[id].name.toLowerCase() : id); }
+  function recipeText(tr) {
+    var made = tr.na !== '_' && tr.na !== tr.a ? tr.na : tr.nt;
+    return nm(tr.a) + ' on ' + nm(tr.t) + ' gives ' + nm(made);
+  }
+  var LORE = Object.keys(TR).filter(function (k) {
+    var tr = TR[k];
+    return !(tr.a === '_' && tr.t === 'berrybowl') && !(tr.na === tr.a && tr.nt === tr.t);
+  }).map(function (k) { return recipeText(TR[k]); });
+
+  /* =====================================================================
+     WORLD
+     ===================================================================== */
+
+  var MW = 96, MH = 96;
+  var BI = [   // biome: ground colour (dark, dried-blood cast), heat 0..1 (0.5 is comfortable), spawn table
+    { name: 'grassland', col: [44, 52, 36], heat: 0.44,
+      spawn: { bush: 0.022, maple: 0.03, juniper: 0.01, milkweed: 0.03, stone: 0.022, bigrock: 0.007, wonion: 0.012, flint: 0.003 } },
+    { name: 'prairie', col: [74, 62, 36], heat: 0.46,
+      spawn: { wcarrot: 0.02, wcarrotseed: 0.012, rabbithole: 0.014, stone: 0.01, milkweed: 0.012, maple: 0.006, soil: 0.008 } },
+    { name: 'swamp', col: [34, 44, 42], heat: 0.4,
+      spawn: { tule: 0.06, claydep: 0.016, pond: 0.014, soil: 0.022, maple: 0.008 } },
+    { name: 'badlands', col: [60, 38, 34], heat: 0.3,
+      spawn: { bigrock: 0.03, stone: 0.04, flint: 0.022, juniper: 0.02 } },
+    { name: 'desert', col: [92, 70, 46], heat: 0.86, spawn: { stone: 0.02, bigrock: 0.01 } },
+    { name: 'tundra', col: [70, 74, 82], heat: 0.1, spawn: { stone: 0.015, juniper: 0.01, bigrock: 0.01 } }
+  ];
+
+  var FIRST_F = ['MAREN', 'ILSA', 'WREN', 'TOVE', 'AGNA', 'RUTH', 'EDDA', 'NELL', 'SIGRID', 'ODA', 'HELKA', 'LIV', 'MAUD',
+                 'ROSA', 'ELKE', 'BRYN', 'ISOLDE', 'YRSA', 'GUDRUN', 'HILDE', 'ALMA', 'TEA', 'SAGA', 'VERA', 'NORA', 'IDUN'];
+  var FIRST_M = ['ODO', 'BRAM', 'TORVALD', 'EMRYS', 'HALE', 'IVOR', 'ROAN', 'STIG', 'ULF', 'COLM', 'AREN', 'GORM',
+                 'LEIF', 'OSRIC', 'PIRAN', 'TAM', 'EINAR', 'KNUT', 'BENNO', 'ARVID', 'JOSS', 'HAKON', 'MILO', 'RUNE'];
+  var FAMS = ['THORN', 'ASHFORD', 'MERE', 'HOLLOW', 'BRACKEN', 'VALE', 'STONE', 'FENN', 'WICK', 'HARROW', 'COLD', 'MARROW'];
+  var TRAITS = ['warm', 'blunt', 'anxious', 'proud', 'tired', 'funny', 'stern', 'gentle', 'curious', 'sad', 'bossy',
+                'patient', 'grumpy', 'pious', 'wry', 'shy', 'loud', 'tender', 'restless', 'practical'];
+
+  var W = null;              // the whole saved state
+  var me = null;             // the player's person (W.people entry)
+  var YEAR = 60;             // seconds per year, from settings.life
+
+  function idx(x, y) { return y * MW + x; }
+  function inb(x, y) { return x >= 0 && y >= 0 && x < MW && y < MH; }
+  function objAt(x, y) { return inb(x, y) ? W.obj[idx(x, y)] : null; }
+  function setObj(x, y, o) { if (inb(x, y)) W.obj[idx(x, y)] = o; }
+  function blocked(x, y) { if (!inb(x, y)) return true; var o = W.obj[idx(x, y)]; return !!(o && OB[o.id].b); }
+  function biomeAt(x, y) { return inb(x, y) ? BI[W.biome[idx(x, y)]] : BI[0]; }
+  function mk(id, o) {
+    var d = OB[id], it = { id: id };
+    if (d.uses) it.u = d.fill ? 1 : d.uses;
+    if (d.decay) it.d = W.T + d.decay[1] * (0.85 + Math.random() * 0.3);
+    if (d.slots) it.c = [];
+    if (o) for (var k in o) it[k] = o[k];
+    return it;
+  }
+
+  function genBiome(seed) {
+    var out = [], cx = MW >> 1, cy = MH >> 1;
+    for (var y = 0; y < MH; y++) for (var x = 0; x < MW; x++) {
+      var a = fbm(x / 22, y / 22, seed), b = fbm(x / 30 + 40, y / 30 + 40, seed + 99);
+      var lat = (y - cy) / MH;                      // cold to the north, hot to the south
+      var bi;
+      if (lat < -0.36 && a > 0.38) bi = 5;
+      else if (lat > 0.38 && a > 0.42) bi = 4;
+      else if (a < 0.4) bi = 2;
+      else if (a > 0.62) bi = 3;
+      else bi = b > 0.52 ? 1 : 0;
+      if (dist(x, y, cx, cy) < 9) bi = 0;            // the village sits in grassland
+      if (dist(x, y, cx + 9, cy + 4) < 5) bi = 2;    // with a swamp a short walk east
+      if (dist(x, y, cx - 8, cy + 6) < 5) bi = 1;    // and prairie to the south west
+      out.push(bi);
+    }
+    return out;
+  }
+
+  function genWorld(seed) {
+    W = { v: 1, seed: seed, T: 0, obj: new Array(MW * MH), biome: [], people: [], nextId: 1, gen: 1,
+          lives: [], camp: { x: MW >> 1, y: MH >> 1 }, fams: [], meId: 0 };
+    W.T = 360 * 0.3;                                // the first life begins in the morning
+    var cx = W.camp.x, cy = W.camp.y, x, y;
+    W.biome = genBiome(seed);
+    for (y = 1; y < MH - 1; y++) for (x = 1; x < MW - 1; x++) {
+      if (dist(x, y, cx, cy) < 4) continue;
+      var sp = BI[W.biome[idx(x, y)]].spawn, r = hash2(x, y, seed + 5), acc = 0;
+      for (var id in sp) { acc += sp[id]; if (r < acc) { setObj(x, y, mk(id)); break; } }
+    }
+    // The village: a hearth, food stores, and what a few lives have left lying about.
+    function put(dx, dy, id, o) { var x = cx + dx, y = cy + dy; if (!objAt(x, y)) setObj(x, y, mk(id, o)); }
+    setObj(cx, cy, mk('fire'));
+    put(2, 0, 'berrybowl', { u: 4 }); put(-2, 1, 'basket', { c: [mk('berry'), mk('carrot')] });
+    put(1, -2, 'bowl'); put(-1, -2, 'kindling'); put(-2, -1, 'kindling'); put(0, 2, 'branch'); put(1, 2, 'branch');
+    put(-1, 2, 'hatchet'); put(2, 2, 'sharp'); put(3, -1, 'stone'); put(-3, 0, 'skewer'); put(3, 1, 'water');
+    var ring = [[5, 0], [5, 2], [4, 4], [-4, 4], [-5, 2], [-5, -1], [-4, -4], [0, -5], [2, -5], [-2, 5], [3, -4], [6, -2]];
+    ring.forEach(function (d) { setObj(cx + d[0], cy + d[1], mk('bush')); });
+    [[7, -6], [-7, -5], [-6, 7], [8, 6], [-8, 0]].forEach(function (d) { setObj(cx + d[0], cy + d[1], mk('maple')); });
+    [[6, -7], [-7, 3]].forEach(function (d) { setObj(cx + d[0], cy + d[1], mk('juniper')); });
+    [[3, 5], [4, 6], [-3, -6]].forEach(function (d) { setObj(cx + d[0], cy + d[1], mk('milkweed')); });
+    setObj(cx + 7, cy + 2, mk('pond')); setObj(cx - 6, cy - 3, mk('bigrock'));
+    [[-2, -7], [-1, -7], [0, -7]].forEach(function (d, i) { setObj(cx + d[0], cy + d[1], mk(i === 1 ? 'sprouts' : 'carrots')); });
+    setObj(cx + 1, cy - 7, mk('soil')); setObj(cx + 2, cy - 7, mk('soil'));
+    // The people already here.
+    var fam = pick(FAMS); W.fams.push(fam);
+    var elder = person({ sex: 'f', age: 49, fam: fam, x: cx - 1, y: cy + 1 });
+    var elder2 = person({ sex: 'm', age: 53, fam: fam, x: cx + 1, y: cy + 1 });
+    var m1 = person({ sex: 'f', age: 24, fam: fam, x: cx + 1, y: cy - 1, mother: elder.id });
+    var m2 = person({ sex: 'f', age: 31, fam: fam, x: cx - 2, y: cy - 2, mother: elder.id });
+    person({ sex: 'm', age: 27, fam: fam, x: cx + 3, y: cy, mother: elder.id });
+    person({ sex: 'm', age: 8, fam: fam, x: cx, y: cy + 3, mother: m2.id });
+    person({ sex: 'f', age: 17, fam: fam, x: cx - 3, y: cy + 2, mother: m2.id });
+    return m1;
+  }
+
+  /* ---------------- people ---------------- */
+
+  function person(o) {
+    var used = {};
+    W.people.forEach(function (p) { if (p.alive) used[p.name] = 1; });
+    var pool = (o.sex === 'f' ? FIRST_F : FIRST_M).filter(function (n) { return !used[n]; });
+    var p = {
+      id: W.nextId++, name: o.name !== undefined ? o.name : (pool.length ? pick(pool) : pick(o.sex === 'f' ? FIRST_F : FIRST_M)),
+      fam: o.fam, sex: o.sex, born: W.T - (o.age || 0) * YEAR, x: o.x + 0.5, y: o.y + 0.5,
+      held: null, carry: 0, carriedBy: 0, food: 0, yum: 0, eaten: {}, heat: 0.5, clothes: {},
+      mother: o.mother || 0, traits: [pick(TRAITS), pick(TRAITS)], mem: [], said: '', sayT: -99,
+      alive: true, npc: o.npc !== false, path: null, job: null, intent: null, lastBirth: W.T - 200,
+      skin: Math.floor(Math.random() * 4), pitch: (o.sex === 'f' ? 420 : 260) * (0.85 + Math.random() * 0.3),
+      starve: 0, foodClock: 0, deathT: 0, cause: '', gen: o.gen || W.gen, wait: 0, face: 1, step: 0
+    };
+    if (p.traits[0] === p.traits[1]) p.traits.pop();
+    p.food = capOf(p);
+    if (o.age > 1 && o.sex === 'm' && Math.random() < 0.5) p.clothes.b = mk('skirt');
+    if (o.age > 40) p.clothes.t = mk('furwrap');
+    W.people.push(p);
+    return p;
+  }
+  function byId(id) { for (var i = 0; i < W.people.length; i++) if (W.people[i].id === id) return W.people[i]; return null; }
+  function ageOf(p) { return ((p.alive ? W.T : p.deathT) - p.born) / YEAR; }
+  function capOf(p) {
+    var a = ageOf(p);
+    return Math.floor(a < 44 ? Math.min(a, 16) + 4 : Math.max(4, 64 - a));
+  }
+  function fertile(p) { var a = ageOf(p); return p.alive && p.sex === 'f' && a >= 14 && a <= 40; }
+  // One Hour One Life's getSayLimit: a letter a year to 8, a sigmoid to 66 by 16, then slowly more.
+  function sayLimit(p) {
+    var a = ageOf(p);
+    if (a < 8) return Math.floor(a) + 1;
+    if (a < 16) return Math.round(9 + 57 / (1 + Math.exp(-(a - 12) * 0.9)));
+    return Math.floor(66 + (a - 16) / 2);
+  }
+  function fullName(p) { return p.name ? p.name + (p.fam ? ' ' + p.fam : '') : 'a nameless ' + (ageOf(p) < 3 ? 'baby' : 'child'); }
+  function stageOf(p) {
+    var a = ageOf(p);
+    return a < 3 ? 'baby' : a < 13 ? (p.sex === 'f' ? 'girl' : 'boy') : a < 45 ? (p.sex === 'f' ? 'woman' : 'man') :
+      (p.sex === 'f' ? 'old woman' : 'old man');
+  }
+  function relation(p, q) {     // what q is to p, in words
+    if (!p || !q) return 'stranger';
+    if (q.id === p.mother) return 'mother';
+    if (q.mother === p.id) return q.sex === 'f' ? 'daughter' : 'son';
+    if (p.mother && q.mother === p.mother) return q.sex === 'f' ? 'sister' : 'brother';
+    var pm = byId(p.mother);
+    if (pm && q.id === pm.mother) return 'grandmother';
+    if (pm && pm.mother && q.mother === pm.mother) return q.sex === 'f' ? 'aunt' : 'uncle';
+    var qm = byId(q.mother);
+    if (qm && qm.mother === p.id) return 'grandchild';
+    if (q.fam && q.fam === p.fam) return 'kin';
+    return 'stranger';
+  }
+  function remember(p, text) {
+    p.mem.push(Math.floor(ageOf(p)) + 'y: ' + text);
+    if (p.mem.length > 8) p.mem.shift();
+  }
+  function living() { return W.people.filter(function (p) { return p.alive; }); }
+
+  /* ---------------- heat, food, age ---------------- */
+
+  function envHeat(x, y) {
+    var tx = Math.floor(x), ty = Math.floor(y), h = biomeAt(tx, ty).heat;
+    for (var dy = -4; dy <= 4; dy++) for (var dx = -4; dx <= 4; dx++) {
+      var o = objAt(tx + dx, ty + dy);
+      if (o && OB[o.id].heat) {
+        var d = Math.sqrt(dx * dx + dy * dy);
+        if (d < 4.5) h += OB[o.id].heat * (1 - d / 4.5);
+      }
+    }
+    return h - night() * 0.08;
+  }
+  function insul(p) {
+    var r = 0.04;
+    for (var s in p.clothes) if (p.clothes[s]) r = r + OB[p.clothes[s].id].r - r * OB[p.clothes[s].id].r;
+    return r;
+  }
+  // 0 at noon, 1 at midnight. A day is six minutes, for the light more than the cold.
+  function night() { var ph = (W.T / 360) % 1; return clamp(0.5 - 0.5 * Math.cos((ph - 0.5) * Math.PI * 2) - 0.15, 0, 0.85) / 0.85; }
+
+  function eat(p, it) {
+    var d = OB[it.id], cap = capOf(p);
+    if (!d.food) return false;
+    if (p.food >= cap) return false;
+    var first = !p.eaten[it.id];
+    p.eaten[it.id] = (p.eaten[it.id] || 0) + 1;
+    var gain = d.food, distinct = Object.keys(p.eaten).length;
+    p.food = Math.min(cap, p.food + gain);
+    if (first) p.yum += Math.max(0, distinct - 1) * 2;     // the yum chain: something new is worth more
+    p.starve = 0;
+    return { first: first, yum: first && distinct > 1 };
+  }
+
+  function lifeTick(p, dt) {
+    if (!p.alive) return;
+    var a = ageOf(p), cap = capOf(p);
+    if (p.food > cap) p.food = cap;
+    // heat: carried babies share the carrier's warmth
+    var holder = p.carriedBy ? byId(p.carriedBy) : null;
+    var env = holder ? holder.heat + 0.06 : envHeat(p.x, p.y);
+    if (p.held && OB[p.held.id].heat) env += OB[p.held.id].heat;
+    var target = 0.5 + (env - 0.5) * (1 - insul(p) * 1.4);
+    p.heat += (target - p.heat) * Math.min(1, dt * 0.06);
+    // A baby held by a nursing mother does not go hungry.
+    if (holder && fertile(holder) && a < 3) { p.food = cap; p.foodClock = 0; }
+    else {
+      var per = 5 + 20 * (1 - Math.min(1, Math.abs(p.heat - 0.5) * 2));
+      p.foodClock += dt;
+      if (p.foodClock >= per) {
+        p.foodClock -= per;
+        if (p.yum > 0) p.yum--;
+        else if (p.food > 0) p.food--;
+      }
+    }
+    if (p.food <= 0 && p.yum <= 0) {
+      p.starve += dt;
+      if (p.starve > (a < 3 ? 14 : 20)) return die(p, 'starved');
+    }
+    if (a >= 60) return die(p, 'old age');
+  }
+
+  function die(p, cause) {
+    p.alive = false; p.deathT = W.T; p.cause = cause;
+    var tx = Math.floor(p.x), ty = Math.floor(p.y);
+    if (p.carriedBy) { var h = byId(p.carriedBy); if (h) h.carry = 0; p.carriedBy = 0; }
+    if (p.carry) { var c = byId(p.carry); if (c) { c.carriedBy = 0; } p.carry = 0; }
+    var spot = freeNear(tx, ty, 3);
+    if (spot) setObj(spot.x, spot.y, mk('grave', { g: { name: fullName(p), age: Math.floor(ageOf(p)), cause: cause } }));
+    if (p.held) { var s2 = freeNear(tx, ty, 3); if (s2) setObj(s2.x, s2.y, p.held); p.held = null; }
+    W.lives.push({ name: fullName(p), age: Math.floor(ageOf(p)), cause: cause, me: p === me, t: W.T });
+    if (W.lives.length > 60) W.lives.shift();
+    living().forEach(function (q) {
+      var rel = relation(q, p);
+      if (rel !== 'stranger' || dist(q.x, q.y, p.x, p.y) < 8)
+        remember(q, fullName(p) + ' (' + rel + ') died of ' + cause + ' at ' + Math.floor(ageOf(p)));
+    });
+    Snd.toll();
+    Mind.event(p, (p.name || 'a nameless baby') + ' died of ' + cause, 3);
+    if (p === me) onMyDeath();
+  }
+
+  function freeNear(x, y, r) {
+    for (var rr = 0; rr <= r; rr++) for (var dy = -rr; dy <= rr; dy++) for (var dx = -rr; dx <= rr; dx++) {
+      if (Math.max(Math.abs(dx), Math.abs(dy)) !== rr) continue;
+      if (inb(x + dx, y + dy) && !objAt(x + dx, y + dy)) return { x: x + dx, y: y + dy };
+    }
+    return null;
+  }
+
+  /* ---------------- the one rule: use what you hold on that ----------------
+     Shared by the player and the villagers, so a villager can only ever do
+     what the player could. Returns a short phrase for the toast, or null. */
+
+  function near(p, tx, ty) { return Math.abs(Math.floor(p.x) - tx) <= 1 && Math.abs(Math.floor(p.y) - ty) <= 1; }
+  function small(it) { var d = OB[it.id]; return d.carry && !d.nobasket && !d.long; }
+
+  function apply(p, tx, ty, alt) {
+    if (!p.alive || p.carriedBy) return null;
+    if (ageOf(p) < 3) return 'too small to do that yet';
+    if (!near(p, tx, ty) || !inb(tx, ty)) return null;
+    var h = p.held, o = objAt(tx, ty);
+    if (alt) {            // a long press: take out of a container
+      if (o && o.c && o.c.length && !h) { p.held = o.c.pop(); Snd.pick(); return 'took ' + nm(p.held.id); }
+      if (o && o.c && h && small(h) && o.c.length < OB[o.id].slots) { o.c.push(h); p.held = null; Snd.pick(); return 'put it in'; }
+    }
+    if (!o) {
+      if (h) { setObj(tx, ty, h); p.held = null; Snd.pick(); return null; }
+      return null;
+    }
+    var tr = TR[(h ? h.id : '_') + '|' + o.id];
+    if (tr && tr.tu > 0 && (o.u || 0) >= OB[o.id].uses) tr = null;               // already full
+    if (tr && tr.au > 0 && h && (h.u || 0) >= OB[h.id].uses) tr = null;
+    if (tr) return doTransition(p, tr, tx, ty);
+    if (h && h.c && small(o) && h.c.length < OB[h.id].slots) {                     // basket in hand scoops it up
+      h.c.push(o); setObj(tx, ty, null); Snd.pick(); return null;
+    }
+    if (h && o.c && small(h) && o.c.length < OB[o.id].slots) {                     // into the basket on the ground
+      o.c.push(h); p.held = null; Snd.pick(); return null;
+    }
+    if (!h && OB[o.id].carry) { p.held = o; setObj(tx, ty, null); Snd.pick(); return null; }
+    if (h && OB[o.id].carry) { setObj(tx, ty, h); p.held = o; Snd.pick(); return null; }  // swap
+    return h ? 'nothing comes of ' + nm(h.id) + ' on ' + nm(o.id) : null;
+  }
+
+  function doTransition(p, tr, tx, ty) {
+    var o = objAt(tx, ty), h = p.held;
+    // the hand
+    if (tr.na === '_') p.held = null;
+    else if (h && tr.na === h.id) {
+      if (tr.au) {
+        h.u = (h.u || 0) + tr.au;
+        if (h.u <= 0) p.held = mk(OB[h.id].spent);
+      }
+    } else p.held = mk(tr.na, tr.setA ? { u: 1 } : null);
+    // the target
+    if (tr.nt === '') setObj(tx, ty, null);
+    else if (tr.nt === o.id) {
+      if (tr.tu) {
+        o.u = (o.u || 0) + tr.tu;
+        if (o.u <= 0) setObj(tx, ty, mk(OB[o.id].spent));
+      }
+      if (OB[o.id].decay && objAt(tx, ty) === o) o.d = W.T + OB[o.id].decay[1];     // fed: the clock resets
+    } else {
+      var n = mk(tr.nt, tr.setT ? { u: 1 } : null);
+      if (o.g) n.g = o.g;
+      setObj(tx, ty, n);
+    }
+    Snd.craft(); if (p === me) buzz(8);
+    var made = tr.na !== '_' && tr.na !== tr.a ? tr.na : tr.nt;
+    if (p === me && made && tr.nt !== tr.t) Mind.noteCraft(made);
+    return null;
+  }
+
+  function useSelf(p) {
+    var h = p.held;
+    if (!h) return null;
+    if (ageOf(p) < 3) return null;
+    var d = OB[h.id];
+    if (d.food) {
+      var r = eat(p, h);
+      if (!r) return 'not hungry';
+      p.held = d.leaves ? mk(d.leaves) : null;
+      Snd.eat();
+      if (p === me) Mind.event(me, me.name + ' ate ' + nm(h.id), 1);
+      return r.yum ? 'yum — something new' : null;
+    }
+    if (d.wear) {
+      var old = p.clothes[d.wear] || null;
+      p.clothes[d.wear] = h; p.held = old; Snd.pick();
+      return 'wearing ' + nm(h.id);
+    }
+    if (h.id === 'berrybowl') {               // eat straight from the bowl
+      if (p.food >= capOf(p)) return 'not hungry';
+      eat(p, { id: 'berry' }); h.u--; if (h.u <= 0) p.held = mk('bowl'); Snd.eat();
+      return null;
+    }
+    return null;
+  }
+
+  // q is the person tapped. Feed them, hand them a thing, or pick a small one up.
+  function usePerson(p, q) {
+    if (!p.alive || !q.alive || dist(p.x, p.y, q.x, q.y) > 1.9 || ageOf(p) < 3) return null;
+    var h = p.held;
+    if (h && OB[h.id].food && q.food < capOf(q)) {
+      eat(q, h); p.held = OB[h.id].leaves ? mk(OB[h.id].leaves) : null; Snd.eat();
+      remember(q, (p.name || 'someone') + ' fed me ' + nm(h.id));
+      Mind.event(q, (p.name || 'Someone') + ' fed ' + (q.name || 'the baby') + ' ' + nm(h.id), 2);
+      return 'fed ' + (q.name || 'them');
+    }
+    if (h && h.id === 'berrybowl' && q.food < capOf(q)) {
+      eat(q, { id: 'berry' }); h.u--; if (h.u <= 0) p.held = mk('bowl'); Snd.eat();
+      remember(q, (p.name || 'someone') + ' fed me berries');
+      return 'fed ' + (q.name || 'them');
+    }
+    if (!h && !p.carry && ageOf(q) < 4 && ageOf(p) >= 10 && !q.carriedBy) return pickUp(p, q);
+    if (h && !q.held && ageOf(q) >= 3) {
+      q.held = h; p.held = null; Snd.pick();
+      remember(q, (p.name || 'someone') + ' gave me ' + nm(h.id));
+      Mind.event(q, (p.name || 'Someone') + ' gave ' + q.name + ' ' + nm(h.id), 2);
+      return 'gave ' + nm(h.id);
+    }
+    return null;
+  }
+  function pickUp(p, q) {
+    p.carry = q.id; q.carriedBy = p.id; q.path = null;
+    if (fertile(p) && (q.food <= 2 || ageOf(q) >= 3)) { q.food = capOf(q); p.food = Math.max(0, p.food - 1); }
+    remember(q, (p.name || 'someone') + ' picked me up');
+    if (q === me || p === me) Mind.event(q, p.name + ' picked up ' + (q.name || 'the baby'), 2);
+    return null;
+  }
+  function putDown(p) {
+    var q = byId(p.carry); p.carry = 0;
+    if (!q) return;
+    q.carriedBy = 0;
+    var s = freeNear(Math.floor(p.x), Math.floor(p.y), 2) || { x: Math.floor(p.x), y: Math.floor(p.y) };
+    q.x = s.x + 0.5; q.y = s.y + 0.5;
+  }
+
+  /* ---------------- paths ----------------
+     A* on the tile grid, eight ways, never cutting a blocked corner. The goal
+     is the tile itself if it is walkable, else any free tile beside it. */
+
+  function findPath(sx, sy, gx, gy, adj) {
+    if (!inb(gx, gy)) return null;
+    var goals = {};
+    if (!adj && !blocked(gx, gy)) goals[idx(gx, gy)] = 1;
+    else for (var dy = -1; dy <= 1; dy++) for (var dx = -1; dx <= 1; dx++)
+      if ((dx || dy || !blocked(gx, gy)) && !blocked(gx + dx, gy + dy)) goals[idx(gx + dx, gy + dy)] = 1;
+    if (goals[idx(sx, sy)]) return [];
+    var open = [idx(sx, sy)], g = {}, came = {}, f = {}, closed = {};
+    g[open[0]] = 0; f[open[0]] = dist(sx, sy, gx, gy);
+    var iter = 0;
+    while (open.length && iter++ < 2600) {
+      var bi = 0;
+      for (var i = 1; i < open.length; i++) if (f[open[i]] < f[open[bi]]) bi = i;
+      var cur = open[bi]; open.splice(bi, 1);
+      if (goals[cur]) {
+        var out = []; while (cur !== undefined && cur !== idx(sx, sy)) { out.unshift(cur); cur = came[cur]; }
+        return out.map(function (k) { return { x: k % MW, y: Math.floor(k / MW) }; });
+      }
+      closed[cur] = 1;
+      var cx = cur % MW, cy = Math.floor(cur / MW);
+      for (var ny = -1; ny <= 1; ny++) for (var nx = -1; nx <= 1; nx++) {
+        if (!nx && !ny) continue;
+        var x = cx + nx, y = cy + ny;
+        if (blocked(x, y) || (nx && ny && (blocked(cx + nx, cy) || blocked(cx, cy + ny)))) continue;
+        var k = idx(x, y); if (closed[k]) continue;
+        var ng = g[cur] + (nx && ny ? 1.414 : 1);
+        if (g[k] === undefined || ng < g[k]) {
+          if (g[k] === undefined) open.push(k);
+          g[k] = ng; came[k] = cur; f[k] = ng + dist(x, y, gx, gy);
+        }
+      }
+    }
+    return null;
+  }
+  function speedOf(p) {
+    var a = ageOf(p);
+    if (a < 0.2) return 0;                            // cannot crawl for the first twelve seconds
+    var s = 3.0 * (a < 10 ? 0.6 + 0.4 * a / 10 : 1);
+    if (a > 52) s *= 0.85;
+    if (p.carry) s *= 0.9;
+    return s;
+  }
+  function walk(p, dt) {
+    if (p.carriedBy) { var h = byId(p.carriedBy); if (h) { p.x = h.x + 0.18 * h.face; p.y = h.y - 0.05; } return true; }
+    if (!p.path || !p.path.length) return true;
+    var n = p.path[0], tx = n.x + 0.5, ty = n.y + 0.5, d = dist(p.x, p.y, tx, ty), s = speedOf(p) * dt;
+    if (s <= 0) return false;
+    if (Math.abs(tx - p.x) > 0.02) p.face = tx > p.x ? 1 : -1;
+    p.step += s;
+    if (d <= s) { p.x = tx; p.y = ty; p.path.shift(); return !p.path.length; }
+    p.x += (tx - p.x) / d * s; p.y += (ty - p.y) / d * s;
+    return false;
+  }
+  function goTo(p, tx, ty, adj) {
+    var path = findPath(Math.floor(p.x), Math.floor(p.y), tx, ty, adj);
+    p.path = path;
+    return path !== null;
+  }
+
+  /* =====================================================================
+     THE BODY — what every villager does, offline, whether you are there
+     or not. Plain priorities, re-decided every second or so: eat, nurse,
+     feed the small ones, keep the hearth, water and pick, farm, fetch
+     wood, rest. A voice-given intent (follow, fetch, feed) goes first.
+     ===================================================================== */
+
+  var FOOD_IDS = ['berry', 'onion', 'carrot', 'cooked'];
+  var FOOD_SRC = ['berrybowl', 'bush', 'carrots', 'wonion', 'wcarrot'];
+
+  // The villager deciding right now; tiles they recently failed to reach are skipped,
+  // or a child whose nearest food sits behind a wall would try it until she starved.
+  var scanFor = null;
+  function scan(x0, y0, r, test) {      // nearest tile within r whose object passes test
+    var best = null, bd = 1e9, cx = Math.floor(x0), cy = Math.floor(y0), av = scanFor && scanFor.avoid;
+    for (var y = Math.max(0, cy - r); y <= Math.min(MH - 1, cy + r); y++)
+      for (var x = Math.max(0, cx - r); x <= Math.min(MW - 1, cx + r); x++) {
+        var o = W.obj[idx(x, y)];
+        if (o && !(av && av[idx(x, y)] > W.T) && test(o, x, y)) { var d = Math.abs(x - cx) + Math.abs(y - cy); if (d < bd) { bd = d; best = { x: x, y: y, o: o }; } }
+      }
+    return best;
+  }
+  function hearth() {
+    var c = W.camp, o = objAt(c.x, c.y);
+    if (o && OB[o.id].hearth) return { x: c.x, y: c.y, o: o };
+    return scan(c.x, c.y, 10, function (o) { return OB[o.id].hearth; });
+  }
+  function claimed(kind, p) {           // one villager to a chore, so they do not all crowd the fire
+    for (var i = 0; i < W.people.length; i++) {
+      var q = W.people[i];
+      if (q !== p && q.alive && q.job && q.job.kind === kind) return true;
+    }
+    return false;
+  }
+  function job(kind, x, y, then, adj) { return { kind: kind, x: x, y: y, then: then, adj: adj !== false, tries: 0 }; }
+
+  // Go and get `id` into the hand: a loose one on the ground, else a bare-hand source.
+  function fetchJob(p, id, kind, after) {
+    var src = HAND_SRC[id] || [];
+    var hit = scan(p.x, p.y, 22, function (o) { return o.id === id || src.indexOf(o.id) >= 0; });
+    if (!hit) return null;
+    return job(kind, hit.x, hit.y, function (p) {
+      apply(p, hit.x, hit.y);
+      if (p.held && p.held.id === id && after) p.job = after(p);
+    });
+  }
+  function foodJob(p, kind, after) {
+    var hit = scan(p.x, p.y, 24, function (o) {
+      if (FOOD_IDS.indexOf(o.id) >= 0 || FOOD_SRC.indexOf(o.id) >= 0) return true;
+      if (o.c) for (var i = 0; i < o.c.length; i++) if (OB[o.c[i].id].food) return true;
+      return false;
+    });
+    if (!hit) return null;
+    return job(kind, hit.x, hit.y, function (p) {
+      var o = objAt(hit.x, hit.y);
+      if (o && o.c) {             // dig the food out of a basket
+        for (var i = o.c.length - 1; i >= 0; i--) if (OB[o.c[i].id].food) { p.held = o.c.splice(i, 1)[0]; break; }
+      } else apply(p, hit.x, hit.y);
+      if (p.held && OB[p.held.id].food && after) p.job = after(p);
+    });
+  }
+  function personJob(kind, q, then) { return { kind: kind, follow: q.id, then: then, tries: 0 }; }
+  function dropHeld(p) {
+    if (!p.held) return;
+    var s = freeNear(Math.floor(p.x), Math.floor(p.y), 1);
+    if (s) apply(p, s.x, s.y);
+  }
+  function campSpot() { return freeNear(W.camp.x, W.camp.y, 4); }
+
+  function decide(p) {
+    var a = ageOf(p), cap = capOf(p), c = W.camp;
+    var mom = byId(p.mother);
+    // A baby: crawl after its mother, cry when hungry.
+    if (a < 3) {
+      if (p.food <= 2 && W.T - p.sayT > 9) say(p, a < 1 ? 'F' : pick(['F', 'FOOD', 'MAMA']).slice(0, sayLimit(p)), true);
+      if (mom && mom.alive && dist(p.x, p.y, mom.x, mom.y) > 2.5 && a > 0.2) goTo(p, Math.floor(mom.x), Math.floor(mom.y), true);
+      p.wait = 2 + Math.random() * 2;
+      return;
+    }
+    // Carrying someone: nursing lasts a little while, then the baby goes down by the fire.
+    if (p.carry) {
+      var q = byId(p.carry);
+      if (!q || !q.alive || W.T > (p.carryUntil || 0)) {
+        if (dist(p.x, p.y, c.x, c.y) > 3 && q && ageOf(q) < 3 && q !== me) { goTo(p, c.x, c.y, true); p.carryUntil = W.T + 4; }
+        else putDown(p);
+      }
+      p.wait = 1; return;
+    }
+    // The voice asked for something.
+    var it = p.intent;
+    if (it && W.T > it.until) p.intent = it = null;
+    if (it) {
+      if (it.kind === 'stay') { p.path = null; p.wait = 2; return; }
+      if (it.kind === 'follow' && me.alive) {
+        if (dist(p.x, p.y, me.x, me.y) > 2.2) goTo(p, Math.floor(me.x), Math.floor(me.y), true);
+        p.wait = 1; return;
+      }
+      if (it.kind === 'home') { p.intent = null; goTo(p, c.x, c.y, true); p.wait = 3; return; }
+      if (it.kind === 'carry' && me.alive && ageOf(me) < 4 && !me.carriedBy) {
+        p.intent = null; dropHeld(p);
+        p.job = personJob('carry', me, function (p) { pickUp(p, me); p.carryUntil = W.T + 14; });
+        return;
+      }
+      if ((it.kind === 'feed' || it.kind === 'fetch' || it.kind === 'give') && me.alive) {
+        var want = it.kind === 'feed' ? null : it.item;
+        p.intent = null;
+        var hand = function (p) { return personJob('give', me, function (p) { usePerson(p, me); }); };
+        if (it.kind === 'give' && p.held) { p.job = hand(p); return; }
+        if (it.kind === 'feed' && ageOf(me) < 3 && fertile(p)) {
+          dropHeld(p); p.job = personJob('carry', me, function (p) { pickUp(p, me); p.carryUntil = W.T + 14; }); return;
+        }
+        if (p.held && (want ? p.held.id === want : OB[p.held.id].food)) { p.job = hand(p); return; }
+        dropHeld(p);
+        p.job = want ? fetchJob(p, want, 'fetch', hand) : foodJob(p, 'fetch', hand);
+        if (p.job) return;
+      }
+      if (it.kind === 'fire') p.pref = 'fire';
+      if (it.kind === 'gather' || it.kind === 'farm') p.pref = it.kind;
+    }
+    // Nurse: her own babies first, then any hungry baby nobody else can feed.
+    if (fertile(p) && p.food > 2) {
+      var babies = living().filter(function (b) {
+        return ageOf(b) < 3 && !b.carriedBy && b.food <= capOf(b) - 2 && dist(p.x, p.y, b.x, b.y) < 30;
+      });
+      babies.sort(function (x, y) { return (x.mother === p.id ? 0 : 1) - (y.mother === p.id ? 0 : 1) || x.food - y.food; });
+      for (var bi = 0; bi < babies.length; bi++) {
+        var b = babies[bi], bm = byId(b.mother);
+        if (b.mother === p.id || !bm || !bm.alive || !fertile(bm) || dist(b.x, b.y, bm.x, bm.y) > 14) {
+          if (claimed('nurse', p) && b.mother !== p.id) continue;
+          dropHeld(p);
+          p.job = personJob('nurse', b, function (p) { pickUp(p, b); p.carryUntil = W.T + 10 + Math.random() * 8; });
+          return;
+        }
+      }
+    }
+    // Hungry: eat what is in hand, or go and get something.
+    if (p.food <= Math.max(3, cap * 0.35)) {
+      if (p.held && OB[p.held.id].food) { useSelf(p); p.wait = 0.6; return; }
+      if (p.held && p.held.id === 'berrybowl') { useSelf(p); p.wait = 0.6; return; }
+      dropHeld(p);
+      p.job = foodJob(p, 'eat', function (p) { useSelf(p); return null; });
+      if (p.job) return;
+    }
+    // A hungry child of the family, and food to spare.
+    if (a >= 10) {
+      var kids = living().filter(function (k) { var ka = ageOf(k); return ka >= 3 && ka < 10 && k.food <= 3 && dist(p.x, p.y, k.x, k.y) < 16; });
+      if (kids.length && !claimed('feedkid', p)) {
+        var k0 = kids[0];
+        var giveK = function (p) { return personJob('feedkid', k0, function (p) { usePerson(p, k0); }); };
+        if (p.held && OB[p.held.id].food) { p.job = giveK(p); return; }
+        dropHeld(p);
+        p.job = foodJob(p, 'feedkid', giveK);
+        if (p.job) return;
+      }
+    }
+    // The hearth.
+    var hh = hearth();
+    if (hh && a >= 6 && (!claimed('fire', p) || p.pref === 'fire')) {
+      var left = hh.o.d ? hh.o.d - W.T : 0, id = hh.o.id;
+      var needs = id === 'ashes' || id === 'coals' || (id === 'fire' && left < 55);
+      if (needs) {
+        if (id === 'ashes') {
+          // Relighting a cold hearth takes the whole bow-drill chain; the old
+          // ones know it by heart, and the body does it as one long job.
+          if (a >= 14) {
+            p.job = job('fire', hh.x, hh.y, function (p) { p.working = W.T + 6; p.workAt = { x: hh.x, y: hh.y, make: 'coals' }; });
+            return;
+          }
+        } else {
+          var fuel = function (p) { return job('fire', hh.x, hh.y, function (p) { apply(p, hh.x, hh.y); }); };
+          if (p.held && (p.held.id === 'kindling' || p.held.id === 'branch')) { p.job = fuel(p); return; }
+          dropHeld(p);
+          p.job = fetchJob(p, 'kindling', 'fire', fuel) || fetchJob(p, 'branch', 'fire', fuel);
+          if (p.job) return;
+        }
+      }
+    }
+    if (a < 6) { wander(p, 4); return; }
+    var r = Math.random(), pref = p.pref;
+    // Water a picked bush near the village.
+    if ((pref === 'gather' || r < 0.25) && !claimed('water', p)) {
+      var empty = scan(c.x, c.y, 8, function (o) { return o.id === 'bushempty'; });
+      if (empty) {
+        var waterIt = function (p) { return job('water', empty.x, empty.y, function (p) { apply(p, empty.x, empty.y); }); };
+        if (p.held && p.held.id === 'water') { p.job = waterIt(p); return; }
+        if (p.held && p.held.id === 'bowl') {
+          var pond = scan(p.x, p.y, 20, function (o) { return o.id === 'pond'; });
+          if (pond) { p.job = job('water', pond.x, pond.y, function (p) { apply(p, pond.x, pond.y); if (p.held && p.held.id === 'water') p.job = waterIt(p); }); return; }
+        }
+        if (!p.held) {
+          var bowl = scan(p.x, p.y, 14, function (o) { return o.id === 'bowl' || o.id === 'water'; });
+          if (bowl) { p.job = job('water', bowl.x, bowl.y, function (p) { apply(p, bowl.x, bowl.y); }); return; }
+        }
+      }
+    }
+    // Fill the bowl by the fire with berries.
+    if (pref === 'gather' || r < 0.5) {
+      var bb = scan(c.x, c.y, 6, function (o) { return (o.id === 'berrybowl' && o.u < 6) || o.id === 'bowl'; });
+      if (bb && !claimed('gather', p)) {
+        var putIn = function (p) { return job('gather', bb.x, bb.y, function (p) { apply(p, bb.x, bb.y); }); };
+        if (p.held && p.held.id === 'berry') { p.job = putIn(p); return; }
+        dropHeld(p);
+        var bush = scan(p.x, p.y, 18, function (o) { return o.id === 'bush'; });
+        if (bush) { p.job = job('gather', bush.x, bush.y, function (p) { apply(p, bush.x, bush.y); if (p.held && p.held.id === 'berry') p.job = putIn(p); }); return; }
+      }
+    }
+    // Farm: pull carrots into the store by the fire, water dry rows.
+    if (pref === 'farm' || r < 0.65) {
+      var row = scan(c.x, c.y, 12, function (o) { return o.id === 'carrots' || o.id === 'rowdry'; });
+      if (row && !claimed('farm', p)) {
+        if (row.o.id === 'carrots' && !p.held) {
+          p.job = job('farm', row.x, row.y, function (p) {
+            apply(p, row.x, row.y);
+            var s = campSpot(); if (s && p.held) p.job = job('farm', s.x, s.y, function (p) { apply(p, s.x, s.y); }, false);
+          });
+          return;
+        }
+      }
+    }
+    // Wood by the fire for later.
+    if (r < 0.8 && !p.held) {
+      var stock = 0;
+      for (var dy = -4; dy <= 4; dy++) for (var dx = -4; dx <= 4; dx++) {
+        var o = objAt(c.x + dx, c.y + dy); if (o && (o.id === 'kindling' || o.id === 'branch')) stock++;
+      }
+      if (stock < 4 && !claimed('wood', p)) {
+        var stash = function (p) { var s = campSpot(); return s ? job('wood', s.x, s.y, function (p) { apply(p, s.x, s.y); }, false) : null; };
+        p.job = fetchJob(p, 'branch', 'wood', stash);
+        if (p.job && dist(p.job.x, p.job.y, c.x, c.y) < 18) return;
+        p.job = null;
+      }
+    }
+    // Elders sit by the fire; the rest drift about the village.
+    if (a > 45 && hh) { goTo(p, hh.x, hh.y, true); p.wait = 8 + Math.random() * 8; return; }
+    if (p.held && Math.random() < 0.3) dropHeld(p);
+    wander(p, 6);
+  }
+  function wander(p, r) {
+    var c = W.camp, ax = p.intent && p.intent.kind === 'follow' ? me.x : c.x, ay = p.intent && p.intent.kind === 'follow' ? me.y : c.y;
+    var tx = Math.floor(ax + (Math.random() * 2 - 1) * r), ty = Math.floor(ay + (Math.random() * 2 - 1) * r);
+    if (!blocked(tx, ty)) goTo(p, tx, ty, false);
+    p.wait = 3 + Math.random() * 5;
+  }
+
+  function unreachable(p, x, y) { (p.avoid = p.avoid || {})[idx(x, y)] = W.T + 40; }
+  function npcTick(p, dt) {
+    if (!p.alive || p.carriedBy || p === me) return;
+    if (p.working) {                    // a long job at one spot (relighting a hearth)
+      if (W.T >= p.working) {
+        var wa = p.workAt, o = objAt(wa.x, wa.y);
+        if (o && o.id === 'ashes') { setObj(wa.x, wa.y, mk(wa.make)); Snd.craft(); }
+        p.working = 0; p.workAt = null;
+      }
+      return;
+    }
+    var j = p.job;
+    if (j) {
+      var tx = j.x, ty = j.y;
+      if (j.follow) {
+        var q = byId(j.follow);
+        if (!q || !q.alive || q.carriedBy) { p.job = null; return; }
+        tx = Math.floor(q.x); ty = Math.floor(q.y);
+        if (dist(p.x, p.y, q.x, q.y) < 1.6) { p.job = null; p.path = null; j.then(p); return; }
+        if (!p.path || !p.path.length || (j.rt = (j.rt || 0) - dt) < 0) { j.rt = 0.8; if (!goTo(p, tx, ty, true)) { p.job = null; return; } }
+        walk(p, dt);
+        return;
+      }
+      if (!p.path) { if (!goTo(p, tx, ty, j.adj)) { unreachable(p, tx, ty); p.job = null; p.wait = 0.5; return; } }
+      if (walk(p, dt)) {
+        p.path = null;
+        if (near(p, tx, ty) || !j.adj) { p.job = null; scanFor = p; j.then(p); scanFor = null; }
+        else if (++j.tries > 2) { unreachable(p, tx, ty); p.job = null; }
+      }
+      return;
+    }
+    walk(p, dt);
+    p.wait -= dt;
+    if (p.wait <= 0 && (!p.path || !p.path.length)) { p.wait = 0.8; scanFor = p; decide(p); scanFor = null; }
+  }
+
+  // Once a second: a baby close to starving pulls its mother (or the nearest
+  // woman who can nurse) off whatever she is doing. Without this a mother
+  // halfway through a long wander could arrive after the baby was gone.
+  function careTick() {
+    living().forEach(function (b) {
+      if (ageOf(b) >= 3 || b.carriedBy || b.food > 2) return;
+      var m = byId(b.mother);
+      if (!m || !m.alive || !fertile(m) || m === me || m.carry || dist(m.x, m.y, b.x, b.y) > 30) {
+        m = null;
+        living().forEach(function (w) {
+          if (w !== me && fertile(w) && !w.carry && (!m || dist(w.x, w.y, b.x, b.y) < dist(m.x, m.y, b.x, b.y))) m = w;
+        });
+      }
+      if (!m || (m.job && (m.job.kind === 'nurse' || m.job.kind === 'carry'))) return;
+      m.job = null; m.path = null; m.wait = 0; m.intent = null; m.working = 0;
+      dropHeld(m);
+      m.job = personJob('nurse', b, function (p) { pickUp(p, b); p.carryUntil = W.T + 10 + Math.random() * 8; });
+    });
+  }
+
+  function birthTick() {
+    var pop = living().length;
+    living().forEach(function (m) {
+      if (!fertile(m) || pop >= 15) return;
+      var kids = living().filter(function (k) { return k.mother === m.id; }).length;
+      if (kids >= 4 || W.T - m.lastBirth < YEAR * (3 + Math.random() * 2)) return;
+      if (m.food < capOf(m) * 0.5) return;
+      if (m === me) { if (Math.random() > 0.35) return; }
+      else if (Math.random() > 0.12) return;
+      m.lastBirth = W.T;
+      var b = person({ sex: Math.random() < 0.55 ? 'f' : 'm', age: 0, fam: m.fam, x: Math.floor(m.x), y: Math.floor(m.y),
+                       mother: m.id, name: '', gen: (m.gen || 1) + 1 });
+      b.food = 4;
+      pickUp(m, b); m.carryUntil = W.T + 12;
+      remember(m, 'gave birth to a ' + (b.sex === 'f' ? 'girl' : 'boy'));
+      Snd.bell(523.25);
+      if (m === me) toast('A ' + (b.sex === 'f' ? 'daughter' : 'son') + '. Say YOU ARE and a name while you hold them.', 5200);
+      Mind.event(m, (m.name || 'A woman') + ' gave birth to a ' + (b.sex === 'f' ? 'girl' : 'boy') + ', not yet named', 3);
+      pop++;
+    });
+    // Unnamed babies get a name in time, even if nobody near you said one.
+    living().forEach(function (b) {
+      if (b.name || b === me) return;
+      var m = byId(b.mother);
+      if (ageOf(b) > 0.6 && (!m || m !== me || ageOf(b) > 5)) nameBaby(b, m && m.alive ? m : null, null);
+    });
+  }
+  function nameBaby(b, by, name) {
+    var used = {}; living().forEach(function (p) { if (p.name) used[p.name] = 1; });
+    if (!name || used[name]) {
+      var pool = (b.sex === 'f' ? FIRST_F : FIRST_M).filter(function (n) { return !used[n]; });
+      name = pool.length ? pick(pool) : pick(b.sex === 'f' ? FIRST_F : FIRST_M);
+      if (by && by !== me && Mind.quiet()) say(by, 'YOU ARE ' + name, false);
+    }
+    b.name = name;
+    remember(b, (by ? by.name : 'Someone') + ' named me ' + name);
+    if (by) remember(by, 'named my baby ' + name);
+    if (b === me) { toast('You are ' + fullName(me) + '.', 3200); }
+  }
+
+  /* ---------------- speech ---------------- */
+
+  function cleanSay(p, text) {
+    text = String(text || '').replace(/[*_~`"“”]/g, '').replace(/\s+/g, ' ').trim().toUpperCase();
+    var lim = sayLimit(p);
+    if (text.length > lim) { text = text.slice(0, lim); var sp = text.lastIndexOf(' '); if (sp > lim * 0.6) text = text.slice(0, sp); }
+    return text;
+  }
+  function say(p, text, quiet) {
+    text = cleanSay(p, text);
+    if (!text) return '';
+    p.said = text; p.sayT = W.T;
+    if (!quiet && dist(p.x, p.y, me.x, me.y) < 12) {
+      for (var i = 0; i < Math.min(6, text.length); i++) setTimeout(Snd.blip.bind(null, p.pitch), i * 55);
+    }
+    // YOU ARE X names the nearest nameless one close by — a baby in arms first.
+    var m = /YOU ARE ([A-Z]{2,12})/.exec(text);
+    if (m) {
+      var cand = p.carry ? byId(p.carry) : null;
+      if (!cand || cand.name) {
+        cand = null;
+        living().forEach(function (q) { if (!q.name && q !== p && dist(p.x, p.y, q.x, q.y) < 3 && !cand) cand = q; });
+      }
+      if (cand) nameBaby(cand, p, m[1]);
+    }
+    return text;
+  }
+
+  /* =====================================================================
+     THE VOICE — Claude Haiku, through the arcade server's /api/brain.
+
+     Asked only when you are there to hear it: a call is made for the
+     villagers within EAR tiles of you, never for anyone further off, and
+     only when something happened near you (you spoke, were born, fed,
+     handed something, someone died) or, now and then, for idle talk if
+     anyone is close. One call voices the whole nearby scene, so two
+     villagers can answer each other. The body does not wait for it: the
+     reply arrives a second or two later, as it would.
+     ===================================================================== */
+
+  var EAR = 8;
+  var Mind = (function () {
+    var live = false, busy = false, checked = false, lastCall = 0, nextAmbient = 30, calls = [], queue = [], talk = [];
+    var stats = { calls: 0, ok: 0, failed: 0, lastMs: 0, lastErr: '', model: '' };
+    var crafted = {};
+
+    function base() { return (settings.brainUrl || '').trim().replace(/\/+$/, ''); }
+    function url(p) { return base() + p; }
+
+    var SYS = [
+      'You voice the villagers of KINDRED, a stone-age village at the edge of the cold, in the spirit of One Hour One Life.',
+      'A life lasts one hour: one minute is one year. People are born as babies to mothers, can say one letter per year until about eight, grow, work, have children and die at sixty. Food runs out fast and the cold makes it worse. What the old ones know is all the village has.',
+      'Each message is one moment: the villagers within earshot of the player, what each is doing, what each remembers, and what just happened.',
+      'Answer with JSON only, no prose around it:',
+      '{"lines":[{"who":"<FIRSTNAME>","say":"<words spoken aloud>","do":"<action>"}]}',
+      'Rules:',
+      '- 0 to 2 lines. An empty list is right when nobody would speak.',
+      '- Only the listed villagers speak; never speak for the player. "who" is their first name exactly as listed.',
+      '- "say" must fit that villager\'s letter limit. Babies (limit under 4) make one sound like F, M, NO, HI.',
+      '- Talk like a real person living this life: short, plain, specific, warm or blunt, in character. Most lines are under eight words; a child says less. No narration, no stage directions, no asterisks, no emoji, no modern words.',
+      '- The scene is what they notice, not what they say. Never repeat its bookkeeping: no letter limits, paces, "fed", "idle", numbers of years. A baby saying F means feed me; answer the baby, do not explain the letter.',
+      '- Good lines: "THERE YOU ARE. HUNGRY AGAIN?" / "BRING WOOD BEFORE DARK." / "YOUR GRANDMOTHER MADE THAT BOWL." / "STAY CLOSE, THE COLD TAKES THE SMALL ONES."',
+      '- Answer what was just said or done. Use names. Remember what they remember. Mothers fuss over babies, elders teach, the hungry complain, the grieving grieve.',
+      '- A mother names a nameless baby by saying exactly: YOU ARE <NAME> (one new first name).',
+      '- "do" is one of: none, follow, stay, feed, give, fetch <item>, fire, gather, farm, carry, home. Use one only when that villager would act on it now.',
+      'What the elders know (the only real recipes; never invent others):',
+      LORE.join('; ') + '.'
+    ].join('\n');
+
+    function check() {
+      if (!settings.voice) { live = false; paintVoice(); return; }
+      fetchT(url('/api/brain'), null, 4000).then(function (r) {
+        live = !!(r && r.ok && r.binary); checked = true; stats.model = (r && r.model) || '';
+        if (live) fetchT(url('/api/brain/warm'), { system: SYS }, 6000).catch(function () {});
+        paintVoice();
+      }).catch(function () { live = false; checked = true; paintVoice(); });
+    }
+    function fetchT(u, body, ms) {
+      var ac = window.AbortController ? new AbortController() : null;
+      var t = setTimeout(function () { if (ac) ac.abort(); }, ms);
+      return fetch(u, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: ac && ac.signal }
+                           : { signal: ac && ac.signal, cache: 'no-store' })
+        .then(function (r) { clearTimeout(t); return r.json(); });
+    }
+
+    function listeners() {
+      if (!me || !me.alive) return [];
+      // Only the named can be given a line; a nameless newborn is in the scene through its mother.
+      return living().filter(function (p) { return p !== me && p.name && dist(p.x, p.y, me.x, me.y) <= EAR; })
+        .sort(function (a, b) { return dist(a.x, a.y, me.x, me.y) - dist(b.x, b.y, me.x, me.y); }).slice(0, 4);
+    }
+
+    function event(subject, text, pri) {
+      if (!me || !me.alive || !subject) return;
+      var heard = subject === me || dist(subject.x, subject.y, me.x, me.y) <= EAR;
+      if (!heard) return;
+      queue.push({ text: text, pri: pri || 1, t: W.T });
+      if (queue.length > 6) queue.shift();
+    }
+    function playerSaid(text) {
+      talk.push((me.name || 'the baby') + ' (player): ' + text);
+      if (talk.length > 8) talk.shift();
+      listeners().forEach(function (q) { remember(q, (me.name || 'the baby') + ' said: ' + text); });
+      event(me, (me.name || 'The baby') + ' said: "' + text + '"', 3);
+    }
+    function noteCraft(id) {
+      if (crafted[id]) return; crafted[id] = 1;
+      event(me, (me.name || 'The child') + ' just made ' + nm(id) + ' for the first time', 1);
+    }
+    function quiet() { return !live || !settings.voice; }
+
+    function describe(p) {
+      var a = ageOf(p), cap = capOf(p), bits = [];
+      bits.push(fullName(p) + ', ' + stageOf(p) + ' ' + Math.floor(a) + 'y, letter limit ' + sayLimit(p));
+      var rel = relation(me, p); if (rel !== 'stranger') bits.push('the player\'s ' + rel);
+      bits.push(p.traits.join(' and '));
+      bits.push(p.food <= 2 ? 'starving' : p.food < cap * 0.4 ? 'hungry' : 'fed');
+      if (p.heat < 0.3) bits.push('cold'); else if (p.heat > 0.72) bits.push('too hot');
+      if (p.held) bits.push('holding ' + nm(p.held.id));
+      if (p.carry) { var c = byId(p.carry); if (c) bits.push('carrying ' + (c.name || 'a nameless baby')); }
+      var doing = p.working ? 'relighting the hearth' : p.job ? p.job.kind : p.path && p.path.length ? 'walking' : 'idle';
+      bits.push('doing: ' + doing);
+      var line = '- ' + bits.join('; ');
+      if (p.mem.length) line += '\n  remembers: ' + p.mem.slice(-4).join(' | ');
+      return line;
+    }
+    function scene(ls, evs) {
+      var hh = hearth(), a = ageOf(me);
+      var out = [];
+      out.push('Time: ' + (night() > 0.6 ? 'night' : night() > 0.25 ? 'dusk' : 'day') + '. Land: ' + biomeAt(Math.floor(me.x), Math.floor(me.y)).name +
+        '. Hearth: ' + (hh ? nm(hh.o.id) + ', ' + Math.round(dist(me.x, me.y, hh.x + 0.5, hh.y + 0.5)) + ' paces off' : 'none') + '.');
+      out.push('Player: ' + fullName(me) + ', ' + stageOf(me) + ' ' + Math.floor(a) + 'y; ' +
+        (me.food <= 2 ? 'starving' : me.food < capOf(me) * 0.4 ? 'hungry' : 'fed') +
+        (me.heat < 0.3 ? ', cold' : '') + (me.held ? ', holding ' + nm(me.held.id) : '') +
+        (me.carriedBy ? ', being carried by ' + (byId(me.carriedBy) || {}).name : '') + '.');
+      if (evs.length) out.push('Just now:\n' + evs.map(function (e) { return '- ' + e.text; }).join('\n'));
+      else out.push('Just now: nothing in particular. Idle talk is fine, or silence.');
+      if (talk.length) out.push('Recent talk:\n' + talk.slice(-6).join('\n'));
+      out.push('Villagers in earshot:\n' + ls.map(describe).join('\n'));
+      return out.join('\n\n');
+    }
+
+    function tick() {
+      if (!me || !me.alive || busy) return;
+      if (settings.voice && !checked) return;      // hold what happened until we know whether there is a voice
+      var ls = listeners();
+      if (!ls.length) { queue = []; return; }
+      var now = performance.now() / 1000;
+      calls = calls.filter(function (t) { return now - t < 60; });
+      var top = 0; queue.forEach(function (e) { top = Math.max(top, e.pri); });
+      var gap = now - lastCall;
+      var go = (top >= 3 && gap > 2.5) || (top >= 2 && gap > 6) || (top >= 1 && gap > 14) ||
+               (!queue.length && now > nextAmbient && gap > 25);
+      if (!go || calls.length >= 8) return;
+      var evs = queue.slice(); queue = [];
+      lastCall = now; nextAmbient = now + 40 + Math.random() * 35;
+      if (quiet()) { stock(ls, evs); return; }
+      busy = true; calls.push(now); stats.calls++; paintVoice();
+      var t0 = performance.now();
+      fetchT(url('/api/brain'), { system: SYS, scene: scene(ls, evs) }, 16000).then(function (r) {
+        busy = false; stats.lastMs = Math.round(performance.now() - t0);
+        if (!r || !r.ok) { stats.failed++; stats.lastErr = (r && r.error) || 'no answer'; stock(ls, evs); paintVoice(); return; }
+        stats.ok++; if (r.model) stats.model = r.model;
+        speak(ls, r.text);
+        paintVoice();
+      }).catch(function (e) {
+        busy = false; stats.failed++; stats.lastErr = String(e && e.message || e);
+        if (stats.failed > 3 && stats.ok === 0) live = false;
+        stock(ls, evs); paintVoice();
+      });
+    }
+
+    function speak(ls, text) {
+      var j = null;
+      try { var s = text.indexOf('{'), e = text.lastIndexOf('}'); if (s >= 0 && e > s) j = JSON.parse(text.slice(s, e + 1)); } catch (err) {}
+      var lines = j && Array.isArray(j.lines) ? j.lines.slice(0, 2) : [];
+      lines.forEach(function (ln, i) {
+        var who = String(ln.who || '').toUpperCase().split(' ')[0];
+        var p = ls.filter(function (q) { return q.name === who; })[0];
+        if (!p || !p.alive) return;
+        setTimeout(function () {
+          if (!p.alive) return;
+          var said = say(p, ln.say, false);
+          if (said) {
+            talk.push(p.name + ': ' + said); if (talk.length > 8) talk.shift();
+            remember(p, 'I said to ' + (me.name || 'the baby') + ': ' + said);
+          }
+          act(p, String(ln.do || 'none').toLowerCase());
+        }, i * 2300);
+      });
+    }
+
+    function act(p, d) {
+      var w = d.split(/\s+/), v = w[0], until = W.T + 50;
+      if (v === 'follow' || v === 'stay' || v === 'home' || v === 'carry' || v === 'feed' || v === 'give') p.intent = { kind: v, until: until };
+      else if (v === 'fire' || v === 'gather' || v === 'farm') { p.pref = v; p.intent = { kind: v, until: until }; }
+      else if (v === 'fetch') {
+        var want = w.slice(1).join(' ').replace(/s$/, ''), id = null;
+        Object.keys(OB).forEach(function (k) { if (!id && OB[k].carry && OB[k].name.toLowerCase().indexOf(want) >= 0) id = k; });
+        if (id) p.intent = { kind: 'fetch', item: id, until: until };
+      } else return;
+      p.job = null; p.wait = 0;
+    }
+
+    // Without the server: a few stock lines, so the village is not mute.
+    function stock(ls, evs) {
+      var ev = evs.length ? evs[evs.length - 1].text : '';
+      var p = ls[0], mom = byId(me.mother);
+      if (mom && ls.indexOf(mom) >= 0 && /said: "F|said: "M|hungry/i.test(ev)) p = mom;
+      if (ageOf(p) < 3) return;
+      var n = me.name || 'LITTLE ONE', line = null;
+      if (/said: "F/i.test(ev) && p === mom) { line = pick(['COME HERE, ' + n, 'HUSH, I HAVE YOU', 'HUNGRY AGAIN?']); p.intent = { kind: 'feed', until: W.T + 30 }; p.job = null; }
+      else if (/died/.test(ev)) line = pick(['REST NOW', 'SHE WAS GOOD TO US', 'BURY THEM BY THE TREES', 'NOT AGAIN']);
+      else if (/fed|gave/.test(ev)) line = pick(['THANK YOU', 'GOOD. MORE LATER', 'YOU ARE KIND, ' + n]);
+      else if (/birth/.test(ev)) line = null;
+      else if (/said/.test(ev)) line = pick(['MM.', 'I HEAR YOU, ' + n, 'NOT NOW', 'SAY IT AGAIN?', 'KEEP THE FIRE FED', 'EAT SOMETHING', 'ASK THE OLD ONES']);
+      else if (/made/.test(ev)) line = pick(['GOOD HANDS', 'THAT WILL HELP', 'WHO TAUGHT YOU THAT?']);
+      else if (Math.random() < 0.5) line = pick(['COLD TONIGHT', 'THE BERRIES ARE THIN', 'WOOD FOR THE FIRE', 'MY BACK HURTS', 'SING SOMETHING']);
+      if (line) say(p, line, false);
+    }
+
+    function status() { return { live: live, busy: busy, checked: checked, stats: stats }; }
+    return { check: check, event: event, playerSaid: playerSaid, noteCraft: noteCraft, tick: tick, quiet: quiet, status: status };
+  }());
+
+  /* =====================================================================
+     DRAWING
+     ===================================================================== */
+
+  var cssW = 0, cssH = 0, dpr = 1, lastDpr = 0, TS = 40, camX = 0, camY = 0;
+  var lightCv = document.createElement('canvas'), lctx = lightCv.getContext('2d');
+  var chunks = {}, CH = 16;
+  var SKIN = ['#e6c6ad', '#c4977a', '#94664b', '#5c3d2c'];
+
+  function rgb(c, k) { return 'rgb(' + Math.round(c[0] * k) + ',' + Math.round(c[1] * k) + ',' + Math.round(c[2] * k) + ')'; }
+  function groundChunk(cx, cy) {
+    var key = cx + ',' + cy;
+    if (chunks[key]) return chunks[key];
+    var c = document.createElement('canvas'), s = TS * dpr;
+    c.width = c.height = Math.ceil(CH * s);
+    var g = c.getContext('2d');
+    for (var y = 0; y < CH; y++) for (var x = 0; x < CH; x++) {
+      var wx = cx * CH + x, wy = cy * CH + y;
+      if (!inb(wx, wy)) { g.fillStyle = '#050203'; g.fillRect(x * s, y * s, s + 1, s + 1); continue; }
+      var b = BI[W.biome[idx(wx, wy)]], v = 0.86 + hash2(wx, wy, 3) * 0.22;
+      g.fillStyle = rgb(b.col, v); g.fillRect(Math.floor(x * s), Math.floor(y * s), Math.ceil(s) + 1, Math.ceil(s) + 1);
+      // tufts and grit, so the ground reads as ground
+      for (var k = 0; k < 3; k++) {
+        var hx = hash2(wx * 3 + k, wy, 9), hy = hash2(wx, wy * 3 + k, 11);
+        g.fillStyle = rgb(b.col, 1.25 + hash2(wx + k, wy, 4) * 0.2);
+        g.fillRect(x * s + hx * s, y * s + hy * s, Math.max(1, s * 0.05), Math.max(2, s * 0.12));
+      }
+    }
+    chunks[key] = c;
+    return c;
+  }
+
+  // Each thing is drawn in its tile: (px,py) is the tile's top-left, s its size.
+  function circ(x, y, r, col) { ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x, y, r, 0, 6.283); ctx.fill(); }
+  function rect(x, y, w, h, col) { ctx.fillStyle = col; ctx.fillRect(x, y, w, h); }
+  function line(x1, y1, x2, y2, col, w) { ctx.strokeStyle = col; ctx.lineWidth = w; ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); }
+  function stick(cx, cy, s, len, ang, col) {
+    var dx = Math.cos(ang) * len * s / 2, dy = Math.sin(ang) * len * s / 2;
+    ctx.lineCap = 'round'; line(cx - dx, cy - dy, cx + dx, cy + dy, col, Math.max(2, s * 0.07));
+  }
+  var BERRY_AT = [[-0.2, -0.16], [0.14, -0.2], [0.24, 0.04], [-0.06, 0.02], [-0.26, 0.12], [0.08, 0.2]];
+  var WOOD = '#7a5640', WOODL = '#a07a5c', LEAFC = '#55704a', STONE = '#7c6a6c', BONE = '#e9d8c5', BERRY = '#c0283f';
+
+  function drawItem(id, cx, cy, s, it) {   // a small carried-size thing centred on cx,cy
+    var t = performance.now() / 1000;
+    switch (id) {
+      case 'stone': circ(cx, cy, s * 0.16, STONE); circ(cx - s * 0.05, cy - s * 0.05, s * 0.05, '#968486'); break;
+      case 'sharp': ctx.fillStyle = '#8e7c7e'; ctx.beginPath(); ctx.moveTo(cx - s * 0.18, cy + s * 0.1); ctx.lineTo(cx + s * 0.2, cy - s * 0.14); ctx.lineTo(cx + s * 0.06, cy + s * 0.14); ctx.fill(); break;
+      case 'flint': ctx.fillStyle = '#4c4448'; ctx.beginPath(); ctx.moveTo(cx - s * 0.12, cy); ctx.lineTo(cx, cy - s * 0.14); ctx.lineTo(cx + s * 0.13, cy + s * 0.05); ctx.lineTo(cx, cy + s * 0.1); ctx.fill(); break;
+      case 'branch': stick(cx, cy, s, 0.9, -0.5, WOOD); line(cx, cy - s * 0.05, cx + s * 0.12, cy - s * 0.2, WOOD, Math.max(1.5, s * 0.04)); break;
+      case 'shaft': stick(cx, cy, s, 0.95, -0.6, WOODL); break;
+      case 'short': stick(cx, cy, s, 0.5, -0.6, WOODL); break;
+      case 'skewer': stick(cx, cy, s, 0.62, -0.6, WOODL); circ(cx + s * 0.18, cy - s * 0.13, s * 0.03, BONE); break;
+      case 'stakes': for (var i = -1; i <= 1; i++) stick(cx + i * s * 0.1, cy, s, 0.45, -1.4, WOODL); break;
+      case 'tiedshort': stick(cx, cy, s, 0.5, -0.6, WOODL); circ(cx, cy, s * 0.06, '#b8a98a'); break;
+      case 'tiedlong': stick(cx, cy, s, 0.95, -0.6, WOODL); circ(cx + s * 0.25, cy - s * 0.17, s * 0.06, '#b8a98a'); break;
+      case 'hatchet': stick(cx, cy + s * 0.05, s, 0.55, -1.0, WOODL); ctx.fillStyle = '#8e7c7e'; ctx.fillRect(cx + s * 0.06, cy - s * 0.24, s * 0.16, s * 0.12); break;
+      case 'hoe': stick(cx, cy, s, 0.95, -0.6, WOODL); ctx.fillStyle = '#8e7c7e'; ctx.fillRect(cx + s * 0.3, cy - s * 0.32, s * 0.08, s * 0.16); break;
+      case 'brokentool': stick(cx, cy, s, 0.4, -0.6, '#5c4636'); break;
+      case 'kindling': for (i = 0; i < 4; i++) stick(cx + (i - 1.5) * s * 0.06, cy, s, 0.4, -1.2 + i * 0.25, WOOD); break;
+      case 'bow': ctx.strokeStyle = WOODL; ctx.lineWidth = Math.max(2, s * 0.06); ctx.beginPath(); ctx.arc(cx, cy + s * 0.15, s * 0.25, 3.6, 5.8); ctx.stroke(); line(cx - s * 0.22, cy + s * 0.02, cx + s * 0.22, cy + s * 0.02, '#c8b998', 1); break;
+      case 'drill': drawItem('bow', cx, cy, s); stick(cx, cy, s, 0.45, -1.57, WOODL); break;
+      case 'embershaft': stick(cx, cy, s, 0.95, -0.6, WOODL); circ(cx + s * 0.3, cy - s * 0.2, s * 0.06, '#ff7a3c'); break;
+      case 'leaf': case 'emberleaf':
+        ctx.fillStyle = id === 'leaf' ? '#6f8a4e' : '#8a5a2e'; ctx.beginPath(); ctx.ellipse(cx, cy, s * 0.16, s * 0.08, -0.6, 0, 6.283); ctx.fill();
+        if (id === 'emberleaf') circ(cx, cy, s * 0.05 * (1 + 0.3 * Math.sin(t * 9)), '#ff8a3c'); break;
+      case 'tinder': for (i = 0; i < 6; i++) line(cx - s * 0.14, cy + (i - 3) * s * 0.03, cx + s * 0.14, cy - (i - 3) * s * 0.02, '#a8946a', 1.2); break;
+      case 'stalk': stick(cx, cy, s, 0.8, -1.0, '#8aa070'); break;
+      case 'thread': ctx.strokeStyle = '#d8ccb0'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.arc(cx, cy, s * 0.1, 0, 5.5); ctx.stroke(); break;
+      case 'rope': ctx.strokeStyle = '#c4b28a'; ctx.lineWidth = Math.max(2, s * 0.05); ctx.beginPath(); ctx.arc(cx, cy, s * 0.15, 0, 5.8); ctx.stroke(); ctx.beginPath(); ctx.arc(cx, cy, s * 0.08, 0, 5.8); ctx.stroke(); break;
+      case 'clay': circ(cx, cy, s * 0.15, '#9a6650'); break;
+      case 'wetbowl': case 'bowl': case 'water': case 'berrybowl':
+        ctx.fillStyle = id === 'wetbowl' ? '#8a5c48' : '#b27a5c';
+        ctx.beginPath(); ctx.ellipse(cx, cy + s * 0.02, s * 0.2, s * 0.13, 0, 0, 3.1416); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(cx, cy + s * 0.02, s * 0.2, s * 0.05, 0, 0, 6.283); ctx.fill();
+        if (id === 'water') { ctx.fillStyle = '#6f8fb8'; ctx.beginPath(); ctx.ellipse(cx, cy + s * 0.02, s * 0.16, s * 0.035, 0, 0, 6.283); ctx.fill(); }
+        if (id === 'berrybowl') { var n = it ? it.u : 3; for (i = 0; i < n; i++) circ(cx + (i % 3 - 1) * s * 0.08, cy - s * 0.01 - Math.floor(i / 3) * s * 0.05, s * 0.045, BERRY); }
+        break;
+      case 'berry': circ(cx, cy, s * 0.07, BERRY); circ(cx - s * 0.02, cy - s * 0.02, s * 0.02, '#ff8fa3'); break;
+      case 'onion': circ(cx, cy, s * 0.1, '#c9b8a0'); line(cx, cy - s * 0.1, cx, cy - s * 0.24, '#7a9a5a', 2); break;
+      case 'carrot': ctx.fillStyle = '#c9772f'; ctx.beginPath(); ctx.moveTo(cx - s * 0.06, cy - s * 0.12); ctx.lineTo(cx + s * 0.06, cy - s * 0.12); ctx.lineTo(cx, cy + s * 0.18); ctx.fill(); line(cx, cy - s * 0.12, cx, cy - s * 0.24, '#6f8a4e', 2); break;
+      case 'seedhead': stick(cx, cy + s * 0.05, s, 0.4, -1.57, '#8a9a6a'); circ(cx, cy - s * 0.14, s * 0.08, '#d8ccb0'); break;
+      case 'reeds': for (i = 0; i < 5; i++) stick(cx + (i - 2) * s * 0.04, cy, s, 0.7, -1.3 + i * 0.05, '#a89a5a'); line(cx - s * 0.12, cy, cx + s * 0.12, cy, '#7a6a3a', 2); break;
+      case 'basket':
+        ctx.fillStyle = '#8a7444'; ctx.fillRect(cx - s * 0.22, cy - s * 0.08, s * 0.44, s * 0.24);
+        ctx.strokeStyle = '#a88f58'; ctx.lineWidth = 1; for (i = 0; i < 4; i++) line(cx - s * 0.22, cy - s * 0.04 + i * s * 0.05, cx + s * 0.22, cy - s * 0.04 + i * s * 0.05, '#a88f58', 1);
+        if (it && it.c) it.c.forEach(function (c2, k) { drawItem(c2.id, cx - s * 0.12 + k * s * 0.12, cy - s * 0.1, s * 0.6, c2); });
+        break;
+      case 'skirt': ctx.fillStyle = '#a89a5a'; ctx.beginPath(); ctx.moveTo(cx - s * 0.16, cy - s * 0.1); ctx.lineTo(cx + s * 0.16, cy - s * 0.1); ctx.lineTo(cx + s * 0.22, cy + s * 0.14); ctx.lineTo(cx - s * 0.22, cy + s * 0.14); ctx.fill(); break;
+      case 'furhat': ctx.fillStyle = '#b49a82'; ctx.beginPath(); ctx.arc(cx, cy + s * 0.06, s * 0.17, 3.1416, 0); ctx.fill(); break;
+      case 'furwrap': ctx.fillStyle = '#9a8068'; ctx.fillRect(cx - s * 0.18, cy - s * 0.14, s * 0.36, s * 0.28); break;
+      case 'fur': ctx.fillStyle = '#b49a82'; ctx.beginPath(); ctx.ellipse(cx, cy, s * 0.2, s * 0.12, 0.3, 0, 6.283); ctx.fill(); break;
+      case 'snare': drawItem('stakes', cx, cy, s); drawItem('thread', cx, cy, s); break;
+      case 'deadrabbit': case 'skinned':
+        ctx.fillStyle = id === 'deadrabbit' ? '#a48a74' : '#b0645a'; ctx.beginPath(); ctx.ellipse(cx, cy, s * 0.2, s * 0.1, 0, 0, 6.283); ctx.fill();
+        circ(cx + s * 0.18, cy - s * 0.04, s * 0.06, ctx.fillStyle); break;
+      case 'skewered': case 'cooked': case 'burnt':
+        stick(cx, cy, s, 0.9, -0.3, WOODL);
+        ctx.fillStyle = id === 'skewered' ? '#b0645a' : id === 'cooked' ? '#8a4a2a' : '#2a1a14';
+        ctx.beginPath(); ctx.ellipse(cx, cy, s * 0.16, s * 0.08, -0.3, 0, 6.283); ctx.fill(); break;
+      case 'firebrand': stick(cx, cy, s, 0.9, -0.6, WOODL); circ(cx + s * 0.3, cy - s * 0.2, s * (0.08 + 0.02 * Math.sin(t * 13)), '#ffa040'); break;
+      default: circ(cx, cy, s * 0.12, '#8f6f76');
+    }
+  }
+
+  function drawObj(o, px, py, s) {
+    var id = o.id, cx = px + s / 2, cy = py + s / 2, t = performance.now() / 1000, i;
+    var d = OB[id];
+    if (d.carry) { drawItem(id, cx, cy + s * 0.12, s, o); return; }
+    switch (id) {
+      case 'bigrock': circ(cx, cy + s * 0.1, s * 0.4, '#5e4e52'); circ(cx - s * 0.1, cy, s * 0.22, '#706064'); break;
+      case 'maple': case 'maplebare': case 'juniper':
+        rect(cx - s * 0.07, cy - s * 0.05, s * 0.14, s * 0.5, '#4a3428');
+        if (id === 'juniper') { ctx.fillStyle = '#3a5040'; ctx.beginPath(); ctx.moveTo(cx, cy - s * 0.95); ctx.lineTo(cx + s * 0.4, cy + s * 0.15); ctx.lineTo(cx - s * 0.4, cy + s * 0.15); ctx.fill(); }
+        else {
+          circ(cx, cy - s * 0.42, s * 0.46, id === 'maple' ? '#4f6a40' : '#45583a');
+          circ(cx - s * 0.2, cy - s * 0.25, s * 0.3, id === 'maple' ? '#5a7848' : '#4a5c3e');
+          if (id === 'maple') for (i = 0; i < 3; i++) stick(cx + (i - 1) * s * 0.18, cy - s * 0.12, s, 0.35, -1.0, WOOD);
+        }
+        break;
+      case 'milkweed': case 'milkdebris':
+        for (i = 0; i < (id === 'milkweed' ? 4 : 2); i++) line(cx + (i - 1.5) * s * 0.1, cy + s * 0.3, cx + (i - 1.5) * s * 0.14, cy - s * (id === 'milkweed' ? 0.3 : 0.05), '#7a9a5a', 2);
+        if (id === 'milkweed') circ(cx, cy - s * 0.28, s * 0.06, '#d8ccb0'); break;
+      case 'bush': case 'bushempty': case 'bushwet':
+        circ(cx, cy, s * 0.36, id === 'bushwet' ? '#3f5a48' : '#4a6440'); circ(cx - s * 0.16, cy - s * 0.1, s * 0.22, '#55704a');
+        if (id === 'bush') for (i = 0; i < (o.u || 0); i++) circ(cx + BERRY_AT[i][0] * s, cy + BERRY_AT[i][1] * s, s * 0.05, BERRY);
+        if (id === 'bushwet') circ(cx + s * 0.2, cy + s * 0.2, s * 0.05, '#7e9cc4'); break;
+      case 'smolder': case 'burning': drawItem('tinder', cx, cy + s * 0.15, s); if (id === 'burning') { ctx.fillStyle = '#ffa040'; ctx.beginPath(); ctx.moveTo(cx - s * 0.1, cy + s * 0.15); ctx.quadraticCurveTo(cx, cy - s * 0.2 - Math.sin(t * 11) * s * 0.05, cx + s * 0.1, cy + s * 0.15); ctx.fill(); } else circ(cx, cy + s * 0.12, s * 0.04, '#ff6a2c'); break;
+      case 'fire': case 'bigfire': case 'coals': case 'ashes':
+        for (i = 0; i < 7; i++) circ(cx + Math.cos(i * 0.9) * s * 0.32, cy + s * 0.12 + Math.sin(i * 0.9) * s * 0.18, s * 0.07, '#5a4a4c');
+        if (id !== 'ashes') { circ(cx, cy + s * 0.12, s * 0.2, id === 'coals' ? '#8a2a1a' : '#5a2a1a'); }
+        if (id === 'coals') for (i = 0; i < 4; i++) circ(cx + (i - 1.5) * s * 0.08, cy + s * 0.12, s * 0.04 * (1 + 0.3 * Math.sin(t * 5 + i)), '#ff5a2c');
+        if (id === 'fire' || id === 'bigfire') {
+          var hgt = id === 'bigfire' ? 0.85 : 0.6;
+          for (i = 0; i < 3; i++) {
+            var fx = cx + (i - 1) * s * 0.12, fl = s * hgt * (0.7 + 0.3 * Math.sin(t * (7 + i * 2) + i));
+            ctx.fillStyle = i === 1 ? '#ffd27a' : '#ff8a3c';
+            ctx.beginPath(); ctx.moveTo(fx - s * 0.1, cy + s * 0.15); ctx.quadraticCurveTo(fx + Math.sin(t * 6 + i) * s * 0.06, cy + s * 0.15 - fl, fx + s * 0.1, cy + s * 0.15); ctx.fill();
+          }
+        }
+        break;
+      case 'claydep': case 'claypit': ctx.fillStyle = id === 'claydep' ? '#8a5a46' : '#4a3028'; ctx.beginPath(); ctx.ellipse(cx, cy + s * 0.1, s * 0.36, s * 0.22, 0, 0, 6.283); ctx.fill(); break;
+      case 'pond': case 'pondlow':
+        ctx.fillStyle = id === 'pond' ? '#3c4f6a' : '#4a4038'; ctx.beginPath(); ctx.ellipse(cx, cy, s * 0.48, s * 0.36, 0, 0, 6.283); ctx.fill();
+        if (id === 'pond') { ctx.strokeStyle = 'rgba(126,156,196,.5)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.ellipse(cx, cy, s * (0.2 + 0.05 * Math.sin(t)), s * 0.12, 0, 0, 6.283); ctx.stroke(); } break;
+      case 'wonion': case 'wonionbare': if (id === 'wonion') { for (i = 0; i < 3; i++) line(cx + (i - 1) * s * 0.06, cy + s * 0.2, cx + (i - 1) * s * 0.1, cy - s * 0.15, '#7a9a5a', 2); circ(cx, cy - s * 0.18, s * 0.05, '#c9a8d0'); } else circ(cx, cy + s * 0.15, s * 0.12, '#3a2a22'); break;
+      case 'wcarrot': case 'wcarrotdug': case 'wcarrotseed':
+        if (id === 'wcarrotdug') { circ(cx, cy + s * 0.15, s * 0.12, '#3a2a22'); break; }
+        for (i = 0; i < 4; i++) line(cx, cy + s * 0.2, cx + (i - 1.5) * s * 0.1, cy - s * 0.1, '#6f8a4e', 1.5);
+        if (id === 'wcarrotseed') circ(cx, cy - s * 0.2, s * 0.1, '#d8ccb0'); break;
+      case 'soil': case 'row': case 'rowdry': case 'rowwet': case 'sprouts': case 'carrots': case 'rowhard':
+        ctx.fillStyle = id === 'soil' ? '#3a2a22' : id === 'rowhard' ? '#5a4436' : id === 'rowwet' ? '#2a1e1a' : '#3e2c24';
+        ctx.fillRect(px + s * 0.08, py + s * 0.18, s * 0.84, s * 0.64);
+        if (id !== 'soil' && id !== 'rowhard') for (i = 0; i < 3; i++) line(px + s * 0.12, py + s * (0.3 + i * 0.2), px + s * 0.88, py + s * (0.3 + i * 0.2), 'rgba(0,0,0,.35)', 1);
+        if (id === 'rowdry' || id === 'rowwet') for (i = 0; i < 5; i++) circ(px + s * (0.2 + i * 0.15), py + s * 0.5, s * 0.025, '#d8ccb0');
+        if (id === 'sprouts' || id === 'carrots') for (i = 0; i < 5; i++) {
+          var hh = id === 'carrots' ? 0.3 : 0.14, on = id === 'sprouts' || i < (o.u || 0);
+          if (on) for (var k = -1; k <= 1; k++) line(px + s * (0.2 + i * 0.15), py + s * 0.55, px + s * (0.2 + i * 0.15) + k * s * 0.05, py + s * (0.55 - hh), '#6f8a4e', 1.6);
+        }
+        break;
+      case 'tule': case 'tuleharv': case 'tulestump':
+        for (i = 0; i < 6; i++) {
+          var hgt2 = id === 'tule' ? 0.75 : id === 'tuleharv' ? 0.35 : 0.1;
+          line(cx + (i - 2.5) * s * 0.08, cy + s * 0.3, cx + (i - 2.5) * s * 0.1, cy + s * (0.3 - hgt2), '#8a8a4a', 2);
+        }
+        break;
+      case 'rabbithole': case 'snared': case 'caught':
+        ctx.fillStyle = '#1a0e0c'; ctx.beginPath(); ctx.ellipse(cx, cy + s * 0.15, s * 0.16, s * 0.08, 0, 0, 6.283); ctx.fill();
+        if (id !== 'rabbithole') drawItem('stakes', cx + s * 0.18, cy, s * 0.7);
+        if (id === 'caught') { ctx.fillStyle = '#a48a74'; ctx.beginPath(); ctx.ellipse(cx - s * 0.1, cy + s * 0.02, s * 0.15, s * 0.09, 0, 0, 6.283); ctx.fill(); } break;
+      case 'furrabbit': drawItem('skinned', cx, cy + s * 0.1, s); drawItem('fur', cx + s * 0.15, cy + s * 0.2, s * 0.6); break;
+      case 'grave': case 'bones':
+        ctx.fillStyle = id === 'grave' ? '#4a3a3c' : '#3a2e30'; ctx.beginPath(); ctx.ellipse(cx, cy + s * 0.15, s * 0.36, s * 0.18, 0, 0, 6.283); ctx.fill();
+        if (id === 'grave') { line(cx, cy - s * 0.35, cx, cy + s * 0.1, BONE, 2); line(cx - s * 0.12, cy - s * 0.2, cx + s * 0.12, cy - s * 0.2, BONE, 2); }
+        else { line(cx - s * 0.15, cy + s * 0.12, cx + s * 0.15, cy + s * 0.18, BONE, 2); circ(cx + s * 0.18, cy + s * 0.08, s * 0.06, BONE); } break;
+      default: circ(cx, cy, s * 0.15, '#8f6f76');
+    }
+  }
+
+  function drawPerson(p, sx, sy, s) {
+    var a = ageOf(p), k = a < 3 ? 0.42 + a * 0.05 : 0.55 + 0.45 * Math.min(1, (a - 3) / 13);
+    var h = s * 0.95 * k, skin = SKIN[p.skin % 4], bob = p.path && p.path.length ? Math.abs(Math.sin(p.step * 6)) * s * 0.03 : 0;
+    var fx = sx, fy = sy + s * 0.32 - bob;          // feet
+    var old = a > 45;
+    ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.beginPath(); ctx.ellipse(sx, sy + s * 0.34, s * 0.2 * k, s * 0.07, 0, 0, 6.283); ctx.fill();
+    if (a < 3) {                                      // a baby is a swaddled bundle, on the ground or in arms
+      var lift = p.carriedBy ? s * 0.12 : 0;
+      ctx.fillStyle = '#c8b8a0'; ctx.beginPath(); ctx.ellipse(sx, sy + s * 0.22 - lift, s * 0.2, s * 0.1, p.carriedBy ? -0.4 : 0, 0, 6.283); ctx.fill();
+      circ(sx + s * 0.16 * p.face, sy + s * 0.17 - lift - (p.carriedBy ? s * 0.06 : 0), s * 0.09, skin);
+      return;
+    }
+    var legH = h * 0.32, bodyH = h * 0.38, headR = h * 0.14;
+    var sw = Math.sin(p.step * 6) * (p.path && p.path.length ? 1 : 0);
+    ctx.lineCap = 'round';
+    line(fx - s * 0.05 * k, fy - legH, fx - s * 0.05 * k + sw * s * 0.05, fy, skin, Math.max(2, s * 0.07 * k));
+    line(fx + s * 0.05 * k, fy - legH, fx + s * 0.05 * k - sw * s * 0.05, fy, skin, Math.max(2, s * 0.07 * k));
+    var by = fy - legH - bodyH;
+    var top = p.clothes.t ? '#9a8068' : skin;
+    ctx.fillStyle = top; ctx.fillRect(fx - s * 0.12 * k, by, s * 0.24 * k, bodyH);
+    if (p.clothes.b) { ctx.fillStyle = '#a89a5a'; ctx.fillRect(fx - s * 0.13 * k, fy - legH - bodyH * 0.25, s * 0.26 * k, bodyH * 0.45); }
+    // arms; one reaches for what is held
+    line(fx - s * 0.12 * k, by + bodyH * 0.15, fx - s * 0.16 * k, by + bodyH * 0.8, skin, Math.max(2, s * 0.06 * k));
+    var hx = fx + s * 0.2 * k * p.face, hy = by + bodyH * 0.6;
+    line(fx + s * 0.12 * k * p.face, by + bodyH * 0.15, hx, hy, skin, Math.max(2, s * 0.06 * k));
+    var hy0 = by - headR * 0.9;
+    if (p.sex === 'f') { ctx.fillStyle = old ? '#9a9090' : '#3a241c'; ctx.fillRect(fx - headR * 1.05, hy0 - headR * 0.6, headR * 2.1, headR * 2.1); }
+    circ(fx, hy0, headR, skin);
+    ctx.fillStyle = old ? '#b0a8a8' : p.sex === 'f' ? '#3a241c' : '#4a2e22';
+    ctx.beginPath(); ctx.arc(fx, hy0 - headR * 0.15, headR * 1.02, 3.3, 6.1); ctx.fill();
+    if (p.clothes.h) { ctx.fillStyle = '#b49a82'; ctx.beginPath(); ctx.arc(fx, hy0 - headR * 0.25, headR * 1.15, 3.1416, 0); ctx.fill(); }
+    circ(fx + headR * 0.45 * p.face, hy0 - headR * 0.05, Math.max(1, headR * 0.12), '#1a0e0c');
+    if (p.held) drawItem(p.held.id, hx + s * 0.04 * p.face, hy, s * 0.8 * Math.max(0.7, k), p.held);
+  }
+
+  function wrap(text, maxW) {
+    var words = text.split(' '), lines = [], cur = '';
+    words.forEach(function (w) { var t = cur ? cur + ' ' + w : w; if (ctx.measureText(t).width > maxW && cur) { lines.push(cur); cur = w; } else cur = t; });
+    if (cur) lines.push(cur);
+    return lines;
+  }
+  function bubble(p, sx, sy, s) {
+    var age = W.T - p.sayT, dur = 3.5 + p.said.length * 0.07;
+    if (!p.said || age > dur) return;
+    ctx.font = '600 ' + Math.round(clamp(s * 0.3, 11, 14)) + 'px ui-monospace, Menlo, monospace';
+    var lines = wrap(p.said, Math.min(200, cssW * 0.5)), lh = Math.round(clamp(s * 0.36, 13, 17));
+    var w = 0; lines.forEach(function (l) { w = Math.max(w, ctx.measureText(l).width); });
+    var bx = clamp(sx - w / 2 - 7, 4, cssW - w - 18), by = sy - s * 1.05 - lines.length * lh - 10;
+    ctx.globalAlpha = age > dur - 0.4 ? (dur - age) / 0.4 : 1;
+    ctx.fillStyle = 'rgba(11,6,9,.88)'; ctx.fillRect(bx, by, w + 14, lines.length * lh + 9);
+    ctx.strokeStyle = p === me ? 'rgba(233,216,197,.6)' : 'rgba(61,31,40,1)'; ctx.lineWidth = 1; ctx.strokeRect(bx + 0.5, by + 0.5, w + 13, lines.length * lh + 8);
+    ctx.fillStyle = '#f2e6e6'; ctx.textBaseline = 'top';
+    lines.forEach(function (l, i) { ctx.fillText(l, bx + 7, by + 5 + i * lh); });
+    ctx.globalAlpha = 1;
+  }
+
+  function draw() {
+    if (!W || !me) { ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.fillStyle = '#0b0609'; ctx.fillRect(0, 0, cssW, cssH); return; }
+    var focus = me.carriedBy ? byId(me.carriedBy) || me : me;
+    camX += (focus.x - camX) * 0.18; camY += (focus.y - camY) * 0.18;
+    if (Math.abs(focus.x - camX) > 6 || Math.abs(focus.y - camY) > 6) { camX = focus.x; camY = focus.y; }
+    var ox = cssW / 2 - camX * TS, oy = cssH * 0.52 - camY * TS;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.fillStyle = '#050203'; ctx.fillRect(0, 0, cssW, cssH);
+    // ground, from cached chunks
+    var x0 = Math.floor(-ox / TS) - 1, y0 = Math.floor(-oy / TS) - 1, x1 = x0 + Math.ceil(cssW / TS) + 3, y1 = y0 + Math.ceil(cssH / TS) + 3;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    for (var cy = Math.floor(y0 / CH); cy <= Math.floor(y1 / CH); cy++) for (var cx = Math.floor(x0 / CH); cx <= Math.floor(x1 / CH); cx++) {
+      if (cx < 0 || cy < 0 || cx * CH >= MW || cy * CH >= MH) continue;
+      ctx.drawImage(groundChunk(cx, cy), Math.round((ox + cx * CH * TS) * dpr), Math.round((oy + cy * CH * TS) * dpr));
+    }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    // things and people, back to front
+    var list = [];
+    for (var y = Math.max(0, y0); y <= Math.min(MH - 1, y1 + 1); y++) for (var x = Math.max(0, x0); x <= Math.min(MW - 1, x1); x++) {
+      var o = W.obj[idx(x, y)]; if (o) list.push({ y: y + (OB[o.id].tall ? 0.8 : 0.3), o: o, x: x, ty: y });
+    }
+    W.people.forEach(function (p) { if (p.alive && !p.carriedBy) list.push({ y: p.y, p: p }); });
+    list.sort(function (a, b) { return a.y - b.y; });
+    list.forEach(function (e) {
+      if (e.o) drawObj(e.o, ox + e.x * TS, oy + e.ty * TS, TS);
+      else {
+        drawPerson(e.p, ox + e.p.x * TS, oy + e.p.y * TS - TS * 0.3, TS);
+        if (e.p.carry) { var c = byId(e.p.carry); if (c) drawPerson(c, ox + c.x * TS, oy + c.y * TS - TS * 0.62, TS * 0.9); }
+      }
+    });
+    // where you are going
+    if (me.pending) { ctx.strokeStyle = 'rgba(233,216,197,.5)'; ctx.lineWidth = 1; ctx.strokeRect(ox + me.pending.x * TS + 1.5, oy + me.pending.y * TS + 1.5, TS - 3, TS - 3); }
+    // night, and the light that holds it back
+    var dark = night() * 0.78;
+    var lw = Math.ceil(cssW / 2), lh = Math.ceil(cssH / 2);
+    if (lightCv.width !== lw || lightCv.height !== lh) { lightCv.width = lw; lightCv.height = lh; }
+    lctx.globalCompositeOperation = 'source-over'; lctx.clearRect(0, 0, lw, lh);
+    lctx.fillStyle = 'rgba(6,3,10,' + (0.12 + dark).toFixed(3) + ')'; lctx.fillRect(0, 0, lw, lh);
+    lctx.globalCompositeOperation = 'destination-out';
+    var lights = [], fireNear = 0;
+    for (y = Math.max(0, y0 - 4); y <= Math.min(MH - 1, y1 + 4); y++) for (x = Math.max(0, x0 - 4); x <= Math.min(MW - 1, x1 + 4); x++) {
+      var lo = W.obj[idx(x, y)];
+      if (lo && OB[lo.id].light) { lights.push([x + 0.5, y + 0.5, OB[lo.id].light]); fireNear = Math.max(fireNear, OB[lo.id].light * clamp(1 - dist(x, y, me.x, me.y) / 9, 0, 1)); }
+    }
+    W.people.forEach(function (p) { if (p.alive && p.held && OB[p.held.id].light) lights.push([p.x, p.y, OB[p.held.id].light]); });
+    lights.push([focus.x, focus.y, 0.35]);
+    var flick = 0.94 + Math.sin(performance.now() / 90) * 0.03 + Math.random() * 0.03;
+    lights.forEach(function (l) {
+      var lx = (ox + l[0] * TS) / 2, ly = (oy + l[1] * TS) / 2, r = TS * 3.4 * l[2] * flick / 2;
+      var g = lctx.createRadialGradient(lx, ly, 0, lx, ly, r);
+      g.addColorStop(0, 'rgba(0,0,0,1)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+      lctx.fillStyle = g; lctx.fillRect(lx - r, ly - r, r * 2, r * 2);
+    });
+    ctx.drawImage(lightCv, 0, 0, cssW, cssH);
+    // the blood-warm glow around a fire
+    ctx.globalCompositeOperation = 'lighter';
+    lights.forEach(function (l) {
+      if (l[2] < 0.4) return;
+      var lx = ox + l[0] * TS, ly = oy + l[1] * TS, r = TS * 2.4 * l[2] * flick;
+      var g = ctx.createRadialGradient(lx, ly, 0, lx, ly, r);
+      g.addColorStop(0, 'rgba(216,90,58,' + (0.16 + dark * 0.12).toFixed(3) + ')'); g.addColorStop(1, 'rgba(184,29,58,0)');
+      ctx.fillStyle = g; ctx.fillRect(lx - r, ly - r, r * 2, r * 2);
+    });
+    ctx.globalCompositeOperation = 'source-over';
+    Snd.fire(fireNear);
+    // names and speech on top of the dark
+    W.people.forEach(function (p) {
+      if (!p.alive) return;
+      var sx = ox + p.x * TS, sy = oy + p.y * TS - (p.carriedBy ? TS * 0.62 : TS * 0.3);
+      if (sx < -80 || sx > cssW + 80 || sy < -80 || sy > cssH + 80) return;
+      if (p !== me && dist(p.x, p.y, me.x, me.y) < EAR) {
+        ctx.font = '500 9px -apple-system, system-ui, sans-serif'; ctx.textBaseline = 'top'; ctx.textAlign = 'center';
+        ctx.fillStyle = 'rgba(195,169,173,.85)'; ctx.fillText((p.name || '—') + ' ' + Math.floor(ageOf(p)), sx, sy + TS * 0.38);
+        ctx.textAlign = 'left';
+      }
+      if (p === me) { ctx.fillStyle = BONE; ctx.beginPath(); ctx.moveTo(sx - 4, sy - TS * 0.95); ctx.lineTo(sx + 4, sy - TS * 0.95); ctx.lineTo(sx, sy - TS * 0.85); ctx.fill(); }
+      bubble(p, sx, sy, TS);
+    });
+    // the cold creeps in at the edges
+    var cold = clamp((0.36 - me.heat) * 3, 0, 1), hot = clamp((me.heat - 0.66) * 3, 0, 1);
+    var vg = ctx.createRadialGradient(cssW / 2, cssH / 2, Math.min(cssW, cssH) * 0.3, cssW / 2, cssH / 2, Math.max(cssW, cssH) * 0.75);
+    vg.addColorStop(0, 'rgba(0,0,0,0)');
+    vg.addColorStop(1, cold > 0 ? 'rgba(60,80,120,' + (0.25 + cold * 0.35).toFixed(3) + ')' : hot > 0 ? 'rgba(140,90,30,' + (0.2 + hot * 0.3).toFixed(3) + ')' : 'rgba(5,2,3,.55)');
+    ctx.fillStyle = vg; ctx.fillRect(0, 0, cssW, cssH);
+  }
+
+  /* =====================================================================
+     INPUT — tap to walk, tap a thing to use what you hold on it, hold on
+     a basket to take from it, drag in the lower left to steer.
+     ===================================================================== */
+
+  var keys = {}, stickV = null;
+  function toWorld(sx, sy) {
+    var ox = cssW / 2 - camX * TS, oy = cssH * 0.52 - camY * TS;
+    return { x: (sx - ox) / TS, y: (sy - oy) / TS };
+  }
+  function personAt(wx, wy) {
+    var best = null, bd = 0.7;
+    W.people.forEach(function (p) {
+      if (!p.alive) return;
+      var py = p.carriedBy ? p.y - 0.62 : p.y - 0.3;
+      var d = dist(wx, wy, p.x, py);
+      if (d < bd) { bd = d; best = p; }
+    });
+    return best;
+  }
+  function tap(sx, sy, alt) {
+    if (!me || !me.alive || paused()) return;
+    var w = toWorld(sx, sy), tx = Math.floor(w.x), ty = Math.floor(w.y);
+    if (me.carriedBy) {                  // wriggle free
+      if (ageOf(me) >= 0.5) { var h = byId(me.carriedBy); if (h) putDown(h); toast('You wriggle free.', 1400); }
+      return;
+    }
+    var q = personAt(w.x, w.y);
+    if (q === me) { var r = useSelf(me); if (r) toast(r); return; }
+    if (q) { me.pending = { person: q.id, x: Math.floor(q.x), y: Math.floor(q.y) }; me.path = null; return; }
+    if (!inb(tx, ty)) return;
+    var o = objAt(tx, ty);
+    if (!o && !(alt && me.held)) { if (!blocked(tx, ty)) { goTo(me, tx, ty, false); me.pending = null; } return; }
+    me.pending = { x: tx, y: ty, alt: alt };
+    me.path = null;
+  }
+  function playerTick(dt) {
+    if (!me.alive || me.carriedBy) return;
+    var vx = 0, vy = 0;
+    if (keys.a || keys.arrowleft) vx -= 1; if (keys.d || keys.arrowright) vx += 1;
+    if (keys.w || keys.arrowup) vy -= 1; if (keys.s || keys.arrowdown) vy += 1;
+    if (stickV) { vx = stickV.x; vy = stickV.y; }
+    var m = Math.sqrt(vx * vx + vy * vy);
+    if (m > 0.15) {
+      me.path = null; me.pending = null;
+      var sp = speedOf(me) * dt * Math.min(1, m) / m, nx = me.x + vx * sp, ny = me.y + vy * sp;
+      if (!blockedAt(nx, me.y)) me.x = nx;
+      if (!blockedAt(me.x, ny)) me.y = ny;
+      if (Math.abs(vx) > 0.1) me.face = vx > 0 ? 1 : -1;
+      me.step += sp;
+      return;
+    }
+    var pd = me.pending;
+    if (pd) {
+      var tx = pd.x, ty = pd.y, q = pd.person ? byId(pd.person) : null;
+      if (q) { tx = Math.floor(q.x); ty = Math.floor(q.y); }
+      var close = q ? dist(me.x, me.y, q.x, q.y) < 1.6 : near(me, tx, ty);
+      if (close) {
+        me.path = null; me.pending = null;
+        var r = q ? usePerson(me, q) : apply(me, tx, ty, pd.alt);
+        if (r) toast(r);
+        if (q && !r && ageOf(me) >= 3 && !me.held && ageOf(q) >= 4) openSay();
+        return;
+      }
+      if (!me.path || !me.path.length || (q && (me.prt = (me.prt || 0) - dt) < 0)) {
+        me.prt = 0.6;
+        if (!goTo(me, tx, ty, true)) { me.pending = null; toast('can\'t reach that', 1200); return; }
+      }
+    }
+    walk(me, dt);
+  }
+  function blockedAt(x, y) {
+    var r = 0.28;
+    return blocked(Math.floor(x - r), Math.floor(y - r)) || blocked(Math.floor(x + r), Math.floor(y - r)) ||
+           blocked(Math.floor(x - r), Math.floor(y + r)) || blocked(Math.floor(x + r), Math.floor(y + r));
+  }
+
+  var touch = null, stickEl = $('stick'), knobEl = $('knob');
+  function inStickZone(x, y) { return x < cssW * 0.46 && y > cssH * 0.58; }
+  cv.addEventListener('touchstart', function (e) {
+    var t = e.changedTouches[0];
+    if (touch) return;
+    touch = { id: t.identifier, x: t.clientX, y: t.clientY, t: performance.now(), moved: false, stick: inStickZone(t.clientX, t.clientY) };
+    if (!touch.stick) touch.lp = setTimeout(function () { if (touch && !touch.moved) { touch.done = true; tap(touch.x, touch.y, true); } }, 450);
+    e.preventDefault();
+  }, { passive: false });
+  cv.addEventListener('touchmove', function (e) {
+    if (!touch) return;
+    for (var i = 0; i < e.changedTouches.length; i++) {
+      var t = e.changedTouches[i]; if (t.identifier !== touch.id) continue;
+      var dx = t.clientX - touch.x, dy = t.clientY - touch.y;
+      if (Math.abs(dx) + Math.abs(dy) > 12) { touch.moved = true; clearTimeout(touch.lp); }
+      if (touch.stick && touch.moved) {
+        var m = Math.sqrt(dx * dx + dy * dy), cl = Math.min(m, 44);
+        stickV = { x: dx / Math.max(m, 1) * cl / 44, y: dy / Math.max(m, 1) * cl / 44 };
+        stickEl.style.display = 'block'; stickEl.style.left = touch.x + 'px'; stickEl.style.top = touch.y + 'px';
+        knobEl.style.transform = 'translate(' + (stickV.x * 32) + 'px,' + (stickV.y * 32) + 'px)';
+      }
+    }
+    e.preventDefault();
+  }, { passive: false });
+  function endTouch(e) {
+    if (!touch) return;
+    for (var i = 0; i < e.changedTouches.length; i++) {
+      if (e.changedTouches[i].identifier !== touch.id) continue;
+      clearTimeout(touch.lp);
+      if (!touch.moved && !touch.done) tap(touch.x, touch.y, false);
+      touch = null; stickV = null; stickEl.style.display = 'none';
+    }
+  }
+  cv.addEventListener('touchend', endTouch); cv.addEventListener('touchcancel', endTouch);
+  var mouseDown = null;
+  cv.addEventListener('mousedown', function (e) { mouseDown = { x: e.clientX, y: e.clientY, t: performance.now() }; });
+  cv.addEventListener('mouseup', function (e) {
+    if (!mouseDown) return;
+    var alt = e.button === 2 || e.shiftKey || performance.now() - mouseDown.t > 450;
+    if (Math.abs(e.clientX - mouseDown.x) + Math.abs(e.clientY - mouseDown.y) < 8) tap(e.clientX, e.clientY, alt);
+    mouseDown = null;
+  });
+  cv.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+  window.addEventListener('keydown', function (e) {
+    if (document.activeElement && document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') return;
+    var k = e.key.toLowerCase();
+    if (k === 'enter') { openSay(); e.preventDefault(); return; }
+    if (k === ' ') { var r = useSelf(me); if (r) toast(r); e.preventDefault(); return; }
+    if (k === 'q') { dropAction(); return; }
+    keys[k] = true;
+  });
+  window.addEventListener('keyup', function (e) { keys[e.key.toLowerCase()] = false; });
+
+  function dropAction() {
+    if (!me || !me.alive || me.carriedBy) return;
+    if (me.carry) { putDown(me); return; }
+    if (!me.held) return;
+    var fx = Math.floor(me.x) + me.face, fy = Math.floor(me.y);
+    var s = !objAt(fx, fy) && inb(fx, fy) ? { x: fx, y: fy } : freeNear(Math.floor(me.x), Math.floor(me.y), 1);
+    if (s) apply(me, s.x, s.y);
+  }
+
+  /* =====================================================================
+     UI
+     ===================================================================== */
+
+  var toastT = 0;
+  function toast(msg, ms) {
+    var el = $('toast'); el.textContent = msg; el.classList.add('on');
+    clearTimeout(toastT); toastT = setTimeout(function () { el.classList.remove('on'); }, ms || 2200);
+  }
+  function paused() {
+    return !$('intro').classList.contains('hide') || !$('settings').classList.contains('hide') ||
+           !$('kin').classList.contains('hide') || document.hidden;
+  }
+
+  var sayBar = $('sayBar'), sayIn = $('sayIn');
+  function openSay() {
+    if (!me || !me.alive) return;
+    sayIn.maxLength = sayLimit(me); sayIn.value = ''; $('sayLim').textContent = sayLimit(me);
+    sayBar.classList.add('on'); setTimeout(function () { sayIn.focus(); }, 30);
+  }
+  function closeSay() { sayBar.classList.remove('on'); sayIn.blur(); }
+  sayIn.addEventListener('input', function () { $('sayLim').textContent = sayLimit(me) - sayIn.value.length; });
+  function sendSay() {
+    var t = sayIn.value.trim();
+    closeSay();
+    if (!t) return;
+    var said = say(me, t, false);
+    if (said) Mind.playerSaid(said);
+  }
+  $('saySend').addEventListener('click', sendSay);
+  sayIn.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); sendSay(); } if (e.key === 'Escape') closeSay(); });
+  sayIn.addEventListener('blur', function () { setTimeout(function () { if (document.activeElement !== sayIn) sayBar.classList.remove('on'); }, 150); });
+  $('btnSay').addEventListener('click', function () { if (sayBar.classList.contains('on')) closeSay(); else openSay(); });
+  $('btnDrop').addEventListener('click', dropAction);
+  $('btnSelf').addEventListener('click', function () { if (me) { var r = useSelf(me); if (r) toast(r); } });
+
+  var lastHud = 0, pipEls = [];
+  function hud() {
+    if (!me) return;
+    $('vName').textContent = me.name || '—';
+    $('vAge').textContent = ageOf(me).toFixed(1);
+    $('vGen').textContent = me.gen || 1;
+    var cap = capOf(me), host = $('vFood');
+    if (pipEls.length !== cap + 4) {
+      host.innerHTML = ''; pipEls = [];
+      for (var i = 0; i < cap + 4; i++) { var el = document.createElement('i'); host.appendChild(el); pipEls.push(el); }
+    }
+    var yum = Math.min(4, Math.ceil(me.yum / 2));
+    pipEls.forEach(function (el, i) {
+      el.style.display = i < cap + (yum ? 4 : 0) ? '' : 'none';
+      el.className = i < cap ? (i < me.food ? (me.food <= 3 ? 'low' : 'on') : '') : (i - cap < yum ? 'yum' : '');
+    });
+    $('vHeat').style.left = clamp(me.heat * 100, 2, 98) + '%';
+    // what is in hand, and what it can do
+    var name = me.carry ? 'Carrying ' + ((byId(me.carry) || {}).name || 'a baby') : me.held ? OB[me.held.id].name + (me.held.u && OB[me.held.id].fill ? ' (' + me.held.u + ')' : '') : 'Bare hands';
+    if (me.carriedBy) name = 'Held by ' + ((byId(me.carriedBy) || {}).name || 'someone');
+    $('heldName').textContent = name;
+    var hint = '';
+    if (ageOf(me) < 3) hint = me.carriedBy ? 'Tap to wriggle free.' : 'Too small to use things. Speak <b>F</b> when hungry.';
+    else if (me.carry) hint = '<b>Drop</b> to set them down.';
+    else if (me.held) {
+      var d = OB[me.held.id], tips = [];
+      if (d.food) tips.push('<b>Self</b> to eat (' + d.food + ')');
+      if (d.wear) tips.push('<b>Self</b> to wear');
+      (BY_ACTOR[me.held.id] || []).slice(0, 3).forEach(function (tr) {
+        var made = tr.na !== '_' && tr.na !== tr.a ? tr.na : tr.nt;
+        if (made !== tr.t) tips.push('on ' + nm(tr.t) + ' → <b>' + nm(made) + '</b>');
+      });
+      if (d.slots) tips.push('tap small things to fill it');
+      hint = tips.slice(0, 3).join(' · ');
+    } else hint = 'Tap a thing to take it or gather from it.';
+    $('heldHint').innerHTML = hint;
+  }
+
+  function paintVoice() {
+    var s = Mind.status(), dot = $('voiceDot'), sub = $('voiceSub');
+    dot.className = 'dot' + (s.busy ? ' busy' : s.live ? ' live' : '');
+    if (!settings.voice) sub.textContent = 'Off. The villagers use a few stock lines.';
+    else if (!s.checked) sub.textContent = 'Looking for the voice server…';
+    else if (s.live) sub.textContent = 'Live: Claude ' + (s.stats.model || 'Haiku') + ' through the arcade server. ' +
+      s.stats.ok + ' lines' + (s.stats.lastMs ? ', last in ' + (s.stats.lastMs / 1000).toFixed(1) + 's' : '') + '. Only people near you speak.';
+    else sub.textContent = 'No voice server here, so stock lines. Run the arcade server on the PC (Helios: arcade) and play from its link.';
+  }
+
+  function openKin() {
+    var rows = living().filter(function (p) { return p !== me; });
+    rows.sort(function (a, b) {
+      var ra = relation(me, a) === 'stranger' ? 1 : 0, rb = relation(me, b) === 'stranger' ? 1 : 0;
+      return ra - rb || ageOf(b) - ageOf(a);
+    });
+    var html = '<p class="lede">' + living().length + ' living. You are <b>' + fullName(me) + '</b>, generation ' + (me.gen || 1) + '.</p>';
+    rows.forEach(function (p) {
+      var rel = relation(me, p);
+      var doing = p.carriedBy ? 'carried' : p.working ? 'relighting the hearth' : p.job ? p.job.kind : 'about the village';
+      html += '<div class="kin"><div class="n">' + (p.name || 'nameless') + ' ' + (p.fam || '') +
+        (rel !== 'stranger' ? ' <em>' + rel + '</em>' : '') + '</div><div class="a">' + Math.floor(ageOf(p)) + 'y</div>' +
+        '<div class="d">' + p.traits.join(', ') + ' · ' + doing + (p.said && W.T - p.sayT < 240 ? ' · <q>' + p.said + '</q>' : '') + '</div></div>';
+    });
+    var dead = W.lives.slice(-8).reverse();
+    if (dead.length) {
+      html += '<h3>Graves</h3>';
+      dead.forEach(function (l) { html += '<div class="kin dead"><div class="n">' + l.name + (l.me ? ' <em>you</em>' : '') + '</div><div class="a">' + l.age + 'y</div><div class="d">' + l.cause + '</div></div>'; });
+    }
+    $('kinBody').innerHTML = html;
+    $('kin').classList.remove('hide');
+  }
+  $('btnKin').addEventListener('click', openKin);
+  $('btnKinBack').addEventListener('click', function () { $('kin').classList.add('hide'); });
+  $('kin').addEventListener('click', function (e) { if (e.target === $('kin')) $('kin').classList.add('hide'); });
+
+  /* ---------------- death and the next life ---------------- */
+
+  function onMyDeath() {
+    save();
+    setTimeout(function () {
+      var kids = W.people.filter(function (p) { return p.mother === me.id; });
+      var alive = kids.filter(function (p) { return p.alive; }).length;
+      $('deadHead').textContent = fullName(me);
+      $('deadBody').innerHTML = '<div class="big">' + Math.floor(ageOf(me)) + '<small>years</small></div>' +
+        '<p class="lede" style="margin-top:16px;text-align:center">Died of ' + me.cause + '. ' +
+        (kids.length ? kids.length + ' child' + (kids.length > 1 ? 'ren' : '') + ', ' + alive + ' still living. ' : '') +
+        living().length + ' people go on without you.</p>';
+      $('dead').classList.remove('hide');
+    }, 1800);
+  }
+  function reborn() {
+    $('dead').classList.add('hide');
+    var mothers = living().filter(function (m) { return fertile(m) && m.npc && !m.carry; });
+    mothers.sort(function (a, b) { return (b.fam === me.fam ? 1 : 0) - (a.fam === me.fam ? 1 : 0) || a.lastBirth - b.lastBirth; });
+    var m = mothers[0], p;
+    if (m) {
+      p = person({ sex: Math.random() < 0.5 ? 'f' : 'm', age: 0, fam: m.fam, x: Math.floor(m.x), y: Math.floor(m.y), mother: m.id, name: '', npc: false, gen: (m.gen || 1) + 1 });
+      p.food = 4; m.lastBirth = W.T;
+      pickUp(m, p); m.carryUntil = W.T + 14;
+      remember(m, 'gave birth to a ' + (p.sex === 'f' ? 'girl' : 'boy'));
+    } else {
+      // No mother to be born to: arrive as an Eve, fourteen and alone, at the old hearth.
+      var fam = living().length ? living()[0].fam : pick(FAMS.filter(function (f) { return W.fams.indexOf(f) < 0; }).concat(FAMS));
+      if (W.fams.indexOf(fam) < 0) W.fams.push(fam);
+      var s = freeNear(W.camp.x, W.camp.y, 3) || W.camp;
+      p = person({ sex: 'f', age: 14, fam: fam, x: s.x, y: s.y, npc: false, gen: 1 });
+      toast('No mother to be born to. You arrive as an Eve.', 4200);
+    }
+    me = p; W.meId = p.id; me.npc = false;
+    W.gen = Math.max(W.gen, me.gen || 1);
+    camX = me.x; camY = me.y;
+    Snd.bell(659.25);
+    Mind.event(me, (m ? (m.name || 'A woman') + ' gave birth to a baby, not yet named' : 'A stranger girl of fourteen walked in from the cold'), 3);
+    save();
+  }
+  $('btnReborn').addEventListener('click', reborn);
+
+  /* =====================================================================
+     SAVE — localStorage, mirrored to Cache Storage, because Safari and the
+     home-screen app do not share localStorage but do share caches.
+     ===================================================================== */
+
+  function serialize() {
+    var objs = [];
+    for (var i = 0; i < W.obj.length; i++) if (W.obj[i]) objs.push([i, W.obj[i]]);
+    var out = {}; for (var k in W) if (k !== 'obj' && k !== 'biome') out[k] = W[k];
+    out.objs = objs; out.savedAt = Date.now();
+    return JSON.stringify(out);
+  }
+  function deserialize(txt) {
+    var d = JSON.parse(txt);
+    if (!d || !d.people || !d.objs) throw new Error('not a village');
+    d.obj = new Array(MW * MH);
+    d.objs.forEach(function (e) { d.obj[e[0]] = e[1]; });
+    delete d.objs;
+    d.biome = genBiome(d.seed);
+    return d;
+  }
+  function save() {
+    if (!W) return;
+    var txt = serialize();
+    try { localStorage.setItem(WKEY, txt); } catch (e) {}
+    try { if (window.caches) caches.open(CACHE).then(function (c) { return c.put('./kindred-save.json', new Response(txt)); }).catch(function () {}); } catch (e) {}
+  }
+  function load(cb) {
+    var local = null;
+    try { var t = localStorage.getItem(WKEY); if (t) local = t; } catch (e) {}
+    function finish(txt) { try { cb(txt ? deserialize(txt) : null); } catch (e) { cb(null); } }
+    if (!window.caches) return finish(local);
+    caches.open(CACHE).then(function (c) { return c.match('./kindred-save.json'); })
+      .then(function (r) { return r ? r.text() : null; })
+      .then(function (txt) {
+        var a = 0, b = 0;
+        try { a = local ? JSON.parse(local).savedAt || 0 : 0; } catch (e) {}
+        try { b = txt ? JSON.parse(txt).savedAt || 0 : 0; } catch (e) {}
+        finish(b > a ? txt : local);
+      }).catch(function () { finish(local); });
+  }
+  function adopt(w) {
+    W = w; chunks = {};
+    me = byId(W.meId);
+    camX = me ? me.x : W.camp.x; camY = me ? me.y : W.camp.y;
+  }
+  function newVillage() {
+    YEAR = 60 / settings.life;
+    var mother = genWorld(Math.floor(Math.random() * 1e9));
+    chunks = {};
+    var p = person({ sex: Math.random() < 0.5 ? 'f' : 'm', age: 0, fam: mother.fam, x: Math.floor(mother.x), y: Math.floor(mother.y),
+                     mother: mother.id, name: '', npc: false, gen: 2 });
+    p.food = 4; mother.lastBirth = W.T;
+    pickUp(mother, p); mother.carryUntil = W.T + 16;
+    me = p; W.meId = p.id; W.gen = 2;
+    camX = me.x; camY = me.y;
+    Mind.event(me, (mother.name || 'A woman') + ' just gave birth to the player, a baby not yet named', 3);
+    save();
+  }
+
+  /* =====================================================================
+     TIME
+     ===================================================================== */
+
+  function decayTick() {
+    var T = W.T;
+    for (var i = 0; i < W.obj.length; i++) {
+      var o = W.obj[i];
+      if (!o) continue;
+      if (o.d && o.d <= T) {
+        var to = OB[o.id].decay[0];
+        W.obj[i] = to ? (function () { var n = mk(to); if (o.g) n.g = o.g; return n; }()) : null;
+      } else if (o.c) {
+        for (var k = o.c.length - 1; k >= 0; k--) if (o.c[k].d && o.c[k].d <= T) {
+          var t2 = OB[o.c[k].id].decay[0]; if (t2) o.c[k] = mk(t2); else o.c.splice(k, 1);
+        }
+      }
+    }
+    W.people.forEach(function (p) {     // what is in hand changes too: an ember leaf cools, a firebrand burns down
+      if (p.alive && p.held && p.held.d && p.held.d <= T) { var to = OB[p.held.id].decay[0]; p.held = to ? mk(to) : null; }
+    });
+  }
+
+  var acc = { decay: 0, care: 0, birth: 0, mind: 0, hud: 0, save: 0 }, lastT = 0;
+  function simStep(dt) {
+    W.T += dt;
+    for (var i = 0; i < W.people.length; i++) {
+      var p = W.people[i];
+      if (!p.alive) continue;
+      lifeTick(p, dt);
+      if (p.npc && p !== me) npcTick(p, dt); else if (p === me) playerTick(dt);
+    }
+    if ((acc.decay += dt) > 0.5) { acc.decay = 0; decayTick(); }
+    if ((acc.care += dt) > 1) { acc.care = 0; careTick(); }
+    if ((acc.birth += dt) > 5) { acc.birth = 0; birthTick(); }
+    if ((acc.mind += dt) > 0.5) { acc.mind = 0; Mind.tick(); }
+    if ((acc.save += dt) > 20) { acc.save = 0; save(); }
+  }
+  function frame(now) {
+    requestAnimationFrame(frame);
+    var dt = Math.min(0.1, (now - (lastT || now)) / 1000); lastT = now;
+    if (W && me && !paused()) simStep(dt);
+    if ((acc.hud += dt) > 0.2) { acc.hud = 0; hud(); }
+    draw();
+  }
+
+  /* ---------------- stage ---------------- */
+
+  function insets() {
+    var cs = getComputedStyle(probe);
+    function v(n) { return parseFloat(cs[n]) || 0; }
+    return { t: v('paddingTop'), r: v('paddingRight'), b: Math.min(v('paddingBottom'), 34), l: v('paddingLeft') };
+  }
+  function framed() { try { return window.parent !== window; } catch (e) { return true; } }
+  function standalone() {
+    if (window.navigator.standalone === true) return true;
+    return !!(window.matchMedia && (matchMedia('(display-mode: standalone)').matches || matchMedia('(display-mode: fullscreen)').matches));
+  }
+  function measure() {
+    var vv = window.visualViewport, doc = document.documentElement;
+    var w = Math.max(doc.clientWidth || 0, window.innerWidth || 0, vv ? Math.round(vv.width + (vv.offsetLeft || 0)) : 0);
+    var h = Math.max(doc.clientHeight || 0, window.innerHeight || 0, vv ? Math.round(vv.height + (vv.offsetTop || 0)) : 0);
+    var clear = !framed() || settings.fullscreen;
+    if (standalone() && clear && screen.width && screen.height) {
+      var lng = Math.max(screen.width, screen.height), sht = Math.min(screen.width, screen.height);
+      if (h >= w) { h = Math.max(h, lng); w = Math.max(w, sht); } else { h = Math.max(h, sht); w = Math.max(w, lng); }
+    }
+    return { w: w, h: h };
+  }
+  function resize() {
+    var m = measure();
+    // With the keyboard up for speech, keep the world as it was rather than squash it.
+    if (sayBar.classList.contains('on') && cssW && m.h < cssH) return;
+    cssW = m.w; cssH = m.h;
+    stageEl.style.width = cssW + 'px'; stageEl.style.height = cssH + 'px';
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    cv.width = Math.round(cssW * dpr); cv.height = Math.round(cssH * dpr);
+    var ins = insets(), root = document.documentElement.style;
+    root.setProperty('--safe-t', ((framed() && !settings.fullscreen) ? 0 : ins.t) + 'px');
+    root.setProperty('--safe-r', ins.r + 'px'); root.setProperty('--safe-b', ins.b + 'px'); root.setProperty('--safe-l', ins.l + 'px');
+    var nts = clamp(Math.round(Math.min(cssW, cssH) / 10), 30, 58);
+    if (nts !== TS || dpr !== lastDpr) { TS = nts; lastDpr = dpr; chunks = {}; }
+  }
+  window.addEventListener('resize', resize);
+  window.addEventListener('orientationchange', function () { setTimeout(resize, 60); setTimeout(resize, 260); setTimeout(resize, 600); });
+  if (window.visualViewport) { window.visualViewport.addEventListener('resize', resize); window.visualViewport.addEventListener('scroll', resize); }
+
+  /* ---------------- settings ---------------- */
+
+  var setEl = $('settings');
+  function setSwitch(el, on) { el.setAttribute('aria-checked', on ? 'true' : 'false'); }
+  function applySettings() {
+    setSwitch($('swFs'), settings.fullscreen); setSwitch($('swSound'), settings.sound);
+    setSwitch($('swHaptic'), settings.haptics); setSwitch($('swVoice'), settings.voice);
+    Array.prototype.forEach.call($('segLife').children, function (b) { b.classList.toggle('on', +b.dataset.v === settings.life); });
+    $('brainUrl').value = settings.brainUrl;
+    Snd.enable(settings.sound);
+    try { window.parent.postMessage({ type: 'arcade:fullscreen', on: !!settings.fullscreen }, '*'); } catch (e) {}
+    saveSettings(); resize(); paintVoice();
+  }
+  function setLife(v) {
+    // Keep everyone's age as it is; only the years ahead run faster or slower.
+    var ny = 60 / v;
+    if (W) W.people.forEach(function (p) {
+      var a = ((p.alive ? W.T : p.deathT) - p.born) / YEAR;
+      p.born = (p.alive ? W.T : p.deathT) - a * ny;
+    });
+    YEAR = ny; settings.life = v; if (W) W.year = ny;
+    applySettings();
+  }
+  Array.prototype.forEach.call($('segLife').children, function (b) { b.addEventListener('click', function () { setLife(+b.dataset.v); }); });
+  $('swFs').addEventListener('click', function () { settings.fullscreen = !settings.fullscreen; applySettings(); });
+  $('swSound').addEventListener('click', function () { settings.sound = !settings.sound; applySettings(); });
+  $('swHaptic').addEventListener('click', function () { settings.haptics = !settings.haptics; applySettings(); buzz(10); });
+  $('swVoice').addEventListener('click', function () { settings.voice = !settings.voice; applySettings(); Mind.check(); });
+  $('brainUrl').addEventListener('change', function () { settings.brainUrl = $('brainUrl').value.trim(); saveSettings(); Mind.check(); });
+  if (!navigator.vibrate) { var hr = $('swHaptic').closest('.row'); if (hr) hr.style.display = 'none'; }
+  function worldInfo() {
+    if (!W) { $('worldInfo').innerHTML = 'No village yet.'; return; }
+    $('worldInfo').innerHTML = '<b>' + living().length + '</b> living · <b>' + W.lives.length + '</b> graves · generation <b>' + W.gen +
+      '</b> · seed ' + W.seed + '<br>village time ' + Math.floor(W.T / 60) + ' min';
+  }
+  function openSettings() { worldInfo(); setEl.classList.remove('hide'); applySettings(); }
+  $('btnGear').addEventListener('click', openSettings);
+  $('btnIntroSet').addEventListener('click', openSettings);
+  $('btnSetBack').addEventListener('click', function () { setEl.classList.add('hide'); save(); });
+  setEl.addEventListener('click', function (e) { if (e.target === setEl) $('btnSetBack').click(); });
+  $('btnLeave').addEventListener('click', function () { save(); try { window.parent.postMessage({ type: 'arcade:exit' }, '*'); } catch (e) {} });
+  $('btnExport').addEventListener('click', function () {
+    if (!W) return;
+    var txt = 'KINDRED1:' + btoa(unescape(encodeURIComponent(serialize())));
+    $('sigil').value = txt; $('sigil').select();
+    try { navigator.clipboard.writeText(txt).then(function () { toast('Village copied.'); }); } catch (e) { toast('Select and copy the text.'); }
+  });
+  $('btnImport').addEventListener('click', function () {
+    var t = $('sigil').value.trim().replace(/^KINDRED1:/, '');
+    try { adopt(deserialize(decodeURIComponent(escape(atob(t))))); save(); toast('Village loaded.'); setEl.classList.add('hide'); if (!me.alive) onMyDeath(); }
+    catch (e) { toast('That is not a village.'); }
+  });
+  $('btnNewWorld').addEventListener('click', function () {
+    if (!confirm('Start a new village? This one is lost unless you copied it.')) return;
+    newVillage(); setEl.classList.add('hide'); $('intro').classList.add('hide'); $('dead').classList.add('hide');
+  });
+
+  function pause() { if (W) save(); }
+  document.addEventListener('visibilitychange', function () { if (document.hidden) pause(); });
+  window.addEventListener('pagehide', pause);
+
+  /* ---------------- arcade contract ---------------- */
+
+  var fpsN = 0, fpsT = performance.now(), fps = 0;
+  (function count() { fpsN++; var n = performance.now(); if (n - fpsT > 1000) { fps = fpsN; fpsN = 0; fpsT = n; } requestAnimationFrame(count); }());
+  window.addEventListener('message', function (e) {
+    if (!e.data || e.data.type !== 'arcade:spec?') return;
+    var vv = window.visualViewport, doc = document.documentElement, cs = getComputedStyle(probe);
+    function v(n) { return Math.round(parseFloat(cs[n]) || 0); }
+    try {
+      window.parent.postMessage({
+        type: 'arcade:spec', name: 'Kindred',
+        win: (window.innerWidth || 0) + '×' + (window.innerHeight || 0),
+        doc: (doc.clientWidth || 0) + '×' + (doc.clientHeight || 0),
+        vv: vv ? Math.round(vv.width) + '×' + Math.round(vv.height) : 'n/a',
+        stage: Math.round(cssW) + '×' + Math.round(cssH), canvas: cv.width + '×' + cv.height,
+        ins: v('paddingTop') + ' / ' + v('paddingRight') + ' / ' + v('paddingBottom') + ' / ' + v('paddingLeft'),
+        fps: fps, scale: Math.round(dpr * 100) + '%',
+        voice: Mind.status().live ? 'live' : 'stock', people: W ? living().length : 0
+      }, '*');
+    } catch (err) {}
+  });
+
+  /* ---------------- go ---------------- */
+
+  YEAR = 60 / settings.life;
+  resize();
+  applySettings();
+  Mind.check();
+  load(function (w) {
+    if (w) {
+      if (w.year && w.year !== YEAR) {         // the life setting changed since this was saved
+        w.people.forEach(function (p) { var a = ((p.alive ? w.T : p.deathT) - p.born) / w.year; p.born = (p.alive ? w.T : p.deathT) - a * YEAR; });
+      }
+      w.year = YEAR;
+      adopt(w);
+      $('btnPlay').textContent = me && me.alive ? 'Return to ' + (me.name || 'your life') : 'Be born again';
+    }
+  });
+  $('btnPlay').addEventListener('click', function () {
+    $('intro').classList.add('hide');
+    if (!W) newVillage();
+    else if (!me || !me.alive) reborn();
+    W.year = YEAR;
+  });
+  requestAnimationFrame(frame);
+}());
+</script>
+</body>
+</html>
