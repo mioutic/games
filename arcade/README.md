@@ -43,7 +43,7 @@ and the channel-strip ink is picked from the folder name's hash.
 
 - `glyph` names a line icon drawn by the launcher — `bolt`, `serpent`, `crypt`,
   `blade`, `pact`, `chalice`, `orb`,
-  `grid`, or `default` (a diamond). **No emoji**: the house style forbids it, and
+  `grid`, `hearth`, or `default` (a diamond). **No emoji**: the house style forbids it, and
   `build-index.py` warns if a `game.json` still carries an `emoji` field. To add
   a glyph, put its SVG path in the `GLYPHS` table in `arcade/index.html`.
   `build-index.py` warns if a `game.json` still carries an `emoji` field. To add

@@ -39,9 +39,9 @@ certificate. Sensors and service workers then behave exactly as they do on Pages
 
 import argparse
 import http.server
+import ipaddress
 import json
 import os
-import socket
 import subprocess
 import sys
 import threading
@@ -59,6 +59,41 @@ EXTRA_TYPES = {
 # running, and the phone URL it hands back is the one worth copying.
 STATE = {"port": None, "url": None, "urls": [], "root": ROOT}
 SERVER = {"srv": None}
+
+# Kindred's villagers speak through this (arcade/games/kindred/brain.py, kept
+# with the game it belongs to): one short line
+# from Haiku via the Claude Code CLI login. None until main() builds it, and
+# None for good with --no-brain.
+BRAIN = {"b": None}
+
+# Only this PC and the tailnet may connect, never the LAN/Wi-Fi.
+TAILNET = (ipaddress.ip_network("100.64.0.0/10"), ipaddress.ip_network("fd7a:115c:a1e0::/48"))
+
+
+def client_ip_allowed(client_ip):
+    """True for loopback and tailnet callers (::ffff:-mapped forms included)."""
+    try:
+        ip = ipaddress.ip_address(str(client_ip or "").split("%")[0])
+        if getattr(ip, "ipv4_mapped", None):
+            ip = ip.ipv4_mapped
+    except ValueError:
+        return False
+    return ip.is_loopback or any(ip in n for n in TAILNET)
+
+
+class Server(http.server.ThreadingHTTPServer):
+    allow_reuse_address = True
+
+    def verify_request(self, request, client_address):
+        # Runs before any request is parsed, so it covers every method and path.
+        if client_ip_allowed(client_address[0]):
+            return True
+        if sys.stdout is not None:
+            try:
+                print("  refused %s (not loopback/tailnet)" % client_address[0])
+            except Exception:
+                pass
+        return False
 
 
 class Handler(http.server.SimpleHTTPRequestHandler):
@@ -86,6 +121,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.send_header("Location", "/arcade/")
             self.end_headers()
             return
+        if path == "/api/brain":
+            b = BRAIN["b"]
+            return self._json(b.status() if b else {"ok": False, "error": "brain off"})
         if path == "/api/status":
             return self._json({
                 "ok": True, "app": "arcade", "status": "running",
@@ -94,15 +132,44 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             })
         return super().do_GET()
 
+    def _body(self, cap=20000):
+        n = int(self.headers.get("Content-Length") or 0)
+        if n <= 0 or n > cap:
+            return None
+        try:
+            return json.loads(self.rfile.read(n).decode("utf-8"))
+        except Exception:
+            return None
+
+    def do_OPTIONS(self):
+        # A game served from another origin (Pages, through `tailscale serve`)
+        # preflights its JSON POST. The tailnet check has already run.
+        self.send_response(204)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.end_headers()
+
     def do_POST(self):
-        if self.path.split("?")[0] == "/api/shutdown":
+        path = self.path.split("?")[0]
+        if path in ("/api/brain", "/api/brain/warm"):
+            b = BRAIN["b"]
+            if not b:
+                return self._json({"ok": False, "error": "brain off"}, 503)
+            d = self._body()
+            if not isinstance(d, dict):
+                return self._json({"ok": False, "error": "bad body"}, 400)
+            if path == "/api/brain/warm":
+                return self._json(b.warmup(d.get("system")))
+            return self._json(b.ask(d.get("system"), d.get("scene")))
+        if path == "/api/shutdown":
             self._json({"ok": True, "stopping": True})
             # Answer first, then stop: shutdown() blocks until the loop exits,
             # so calling it inline would deadlock this handler's own thread.
             threading.Thread(target=lambda: SERVER["srv"] and SERVER["srv"].shutdown(),
                              daemon=True).start()
             return
-        self.send_error(405, "only /api/shutdown accepts POST")
+        self.send_error(405, "only /api/shutdown and /api/brain accept POST")
 
     def end_headers(self):
         # The whole point of serving locally is that a refresh shows the edit.
@@ -161,32 +228,23 @@ def tailscale_host():
     return name, ip
 
 
-def lan_ip():
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    try:
-        s.connect(("8.8.8.8", 80))
-        return s.getsockname()[0]
-    except Exception:
-        return None
-    finally:
-        s.close()
-
-
 def main():
     ap = argparse.ArgumentParser(description="Serve the arcade to the phone over Tailscale.")
     ap.add_argument("--port", "-p", type=int, default=8123)
+    ap.add_argument("--no-brain", action="store_true",
+                    help="don't offer /api/brain (Kindred's villagers fall back to stock lines)")
     args = ap.parse_args()
 
     if not os.path.exists(os.path.join(ROOT, "arcade", "games.json")):
         print("note: arcade/games.json is missing — run arcade/tools/build-index.py once\n")
 
     name, ip = tailscale_host()
-    lan = lan_ip()
 
     # The tailnet name first: it survives a changed IP, and it is the one to copy.
+    # No LAN address: the server refuses everything but this PC and the tailnet.
     STATE["port"] = args.port
     STATE["urls"] = ["http://%s:%d/arcade/" % (h, args.port)
-                     for h in (name, ip, lan) if h]
+                     for h in (name, ip) if h]
     STATE["url"] = STATE["urls"][0] if STATE["urls"] else \
         "http://localhost:%d/arcade/" % args.port
 
@@ -199,25 +257,31 @@ def main():
         print("    http://%s:%d/arcade/" % (ip, args.port))
     if not name and not ip:
         print("    (Tailscale not detected — is it running and logged in?)")
-    if lan:
-        print("\n  Same wifi, no Tailscale:")
-        print("    http://%s:%d/arcade/" % (lan, args.port))
     print("\n  Here:")
     print("    http://localhost:%d/arcade/" % args.port)
     print("    http://localhost:%d/play/     (the shipped build; rebuild first)" % args.port)
     print("\n  Ctrl+C to stop. Windows may ask to allow this through the firewall\n"
           "  the first time — allow it on private networks.\n")
 
-    http.server.ThreadingHTTPServer.allow_reuse_address = True
     try:
-        srv = http.server.ThreadingHTTPServer(("0.0.0.0", args.port), Handler)
+        srv = Server(("0.0.0.0", args.port), Handler)
     except OSError as e:
         sys.exit("could not bind port %d: %s" % (args.port, e))
     SERVER["srv"] = srv
+    if not args.no_brain:
+        try:
+            sys.path.insert(0, os.path.join(ROOT, "arcade", "games", "kindred"))
+            import brain
+            BRAIN["b"] = brain.Brain()
+            print("  Villager voice: %s via %s" % (brain.MODEL, BRAIN["b"].exe or "(claude.exe not found)"))
+        except Exception as e:
+            print("  Villager voice off: %s" % e)
     try:
         srv.serve_forever()
     except KeyboardInterrupt:
         pass
+    if BRAIN["b"]:
+        BRAIN["b"].close()
     print("\n  stopped\n")
 
 

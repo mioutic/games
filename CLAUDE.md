@@ -135,6 +135,7 @@ node thirst/pool.test.js   # the upgrade pool never degrades to gold
 node thirst/world.test.js  # collision, wall ejection, spawn placement on all maps
 node thirst/path.test.js   # a foe behind a wall reaches the player
 node thirst/probe.js       # a kiting bot plays 3-4 minutes and reports pacing
+node kindred/probe.js      # a life + 15 village minutes; --live http://127.0.0.1:8124 uses the real voice
 ```
 
 To look at something that normally needs play (a boss, a level-up sheet), the

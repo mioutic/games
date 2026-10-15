@@ -22,6 +22,14 @@
       "entry": "index.html"
     },
     {
+      "slug": "kindred",
+      "name": "Kindred",
+      "glyph": "hearth",
+      "description": "One life, one hour. Born to a mother at the edge of the cold, you grow, learn the old ways, feed the small ones and die at sixty. The people near you answer in their own words.",
+      "ink": "#c96a8e",
+      "entry": "index.html"
+    },
+    {
       "slug": "barrow",
       "name": "Barrow",
       "glyph": "blade",
