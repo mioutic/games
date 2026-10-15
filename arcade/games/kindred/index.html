@@ -206,7 +206,8 @@
     <h2>Kindred</h2>
     <p class="lede">You are born into a village at the edge of the cold. <b>One minute is one year</b>; at sixty you are gone, and someone you raised carries on.</p>
     <p class="lede">As a baby you can say one letter. Say <b>F</b> and your mother may come. Grow, learn the old ways from the elders, keep the fire, feed the small ones. The people nearby hear what you say and answer in their own words.</p>
-    <p class="lede"><b>Tap</b> the ground to walk, tap a thing to use what you hold on it. <b>Hold</b> on a basket to take from it. Drag in the lower left to steer.</p>
+    <p class="lede" id="ledeTouch"><b>Tap</b> the ground to walk, tap a thing to use what you hold on it. <b>Hold</b> on a basket to take from it. Drag in the lower left to steer.</p>
+    <p class="lede" id="ledeDesk" style="display:none"><b>Click</b> to walk or to use what you hold on a thing; <b>right-click</b> a basket to take from it. <b>WASD</b> to walk, <b>Enter</b> to speak, <b>Space</b> to eat or wear, <b>Q</b> to drop, the <b>wheel</b> to zoom, <b>F11</b> for full screen.</p>
     <button class="go wide" id="btnPlay">Be born</button>
     <button class="go ghost wide" id="btnIntroSet">Settings</button>
   </div>
@@ -299,6 +300,9 @@
   var probe = document.getElementById('probe');
   function $(id) { return document.getElementById(id); }
 
+  // The desktop build (Electron) serves this page from kindred://, and answers
+  // /api/brain itself, in-process: no server, no port.
+  var DESKTOP = location.protocol === 'kindred:';
   var SKEY = 'kindred.settings', WKEY = 'kindred.world', CACHE = 'kindred-save';
   var settings = { fullscreen: false, sound: true, haptics: true, voice: true, life: 1, brainUrl: '' };
   try {
@@ -2358,7 +2362,7 @@
     var ins = insets(), root = document.documentElement.style;
     root.setProperty('--safe-t', ((framed() && !settings.fullscreen) ? 0 : ins.t) + 'px');
     root.setProperty('--safe-r', ins.r + 'px'); root.setProperty('--safe-b', ins.b + 'px'); root.setProperty('--safe-l', ins.l + 'px');
-    var nts = clamp(Math.round(Math.min(cssW, cssH) / 10), 30, 58);
+    var nts = clamp(Math.round(Math.min(cssW, cssH) / 10 * (typeof zoom === 'number' ? zoom : 1)), 24, 96);
     if (nts !== TS || dpr !== lastDpr) { TS = nts; lastDpr = dpr; chunks = {}; }
   }
   window.addEventListener('resize', resize);
@@ -2395,6 +2399,20 @@
   $('swVoice').addEventListener('click', function () { settings.voice = !settings.voice; applySettings(); Mind.check(); });
   $('brainUrl').addEventListener('change', function () { settings.brainUrl = $('brainUrl').value.trim(); saveSettings(); Mind.check(); });
   if (!navigator.vibrate) { var hr = $('swHaptic').closest('.row'); if (hr) hr.style.display = 'none'; }
+  if (DESKTOP) {
+    // A window, not a frame in the arcade: F11 is full screen and closing the window leaves.
+    $('swFs').closest('.row').style.display = 'none';
+    $('btnLeave').style.display = 'none';
+    $('brainUrl').closest('.row').style.display = 'none';
+    $('ledeTouch').style.display = 'none'; $('ledeDesk').style.display = '';
+    document.title = 'Kindred';
+  }
+  // The wheel zooms (a desk has room for more of the world than a phone).
+  var zoom = 1;
+  cv.addEventListener('wheel', function (e) {
+    zoom = clamp(zoom * (e.deltaY > 0 ? 0.9 : 1.1), 0.55, 1.8);
+    resize(); e.preventDefault();
+  }, { passive: false });
   function worldInfo() {
     if (!W) { $('worldInfo').innerHTML = 'No village yet.'; return; }
     $('worldInfo').innerHTML = '<b>' + living().length + '</b> living · <b>' + W.lives.length + '</b> graves · generation <b>' + W.gen +
