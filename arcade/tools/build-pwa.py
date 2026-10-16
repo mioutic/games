@@ -111,11 +111,18 @@ self.addEventListener('install', (event) => {
   );
 });
 
+// Old builds go; save mirrors stay. Cache Storage is the one store Safari and
+// the home-screen app share, so the games mirror their saves into caches named
+// '<slug>-save' (thirst-save, arcology-save, kindred-save, and the BlooX kit's
+// platform/save.js). Those caches belong to the games, not to a build: sweeping
+// every non-current key on a VERSION bump would wipe the only cross-world copy
+// of a save on every update.
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys()
       .then((keys) => Promise.all(
-        keys.filter((k) => k !== CACHE_VERSION).map((k) => caches.delete(k))
+        keys.filter((k) => k !== CACHE_VERSION && !k.endsWith('-save'))
+          .map((k) => caches.delete(k))
       ))
       .then(() => self.clients.claim())
   );

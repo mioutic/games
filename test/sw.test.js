@@ -201,6 +201,26 @@ const check = (name, cond, got) => {
           out.tag !== 'stale', out.tag);
   }
 
+  // ── saves outlive builds ──────────────────────────────────────────────────
+  // The games mirror their saves into '<slug>-save' caches because Cache
+  // Storage is the only store Safari and the home-screen app share. An
+  // activate that swept every non-current key wiped them on each VERSION bump.
+  console.log('\n[H] a version bump keeps the games\' save mirrors');
+  {
+    const { listeners, caches } = loadSW(() => Promise.resolve(new Res('net')));
+    const SAVES = ['thirst-save', 'arcology-save', 'kindred-save', 'ossuary-save'];
+    for (const n of SAVES) (await caches.open(n)).put(req('./' + n + '.json'), new Res('save:' + n));
+    (await caches.open(OLD_CACHE)).put(req(PAGE), new Res('stale'));
+    const ev = { waitUntil: (p) => { ev._p = p; } };
+    listeners.activate.forEach((fn) => fn(ev));
+    await ev._p;
+    const keys = await caches.keys();
+    check('old build still evicted', !keys.includes(OLD_CACHE), keys);
+    check('every <slug>-save cache survives', SAVES.every((n) => keys.includes(n)), keys);
+    const hit = await (await caches.open('thirst-save')).match(req('./thirst-save.json'));
+    check('the saved payload is intact', !!hit && hit.tag === 'save:thirst-save', hit && hit.tag);
+  }
+
   console.log(fail ? `\n${fail} FAILED\n` : '\nALL PASS\n');
   process.exit(fail ? 1 : 0);
 })();
