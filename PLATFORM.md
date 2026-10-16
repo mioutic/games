@@ -188,6 +188,13 @@ exports the whole save as a text "sigil" from its settings sheet, which is the
 only route between two phones. Any game with progress worth keeping should do
 the same; the mirror is twenty lines.
 
+**Name the mirror cache `<slug>-save`.** The arcade's service worker deletes
+every cache that is not the current `CACHE_VERSION` when a new build activates,
+and spares only names ending in `-save` (`build-pwa.py`'s activate filter;
+`test/sw.test.js` case [H]). Until v1.46.1 it spared nothing, so every
+`VERSION` bump wiped the one copy of a save the two storage worlds share. A
+mirror under any other name is swept on the next deploy.
+
 ## Shipping
 
 - `arcade/VERSION` is the single source for the on-screen build stamp *and* the
